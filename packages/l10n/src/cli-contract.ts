@@ -6,6 +6,11 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import {
+  translationFieldCategories,
+  translationFieldScenes,
+  translationFormats,
+} from "#/model";
 import type { ProjectReport, SyncPlan, SyncPreviewResult } from "#/model";
 import {
   applySyncProject,
@@ -25,7 +30,9 @@ const messageIdentitySchema = z.object({
   sourceFile: z.string(),
   targetFile: z.string(),
   path: z.array(z.string()),
-  category: z.enum(["chat-string", "chat-string-list"]),
+  category: z.enum(translationFieldCategories),
+  scene: z.enum(translationFieldScenes).optional(),
+  format: z.enum(translationFormats).optional(),
 });
 const diagnosticSchema = z.object({
   diagnosticId: z.string(),
@@ -98,11 +105,24 @@ const syncPlanSchema = z.object({
       sourceFile: z.string(),
       targetFile: z.string(),
       path: z.array(z.string()),
-      category: z.enum(["chat-string", "chat-string-list"]),
+      category: z.enum(translationFieldCategories),
+      scene: z.enum(translationFieldScenes).optional(),
+      format: z.enum(translationFormats).optional(),
       previousSource: jsonValueSchema.optional(),
       source: jsonValueSchema.optional(),
       previousTarget: jsonValueSchema.optional(),
       target: jsonValueSchema.optional(),
+    }),
+  ),
+  structures: z.array(
+    z.object({
+      sourceFile: z.string(),
+      definitionsSource: z.string(),
+      targetFile: z.string(),
+      path: z.array(z.string()),
+      action: z.enum(["preserve", "update", "delete"]),
+      previous: jsonValueSchema.optional(),
+      expected: jsonValueSchema.optional(),
     }),
   ),
   targetFiles: z.array(

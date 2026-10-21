@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { parseConfiguration } from "#/configuration";
 import { collectMessages } from "#/messages";
+import { translationFieldCategories, translationFieldScenes } from "#/model";
 import type {
   ConsumerConfiguration,
   JsonValue,
@@ -29,6 +30,14 @@ export interface MappingSnapshot {
   readonly mapping: TranslationMapping;
   readonly sourceValue: JsonValue;
   readonly sourceSha256: string;
+  readonly definitionsValue?: JsonValue;
+  readonly definitionsSha256?: string;
+}
+
+export interface ReleasedTranslationPath {
+  readonly sourceFile: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
 }
 
 export interface SourceBaseline {
@@ -38,6 +47,7 @@ export interface SourceBaseline {
   readonly jarSha256: string;
   readonly resources: readonly ResourceSnapshot[];
   readonly mappings: readonly MappingSnapshot[];
+  readonly releasedTranslationPaths?: readonly ReleasedTranslationPath[];
   readonly miniMessageTheme?: {
     readonly file: string;
     readonly source: string;
@@ -86,10 +96,12 @@ const mappingSchema = z
   .object({
     source: z.string().min(1),
     target: z.string().min(1),
+    definitionsSource: z.string().min(1).optional(),
     fields: z.array(
       z.object({
         path: z.array(z.string()),
-        category: z.enum(["chat-string", "chat-string-list"]),
+        category: z.enum(translationFieldCategories),
+        scene: z.enum(translationFieldScenes).optional(),
       }),
     ),
   })
@@ -110,6 +122,7 @@ const resourceSchema = z
     purpose: z.enum([
       "chat-language",
       "gui-language",
+      "dialog-language",
       "configuration",
       "metadata",
       "documentation",
@@ -140,9 +153,25 @@ const baselineSchema = z
           mapping: mappingSchema,
           sourceValue: jsonValueSchema,
           sourceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+          definitionsValue: jsonValueSchema.optional(),
+          definitionsSha256: z
+            .string()
+            .regex(/^[0-9a-f]{64}$/)
+            .optional(),
         })
         .strict(),
     ),
+    releasedTranslationPaths: z
+      .array(
+        z
+          .object({
+            sourceFile: z.string().min(1),
+            targetFile: z.string().min(1),
+            path: z.array(z.string()),
+          })
+          .strict(),
+      )
+      .optional(),
     miniMessageTheme: z
       .object({ file: z.string().min(1), source: z.string() })
       .strict()
@@ -323,6 +352,26 @@ export async function readState(
       return {
         ok: false,
         message: `原文基线摘要不一致：${entry.mapping.source}`,
+      };
+    }
+    if (
+      entry.definitionsValue !== undefined &&
+      (entry.definitionsSha256 === undefined ||
+        sha256(canonicalJson(entry.definitionsValue)) !==
+          entry.definitionsSha256)
+    ) {
+      return {
+        ok: false,
+        message: `结构基线摘要不一致：${entry.mapping.definitionsSource ?? entry.mapping.source}`,
+      };
+    }
+    if (
+      entry.definitionsSha256 !== undefined &&
+      entry.definitionsValue === undefined
+    ) {
+      return {
+        ok: false,
+        message: `结构基线缺少定义值：${entry.mapping.definitionsSource ?? entry.mapping.source}`,
       };
     }
   }

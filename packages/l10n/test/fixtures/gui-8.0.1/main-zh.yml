@@ -1,0 +1,25 @@
+general:
+  all: <green>所有</green>
+physical:
+  selection:
+    name: <t:regular_heading>选区工具
+    lore:
+      - <t:regular>使用此工具创建选区.
+      - "选区可用于:"
+      - " <t:decoration>• </t><t:regular>占领"
+      - " <t:decoration>• </t><t:regular>取消占领"
+      - " <t:decoration>• </t><t:regular>调整子区域大小"
+    material: GOLDEN_HOE
+gui:
+  main:
+    title: <t:menu_title>城镇主菜单
+    items:
+      default:
+        lands:
+          name: <t:entity_land><b>你的城镇</t>
+          lore:
+            - <t:decoration>✖ </t><t:regular>管理你参与的城镇.
+            - "    <t:decoration>• </t><t:regular>拥有: <t:regular_value><v:own></t>"
+            - "    <t:decoration>• </t><t:regular>已加入: <t:regular_value><v:trusted></t>"
+          material: skin:8449b9318e33158e64a46ab0de121c3d40000e3332c1574932b3c849d8fa0dc2
+          slots: 11

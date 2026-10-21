@@ -1,5 +1,5 @@
+import { formatForScene } from "#/field-metadata";
 import type {
-  ChatFieldCategory,
   DiagnosticLocation,
   JsonValue,
   ObservedMessage,
@@ -7,6 +7,7 @@ import type {
   ResourceInventoryEntry,
   TargetMessage,
   TranslationField,
+  TranslationFieldCategory,
   TranslationMapping,
 } from "#/model";
 import { canonicalJson, compareText, sha256 } from "#/value";
@@ -62,10 +63,25 @@ function inspectPath(
 }
 
 function isValidTargetValue(
-  category: ChatFieldCategory,
+  category: TranslationFieldCategory,
   target: JsonValue,
 ): boolean {
-  if (category === "chat-string") return typeof target === "string";
+  if (
+    category === "chat-string" ||
+    category === "gui-string" ||
+    category === "dialog-string" ||
+    category === "dialog-label-format" ||
+    category === "configuration-string"
+  ) {
+    return typeof target === "string";
+  }
+  if (category === "gui-lore") {
+    return (
+      typeof target === "string" ||
+      (Array.isArray(target) &&
+        target.every((item) => typeof item === "string"))
+    );
+  }
   return (
     Array.isArray(target) && target.every((item) => typeof item === "string")
   );
@@ -74,7 +90,7 @@ function isValidTargetValue(
 function messageIdentity(
   mapping: TranslationMapping,
   path: readonly string[],
-  category: ChatFieldCategory,
+  field: TranslationField,
 ) {
   const identity = {
     sourceFile: mapping.source,
@@ -83,7 +99,10 @@ function messageIdentity(
   return {
     ...identity,
     targetFile: mapping.target,
-    category,
+    category: field.category,
+    ...(field.scene === undefined
+      ? {}
+      : { scene: field.scene, format: formatForScene(field.scene) }),
     id: sha256(canonicalJson(identity)),
   };
 }
@@ -117,6 +136,130 @@ function walkStrings(
   output.set(pathKey(path), { path, value });
 }
 
+function isStringList(value: JsonValue): value is readonly string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+function isValidMessageValue(
+  category: TranslationFieldCategory,
+  value: JsonValue,
+): boolean {
+  if (
+    category === "chat-string" ||
+    category === "gui-string" ||
+    category === "dialog-string" ||
+    category === "dialog-label-format" ||
+    category === "configuration-string"
+  ) {
+    return typeof value === "string";
+  }
+  if (category === "gui-lore") {
+    return typeof value === "string" || isStringList(value);
+  }
+  return isStringList(value);
+}
+
+function fieldTypeDescription(category: TranslationFieldCategory): string {
+  if (
+    category === "chat-string" ||
+    category === "gui-string" ||
+    category === "dialog-string" ||
+    category === "dialog-label-format" ||
+    category === "configuration-string"
+  ) {
+    return "字符串";
+  }
+  if (category === "gui-lore") return "字符串或只含字符串的列表";
+  return "只含字符串的列表";
+}
+
+function fieldTypeReason(category: TranslationFieldCategory): string {
+  if (category === "gui-lore") return "GUI lore 必须是字符串或只含字符串的列表";
+  if (category === "chat-string" || category === "chat-string-list") {
+    return category === "chat-string"
+      ? "聊天字符串字段必须由字符串或字符串映射组成"
+      : "聊天列表字段必须是只含字符串的列表";
+  }
+  if (category.startsWith("dialog-"))
+    return "对话框字段必须符合声明的字符串类型";
+  if (category.startsWith("configuration-")) {
+    return "配置翻译字段必须符合声明的字符串类型";
+  }
+  return "GUI 名称、标题和通用文本必须是字符串";
+}
+
+function matchingEntries(
+  root: JsonValue | undefined,
+  pattern: readonly string[],
+): readonly { readonly path: readonly string[]; readonly value: JsonValue }[] {
+  if (root === undefined) return [];
+  const entries: { path: readonly string[]; value: JsonValue }[] = [];
+  function visit(
+    value: JsonValue,
+    path: readonly string[],
+    index: number,
+  ): void {
+    if (index === pattern.length) {
+      entries.push({ path, value });
+      return;
+    }
+    const segment = pattern[index]!;
+    if (segment === "**") {
+      function collectLeaves(current: JsonValue, leafPath: readonly string[]) {
+        if (isRecord(current)) {
+          for (const key of Object.keys(current).sort()) {
+            collectLeaves(current[key]!, [...leafPath, key]);
+          }
+        } else {
+          entries.push({ path: leafPath, value: current });
+        }
+      }
+      collectLeaves(value, path);
+      return;
+    }
+    if (!isRecord(value)) return;
+    if (segment === "*") {
+      for (const key of Object.keys(value).sort()) {
+        visit(value[key]!, [...path, key], index + 1);
+      }
+      return;
+    }
+    if (Object.hasOwn(value, segment)) {
+      visit(value[segment]!, [...path, segment], index + 1);
+    }
+  }
+  visit(root, [], 0);
+  return entries;
+}
+
+export function fieldSelectorMatchesPath(
+  path: readonly string[],
+  field: TranslationField,
+): boolean {
+  if (field.category === "chat-string") {
+    return (
+      path.length >= field.path.length &&
+      field.path.every((segment, index) => path[index] === segment)
+    );
+  }
+  const selector = field.path;
+  const recursiveIndex = selector.indexOf("**");
+  const fixedLength = recursiveIndex === -1 ? selector.length : recursiveIndex;
+  if (
+    (recursiveIndex === -1 && path.length !== selector.length) ||
+    (recursiveIndex !== -1 && path.length < fixedLength)
+  ) {
+    return false;
+  }
+  for (let index = 0; index < fixedLength; index += 1) {
+    const segment = selector[index]!;
+    if (segment !== "*" && segment !== path[index]) return false;
+  }
+  return true;
+}
+
 function collectField(
   root: JsonValue | undefined,
   field: TranslationField,
@@ -134,22 +277,21 @@ function collectField(
     { path: readonly string[]; value: JsonValue }
   >();
   const issues: ProjectFileIssue[] = [];
-  const selected = valueAtPath(root, field.path);
-  if (selected === undefined) {
-    if (strictSource) {
-      issues.push({
-        file,
-        code: "source.field-missing",
-        reason: "声明的翻译字段不存在",
-        path: field.path,
-        expected: "已声明的字段",
-        actual: { state: "missing" },
-      });
-    }
-    return { values, issues };
-  }
-
   if (field.category === "chat-string") {
+    const selected = valueAtPath(root, field.path);
+    if (selected === undefined) {
+      if (strictSource) {
+        issues.push({
+          file,
+          code: "source.field-missing",
+          reason: "声明的翻译字段不存在",
+          path: field.path,
+          expected: "已声明的字段",
+          actual: { state: "missing" },
+        });
+      }
+      return { values, issues };
+    }
     const stringValues = new Map<
       string,
       { path: readonly string[]; value: JsonValue }
@@ -165,25 +307,34 @@ function collectField(
     return { values, issues };
   }
 
+  const selectedEntries = matchingEntries(root, field.path);
   if (
-    !Array.isArray(selected) ||
-    !selected.every((item) => typeof item === "string")
+    selectedEntries.length === 0 &&
+    strictSource &&
+    !field.path.some((part) => part === "*" || part === "**")
   ) {
     issues.push({
       file,
-      code: "message.type-mismatch",
-      reason: "聊天列表字段必须是只含字符串的列表",
+      code: "source.field-missing",
+      reason: "声明的翻译字段不存在",
       path: field.path,
-      expected: "字符串列表",
-      actual: selected,
+      expected: "已声明的字段",
+      actual: { state: "missing" },
     });
-    values.set(pathKey(field.path), {
-      path: field.path,
-      value: selected,
-    });
-    return { values, issues };
   }
-  values.set(pathKey(field.path), { path: field.path, value: selected });
+  for (const entry of selectedEntries) {
+    if (!isValidMessageValue(field.category, entry.value)) {
+      issues.push({
+        file,
+        code: "message.type-mismatch",
+        reason: fieldTypeReason(field.category),
+        path: entry.path,
+        expected: fieldTypeDescription(field.category),
+        actual: entry.value,
+      });
+    }
+    values.set(pathKey(entry.path), entry);
+  }
   return { values, issues };
 }
 
@@ -225,7 +376,7 @@ export function collectMessages(
         const identity = messageIdentity(
           saved.mapping,
           sourceEntry.path,
-          field.category,
+          field,
         );
         const targetValue = inspectPath(targetRoot, sourceEntry.path);
         if (
@@ -240,13 +391,9 @@ export function collectMessages(
           issues.push({
             file: saved.mapping.target,
             code: "message.type-mismatch",
-            reason:
-              field.category === "chat-string"
-                ? "聊天字符串消息必须是字符串"
-                : "聊天列表消息必须是只含字符串的列表",
+            reason: fieldTypeReason(field.category),
             path: sourceEntry.path,
-            expected:
-              field.category === "chat-string" ? "字符串" : "字符串列表",
+            expected: fieldTypeDescription(field.category),
             actual: targetValue.value,
           });
         }
@@ -261,7 +408,7 @@ export function collectMessages(
           issues.push({
             file: saved.mapping.target,
             code: "message.type-mismatch",
-            reason: "聊天字段路径的祖先必须是映射",
+            reason: "受管理字段路径的祖先必须是映射",
             path: targetValue.path,
             expected: "映射",
             actual: targetValue.value,
@@ -281,7 +428,7 @@ export function collectMessages(
         const identity = messageIdentity(
           saved.mapping,
           targetEntry.path,
-          field.category,
+          field,
         );
         targetMessages.push({
           ...identity,

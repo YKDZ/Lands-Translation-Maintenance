@@ -8,7 +8,7 @@ import {
   syncConfigurationFingerprint,
 } from "#/configuration";
 import { readJarResources } from "#/jar";
-import { collectMessages } from "#/messages";
+import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
 import { parseMiniMessages } from "#/minimessage";
 import {
   captureMiniMessageTheme,
@@ -21,9 +21,11 @@ import type {
   Diagnostic,
   DiagnosticLocation,
   JsonValue,
+  ObservedMessage,
   ProjectFileIssue,
   ProjectReport,
   ProjectSummary,
+  ProjectStructure,
   ProjectView,
   ResourceInventoryEntry,
   SyncInputSnapshot,
@@ -32,6 +34,7 @@ import type {
   SyncPreviewResult,
   SyncResourceChanges,
   SyncResourceDifference,
+  SyncStructureChange,
   SyncTargetFilePlan,
   SyncWrite,
   Severity,
@@ -51,6 +54,7 @@ import {
   stateDirectoryName,
   transactionFileName,
   type MappingSnapshot,
+  type ReleasedTranslationPath,
   type ResourceSnapshot,
   type SameTextCandidate,
   type SourceBaseline,
@@ -298,6 +302,41 @@ function readYaml(bytes: Uint8Array, file: string) {
   return parsed.parsed;
 }
 
+function readMappingSnapshot(
+  mapping: ConsumerConfiguration["translationScope"]["mappings"][number],
+  jarResources: ReadonlyMap<string, Uint8Array>,
+): MappingSnapshot {
+  const sourceBytes = jarResources.get(mapping.source);
+  if (sourceBytes === undefined) {
+    throw new ProjectOperationError(`映射原文不在 JAR 中：${mapping.source}`);
+  }
+  const sourceValue = readYaml(sourceBytes, mapping.source).value;
+  const definitionsSource = mapping.definitionsSource;
+  if (definitionsSource === undefined || definitionsSource === mapping.source) {
+    return {
+      mapping,
+      sourceValue,
+      sourceSha256: sha256(canonicalJson(sourceValue)),
+    };
+  }
+  const definitionsBytes = jarResources.get(definitionsSource);
+  if (definitionsBytes === undefined) {
+    throw new ProjectOperationError(
+      `结构定义不在 JAR 中：${definitionsSource}`,
+      "configuration.mapping-definitions-missing",
+      { file: definitionsSource, path: [] },
+    );
+  }
+  const definitionsValue = readYaml(definitionsBytes, definitionsSource).value;
+  return {
+    mapping,
+    sourceValue,
+    sourceSha256: sha256(canonicalJson(sourceValue)),
+    definitionsValue,
+    definitionsSha256: sha256(canonicalJson(definitionsValue)),
+  };
+}
+
 function resourceMismatches(
   declared: readonly ResourceInventoryEntry[],
   actual: readonly { readonly path: string }[],
@@ -348,14 +387,27 @@ function sourceMessageIssues(
 }
 
 function isValidTargetValue(
-  source: JsonValue,
+  category: ObservedMessage["category"],
   target: JsonValue | undefined,
 ): boolean {
-  if (typeof source === "string") return typeof target === "string";
-  if (Array.isArray(source)) {
+  if (
+    category === "chat-string" ||
+    category === "gui-string" ||
+    category === "dialog-string" ||
+    category === "dialog-label-format" ||
+    category === "configuration-string"
+  ) {
+    return typeof target === "string";
+  }
+  if (category === "gui-lore") {
     return (
-      Array.isArray(target) && target.every((item) => typeof item === "string")
+      typeof target === "string" ||
+      (Array.isArray(target) &&
+        target.every((item) => typeof item === "string"))
     );
+  }
+  if (Array.isArray(target)) {
+    return target.every((item) => typeof item === "string");
   }
   return false;
 }
@@ -540,8 +592,69 @@ function emptyView(): ProjectView {
     resources: [],
     messages: [],
     targetMessages: [],
+    structures: [],
     fileIssues: [],
   };
+}
+
+function isRecord(value: JsonValue | undefined): value is {
+  readonly [key: string]: JsonValue;
+} {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function structureValueType(value: JsonValue): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "列表";
+  if (isRecord(value)) return "映射";
+  if (typeof value === "string") return "字符串";
+  if (typeof value === "number") return "数字";
+  return "布尔值";
+}
+
+function definitionsValueOf(mapping: MappingSnapshot): JsonValue | undefined {
+  if (mapping.mapping.definitionsSource === undefined) return undefined;
+  return mapping.mapping.definitionsSource === mapping.mapping.source
+    ? mapping.sourceValue
+    : mapping.definitionsValue;
+}
+
+function makeProjectStructures(
+  mappings: readonly MappingSnapshot[],
+  targets: ReadonlyMap<string, TargetFileInput>,
+  messages: readonly ObservedMessage[],
+  releasedTranslationPaths: readonly ReleasedTranslationPath[],
+): ProjectStructure[] {
+  const structures: ProjectStructure[] = [];
+  for (const snapshot of mappings) {
+    const definitionsSource = snapshot.mapping.definitionsSource;
+    const definitions = definitionsValueOf(snapshot);
+    if (definitionsSource === undefined || definitions === undefined) continue;
+    structures.push({
+      sourceFile: snapshot.mapping.source,
+      definitionsSource,
+      targetFile: snapshot.mapping.target,
+      definitions,
+      target: targets.get(snapshot.mapping.target)?.value,
+      translationPaths: messages
+        .filter(
+          (message) =>
+            message.sourceFile === snapshot.mapping.source &&
+            message.targetFile === snapshot.mapping.target,
+        )
+        .map((message) => message.path)
+        .concat(
+          releasedTranslationPaths
+            .filter(
+              (released) =>
+                released.sourceFile === snapshot.mapping.source &&
+                released.targetFile === snapshot.mapping.target,
+            )
+            .map((released) => released.path),
+        ),
+    });
+  }
+  return structures;
 }
 
 function emptyLock(): SyncLock {
@@ -593,6 +706,12 @@ function projectView(
     targetValues,
     baseline.resources,
   );
+  const structures = makeProjectStructures(
+    baseline.mappings,
+    targets,
+    collected.messages,
+    baseline.releasedTranslationPaths ?? [],
+  );
   return {
     sourceLanguage: baseline.translationScope.sourceLanguage,
     targetLanguage: baseline.translationScope.targetLanguage,
@@ -602,8 +721,439 @@ function projectView(
     })),
     messages: collected.messages,
     targetMessages: collected.targetMessages,
-    fileIssues: [...extraIssues, ...collected.issues],
+    structures,
+    fileIssues: [
+      ...extraIssues,
+      ...collected.issues,
+      ...structureFindingIssues(structures),
+    ],
   };
+}
+
+interface StructurePlanResult {
+  readonly changes: readonly SyncStructureChange[];
+  readonly blockers: readonly {
+    readonly code: string;
+    readonly reason: string;
+  }[];
+}
+
+function selectedAt(
+  paths: readonly (readonly string[])[],
+  path: readonly string[],
+): boolean {
+  return paths.some((selected) => samePath(selected, path));
+}
+
+function selectedBelow(
+  paths: readonly (readonly string[])[],
+  path: readonly string[],
+): boolean {
+  return paths.some(
+    (selected) =>
+      selected.length > path.length && pathStartsWith(selected, path),
+  );
+}
+
+function samePath(left: readonly string[], right: readonly string[]): boolean {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+function makeReleasedTranslationPaths(
+  previous: readonly ReleasedTranslationPath[],
+  currentMappings: readonly MappingSnapshot[],
+  previousMessages: readonly ObservedMessage[],
+): ReleasedTranslationPath[] {
+  const mappingsByAddress = new Map(
+    currentMappings.map((snapshot) => [
+      canonicalJson([snapshot.mapping.source, snapshot.mapping.target]),
+      snapshot.mapping,
+    ]),
+  );
+  const currentMapping = (sourceFile: string, targetFile: string) =>
+    mappingsByAddress.get(canonicalJson([sourceFile, targetFile]));
+  const released = new Map<string, ReleasedTranslationPath>();
+  const retain = (candidate: ReleasedTranslationPath): void => {
+    const mapping = currentMapping(candidate.sourceFile, candidate.targetFile);
+    if (
+      mapping === undefined ||
+      mapping.fields.some((field) =>
+        fieldSelectorMatchesPath(candidate.path, field),
+      )
+    ) {
+      return;
+    }
+    released.set(canonicalJson(candidate), candidate);
+  };
+
+  for (const path of previous) retain(path);
+  for (const message of previousMessages) {
+    const mapping = currentMapping(message.sourceFile, message.targetFile);
+    if (
+      mapping !== undefined &&
+      !mapping.fields.some((field) =>
+        fieldSelectorMatchesPath(message.path, field),
+      )
+    ) {
+      retain({
+        sourceFile: message.sourceFile,
+        targetFile: message.targetFile,
+        path: message.path,
+      });
+    }
+  }
+
+  return [...released.values()].sort((left, right) =>
+    compareText(canonicalJson(left), canonicalJson(right)),
+  );
+}
+
+function sortedKeys(...values: readonly (JsonValue | undefined)[]): string[] {
+  const keys = new Set<string>();
+  for (const value of values) {
+    if (isRecord(value)) {
+      for (const key of Object.keys(value)) keys.add(key);
+    }
+  }
+  return [...keys].sort(compareText);
+}
+
+function planStructureChanges(
+  previousMappings: readonly MappingSnapshot[],
+  currentMappings: readonly MappingSnapshot[],
+  targets: ReadonlyMap<string, TargetFileInput>,
+  currentMessages: readonly ObservedMessage[],
+  releasedTranslationPaths: readonly ReleasedTranslationPath[],
+): StructurePlanResult {
+  const previousBySource = new Map(
+    previousMappings.map((snapshot) => [snapshot.mapping.source, snapshot]),
+  );
+  const changes: SyncStructureChange[] = [];
+  const blockers: { code: string; reason: string }[] = [];
+
+  for (const snapshot of currentMappings) {
+    const mapping = snapshot.mapping;
+    const definitionsSource = mapping.definitionsSource;
+    const currentDefinitions = definitionsValueOf(snapshot);
+    if (definitionsSource === undefined || currentDefinitions === undefined)
+      continue;
+    const previousSnapshot = previousBySource.get(mapping.source);
+    const previousDefinitions =
+      previousSnapshot?.mapping.definitionsSource === definitionsSource
+        ? definitionsValueOf(previousSnapshot)
+        : undefined;
+    const target = targets.get(mapping.target);
+    if (target === undefined) continue;
+    const currentTranslationPaths = currentMessages
+      .filter(
+        (message) =>
+          message.sourceFile === mapping.source &&
+          message.targetFile === mapping.target,
+      )
+      .map((message) => message.path);
+    const releasedPaths = releasedTranslationPaths
+      .filter(
+        (released) =>
+          released.sourceFile === mapping.source &&
+          released.targetFile === mapping.target,
+      )
+      .map((released) => released.path);
+    const translationPaths = [...currentTranslationPaths, ...releasedPaths];
+
+    if (!isRecord(currentDefinitions)) {
+      blockers.push({
+        code: "sync.structure-source-shape",
+        reason: `${definitionsSource} 的结构根节点必须是映射`,
+      });
+      continue;
+    }
+    if (previousDefinitions !== undefined && !isRecord(previousDefinitions)) {
+      blockers.push({
+        code: "sync.structure-source-shape",
+        reason: `${definitionsSource} 的旧结构根节点不是映射`,
+      });
+      continue;
+    }
+    for (const message of currentMessages) {
+      if (message.sourceFile !== mapping.source) continue;
+      for (let depth = 1; depth < message.path.length; depth += 1) {
+        const definitionParent = valueAtPath(
+          currentDefinitions,
+          message.path.slice(0, depth),
+        );
+        if (definitionParent !== undefined && !isRecord(definitionParent)) {
+          blockers.push({
+            code: "sync.structure-source-shape",
+            reason: `${definitionsSource}:${message.path.slice(0, depth).join(".")} 无法与已选择的译文路径对应`,
+          });
+          break;
+        }
+      }
+    }
+
+    const update = (
+      path: readonly string[],
+      current: JsonValue,
+      actual: JsonValue | undefined,
+    ): void => {
+      changes.push({
+        sourceFile: mapping.source,
+        definitionsSource,
+        targetFile: mapping.target,
+        path,
+        action: "update",
+        ...(actual === undefined ? {} : { previous: actual }),
+        expected: current,
+      });
+    };
+    const blockTargetType = (
+      path: readonly string[],
+      actual: JsonValue,
+      expected: JsonValue,
+    ): void => {
+      blockers.push({
+        code: "sync.structure-target-path-type",
+        reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual)}，上游结构类型为${structureValueType(expected)}`,
+      });
+    };
+    const canDeleteManagedSubtree = (
+      path: readonly string[],
+      previous: JsonValue,
+      actual: JsonValue,
+    ): boolean => {
+      if (
+        selectedAt(translationPaths, path) ||
+        selectedBelow(translationPaths, path)
+      ) {
+        return false;
+      }
+      const previousIsMap = isRecord(previous);
+      const actualIsMap = isRecord(actual);
+      if (previousIsMap || actualIsMap) {
+        if (!previousIsMap || !actualIsMap) return false;
+        return Object.keys(actual).every(
+          (key) =>
+            Object.prototype.hasOwnProperty.call(previous, key) &&
+            canDeleteManagedSubtree(
+              [...path, key],
+              previous[key]!,
+              actual[key]!,
+            ),
+        );
+      }
+      return structureValueType(previous) === structureValueType(actual);
+    };
+    const visit = (
+      path: readonly string[],
+      previous: JsonValue | undefined,
+      current: JsonValue | undefined,
+      actual: JsonValue | undefined,
+    ): void => {
+      if (selectedAt(translationPaths, path)) return;
+
+      const previousIsMap = isRecord(previous);
+      const currentIsMap = isRecord(current);
+      const actualIsMap = isRecord(actual);
+      const hasSelectedDescendant = selectedBelow(translationPaths, path);
+
+      if (current === undefined) {
+        if (previous === undefined) {
+          if (hasSelectedDescendant) return;
+          if (actual !== undefined) {
+            changes.push({
+              sourceFile: mapping.source,
+              definitionsSource,
+              targetFile: mapping.target,
+              path,
+              action: "preserve",
+              previous: actual,
+            });
+          }
+          return;
+        }
+        if (actual === undefined) return;
+        if (previousIsMap) {
+          if (!actualIsMap) {
+            blockTargetType(path, actual, previous);
+            return;
+          }
+          if (canDeleteManagedSubtree(path, previous, actual)) {
+            changes.push({
+              sourceFile: mapping.source,
+              definitionsSource,
+              targetFile: mapping.target,
+              path,
+              action: "delete",
+              previous: actual,
+            });
+            return;
+          }
+          for (const key of sortedKeys(previous, actual)) {
+            visit([...path, key], previous[key], undefined, actual[key]);
+          }
+          return;
+        }
+        if (structureValueType(actual) !== structureValueType(previous)) {
+          blockTargetType(path, actual, previous);
+          return;
+        }
+        changes.push({
+          sourceFile: mapping.source,
+          definitionsSource,
+          targetFile: mapping.target,
+          path,
+          action: "delete",
+          previous: actual,
+        });
+        return;
+      }
+
+      if (currentIsMap) {
+        if (actual !== undefined && !actualIsMap) {
+          if (previous !== undefined && sameValue(actual, previous)) {
+            update(path, current, actual);
+          } else {
+            blockTargetType(path, actual, current);
+          }
+          return;
+        }
+        if (actual === undefined && Object.keys(current).length === 0) {
+          update(path, current, undefined);
+          return;
+        }
+        for (const key of sortedKeys(previous, current, actual)) {
+          visit(
+            [...path, key],
+            previousIsMap ? previous[key] : undefined,
+            current[key],
+            actualIsMap ? actual[key] : undefined,
+          );
+        }
+        return;
+      }
+
+      if (hasSelectedDescendant) {
+        blockers.push({
+          code: "sync.structure-source-shape",
+          reason: `${definitionsSource}:${path.join(".")} 无法与已选择的译文路径对应`,
+        });
+        return;
+      }
+
+      if (actual === undefined) {
+        update(path, current, undefined);
+        return;
+      }
+
+      if (structureValueType(actual) !== structureValueType(current)) {
+        if (previous !== undefined && sameValue(actual, previous)) {
+          update(path, current, actual);
+        } else {
+          blockTargetType(path, actual, current);
+        }
+        return;
+      }
+
+      if (!sameValue(actual, current)) update(path, current, actual);
+    };
+
+    visit([], previousDefinitions, currentDefinitions, target.value);
+  }
+
+  changes.sort((left, right) =>
+    compareText(
+      `${left.targetFile}:${canonicalJson(left.path)}:${left.action}`,
+      `${right.targetFile}:${canonicalJson(right.path)}:${right.action}`,
+    ),
+  );
+  blockers.sort((left, right) =>
+    compareText(`${left.code}:${left.reason}`, `${right.code}:${right.reason}`),
+  );
+  return { changes, blockers };
+}
+
+function applyStructureChanges(
+  targets: ReadonlyMap<string, TargetFileInput>,
+  changes: readonly SyncStructureChange[],
+  changedTargetPaths: Set<string>,
+): void {
+  const applicable = changes
+    .filter((change) => change.action !== "preserve")
+    .sort((left, right) => {
+      const leftDepth = left.path.length;
+      const rightDepth = right.path.length;
+      if (left.action === "delete" && right.action === "delete") {
+        return rightDepth - leftDepth;
+      }
+      if (left.action === "update" && right.action === "update") {
+        return leftDepth - rightDepth;
+      }
+      return left.action === "delete" ? -1 : 1;
+    });
+  for (const change of applicable) {
+    const target = targets.get(change.targetFile);
+    if (target === undefined) {
+      throw new ProjectOperationError(
+        `无法准备结构目标文件：${change.targetFile}`,
+      );
+    }
+    if (change.action === "update") {
+      if (change.expected === undefined) {
+        throw new ProjectOperationError("结构更新缺少上游定义值");
+      }
+      updateDocumentValue(target.document, change.path, change.expected);
+    } else {
+      target.document.deleteIn(change.path);
+    }
+    changedTargetPaths.add(change.targetFile);
+  }
+}
+
+function structureFindingIssues(
+  structures: readonly ProjectStructure[],
+): readonly ProjectFileIssue[] {
+  const issues: ProjectFileIssue[] = [];
+  for (const structure of structures) {
+    const expected = new Map<
+      string,
+      { path: readonly string[]; value: JsonValue }
+    >();
+    const visit = (value: JsonValue, path: readonly string[]): void => {
+      if (selectedAt(structure.translationPaths, path)) return;
+      if (isRecord(value)) {
+        if (Object.keys(value).length === 0) {
+          expected.set(canonicalJson(path), { path, value });
+          return;
+        }
+        for (const key of Object.keys(value).sort(compareText)) {
+          visit(value[key]!, [...path, key]);
+        }
+        return;
+      }
+      expected.set(canonicalJson(path), { path, value });
+    };
+    visit(structure.definitions, []);
+    for (const { path, value } of expected.values()) {
+      const actual = valueAtPath(structure.target, path);
+      if (
+        isRecord(value) &&
+        Object.keys(value).length === 0 &&
+        isRecord(actual)
+      ) {
+        continue;
+      }
+      if (actual !== undefined && sameValue(actual, value)) continue;
+      issues.push({
+        file: structure.targetFile,
+        code: "structure.definition-mismatch",
+        reason: "目标结构字段与已登记的上游定义不一致",
+        path,
+        expected: value,
+        actual: actual === undefined ? { state: "missing" } : actual,
+      });
+    }
+  }
+  return issues;
 }
 
 function coverageUnavailable(view: ProjectView): readonly string[] {
@@ -616,9 +1166,6 @@ function coverageUnavailable(view: ProjectView): readonly string[] {
     view.resources.some((resource) => resource.purpose === "bedrock-excluded")
   ) {
     unavailable.push("Bedrock JSON 已登记但本票不解析");
-  }
-  if (view.resources.some((resource) => resource.purpose === "gui-language")) {
-    unavailable.push("GUI 语言资源已登记但本票不解析");
   }
   return unavailable;
 }
@@ -700,25 +1247,14 @@ export async function initializeProject(
 
   const mappings: MappingSnapshot[] = [];
   for (const mapping of configuration.translationScope.mappings) {
-    const sourceBytes = jarByPath.get(mapping.source);
-    if (sourceBytes === undefined) {
-      throw new ProjectOperationError(`映射原文不在 JAR 中：${mapping.source}`);
-    }
-    const parsed = readYaml(sourceBytes, mapping.source);
-    mappings.push({
-      mapping,
-      sourceValue: parsed.value,
-      sourceSha256: sha256(canonicalJson(parsed.value)),
-    });
+    mappings.push(readMappingSnapshot(mapping, jarByPath));
   }
   const invalidSourceIssues = sourceMessageIssues(mappings, resources);
   if (invalidSourceIssues.length > 0) {
     const detail = invalidSourceIssues
       .map((issue) => `${issue.file} ${issue.path.join(".")}: ${issue.reason}`)
       .join("；");
-    throw new ProjectOperationError(
-      `原文不符合已声明的聊天字段分类：${detail}`,
-    );
+    throw new ProjectOperationError(`原文不符合已声明的字段类型：${detail}`);
   }
 
   const targetInput = await readTargets(project, {
@@ -749,6 +1285,22 @@ export async function initializeProject(
     ),
   );
   const initialCollection = collectMessages(mappings, targetValues, resources);
+  const initialStructures = planStructureChanges(
+    [],
+    mappings,
+    targetInput.targets,
+    initialCollection.messages,
+    [],
+  );
+  if (initialStructures.blockers.length > 0) {
+    const detail = initialStructures.blockers
+      .map(({ code, reason }) => `${code}：${reason}`)
+      .join("；");
+    throw new ProjectOperationError(
+      `无法安全合并上游结构：${detail}`,
+      initialStructures.blockers[0]!.code,
+    );
+  }
   const seeds: TranslationSeed[] = [];
   const sameTextCandidates: SameTextCandidate[] = [];
   const messagesNeedingSeed = new Set<string>();
@@ -760,7 +1312,7 @@ export async function initializeProject(
         reason: "missing",
       });
       messagesNeedingSeed.add(message.id);
-    } else if (!isValidTargetValue(message.source, message.target)) {
+    } else if (!isValidTargetValue(message.category, message.target)) {
       continue;
     } else if (sameValue(message.target, message.source)) {
       sameTextCandidates.push({
@@ -770,6 +1322,12 @@ export async function initializeProject(
     }
   }
 
+  const changedStructureTargets = new Set<string>();
+  applyStructureChanges(
+    targetInput.targets,
+    initialStructures.changes,
+    changedStructureTargets,
+  );
   const updatedTargetBytes = new Map<string, string>();
   for (const message of initialCollection.messages) {
     if (!messagesNeedingSeed.has(message.id)) continue;
@@ -784,6 +1342,7 @@ export async function initializeProject(
   for (const [path, target] of targetInput.targets) {
     const changed =
       target.originalSha256 === undefined ||
+      changedStructureTargets.has(path) ||
       initialCollection.messages.some(
         (message) =>
           message.targetFile === path && messagesNeedingSeed.has(message.id),
@@ -961,18 +1520,9 @@ function makeSyncMappings(
   const jarByPath = new Map(
     jarResources.map((resource) => [resource.path, resource.bytes]),
   );
-  return configuration.translationScope.mappings.map((mapping) => {
-    const sourceBytes = jarByPath.get(mapping.source);
-    if (sourceBytes === undefined) {
-      throw new ProjectOperationError(`映射原文不在 JAR 中：${mapping.source}`);
-    }
-    const parsed = readYaml(sourceBytes, mapping.source);
-    return {
-      mapping,
-      sourceValue: parsed.value,
-      sourceSha256: sha256(canonicalJson(parsed.value)),
-    };
-  });
+  return configuration.translationScope.mappings.map((mapping) =>
+    readMappingSnapshot(mapping, jarByPath),
+  );
 }
 
 export async function previewSyncProject(
@@ -1081,6 +1631,26 @@ export async function previewSyncProject(
     targetValueMap(targets),
     state.baseline.resources,
   );
+  const releasedTranslationPaths = makeReleasedTranslationPaths(
+    state.baseline.releasedTranslationPaths ?? [],
+    mappings,
+    previousCollection.messages,
+  );
+  const structurePlan = planStructureChanges(
+    state.baseline.mappings,
+    mappings,
+    targets,
+    currentCollection.messages,
+    releasedTranslationPaths,
+  );
+  if (structurePlan.blockers.length > 0) {
+    return {
+      ready: false,
+      blockers: structurePlan.blockers,
+      resourceDifference,
+      resourceChanges,
+    };
+  }
   const previousMessages = new Map(
     previousCollection.messages.map((message) => [message.id, message]),
   );
@@ -1104,7 +1674,7 @@ export async function previewSyncProject(
         ({ mapping }) =>
           mapping.target === previous.targetFile &&
           mapping.fields.some((field) =>
-            pathStartsWith(previous.path, field.path),
+            fieldSelectorMatchesPath(previous.path, field),
           ),
       ),
   );
@@ -1180,6 +1750,7 @@ export async function previewSyncProject(
   for (const [path, target] of targets) {
     if (target.originalSha256 === undefined) changedTargetPaths.add(path);
   }
+  applyStructureChanges(targets, structurePlan.changes, changedTargetPaths);
 
   const plannedMessages: SyncMessageChange[] = [];
   const targetAfter = new Map<string, JsonValue>();
@@ -1192,8 +1763,16 @@ export async function previewSyncProject(
           `无法准备目标文件：${previous.targetFile}`,
         );
       }
-      target.document.deleteIn(previous.path);
-      changedTargetPaths.add(previous.targetFile);
+      const removedByStructure = structurePlan.changes.some(
+        (change) =>
+          change.action === "delete" &&
+          change.targetFile === previous.targetFile &&
+          pathStartsWith(previous.path, change.path),
+      );
+      if (!removedByStructure) {
+        target.document.deleteIn(previous.path);
+        changedTargetPaths.add(previous.targetFile);
+      }
     }
     plannedMessages.push({
       id: previous.id,
@@ -1203,6 +1782,8 @@ export async function previewSyncProject(
       targetFile: previous.targetFile,
       path: previous.path,
       category: previous.category,
+      ...(previous.scene === undefined ? {} : { scene: previous.scene }),
+      ...(previous.format === undefined ? {} : { format: previous.format }),
       previousSource: previous.source,
       ...(previous.target === undefined
         ? {}
@@ -1223,6 +1804,8 @@ export async function previewSyncProject(
         targetFile: message.targetFile,
         path: message.path,
         category: message.category,
+        ...(message.scene === undefined ? {} : { scene: message.scene }),
+        ...(message.format === undefined ? {} : { format: message.format }),
         ...(previous === undefined ? {} : { previousSource: previous.source }),
         source: message.source,
       });
@@ -1297,6 +1880,8 @@ export async function previewSyncProject(
       targetFile: message.targetFile,
       path: message.path,
       category: message.category,
+      ...(message.scene === undefined ? {} : { scene: message.scene }),
+      ...(message.format === undefined ? {} : { format: message.format }),
       ...(previous === undefined ? {} : { previousSource: previous.source }),
       source: message.source,
       ...(selectedPreviousTarget === undefined
@@ -1336,7 +1921,7 @@ export async function previewSyncProject(
         (message) =>
           message.targetStatus === "present" &&
           message.target !== undefined &&
-          !isValidTargetValue(message.source, message.target) &&
+          !isValidTargetValue(message.category, message.target) &&
           message.targetFile === targetMessage.targetFile &&
           message.path.length < targetMessage.path.length &&
           message.path.every(
@@ -1361,6 +1946,12 @@ export async function previewSyncProject(
       targetFile: targetMessage.targetFile,
       path: targetMessage.path,
       category: targetMessage.category,
+      ...(targetMessage.scene === undefined
+        ? {}
+        : { scene: targetMessage.scene }),
+      ...(targetMessage.format === undefined
+        ? {}
+        : { format: targetMessage.format }),
       ...(previous === undefined ? {} : { previousSource: previous.source }),
       previousTarget: targetMessage.value,
     });
@@ -1412,6 +2003,9 @@ export async function previewSyncProject(
     jarSha256: jarInput.sha256,
     resources,
     mappings,
+    ...(releasedTranslationPaths.length === 0
+      ? {}
+      : { releasedTranslationPaths }),
     ...(miniMessageTheme === undefined ? {} : { miniMessageTheme }),
   };
   const baselineText = serializeBaseline(baseline);
@@ -1531,6 +2125,7 @@ export async function previewSyncProject(
     jarSha256: jarInput.sha256,
     resourceChanges,
     messages: plannedMessages,
+    structures: structurePlan.changes,
     targetFiles: targetPlans,
     unmanagedTargets,
     pendingTranslations,

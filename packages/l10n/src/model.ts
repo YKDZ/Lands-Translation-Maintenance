@@ -11,13 +11,93 @@ export type Severity = "error" | "warning" | "info";
 export type ResourcePurpose =
   | "chat-language"
   | "gui-language"
+  | "dialog-language"
   | "configuration"
   | "metadata"
   | "documentation"
   | "bedrock-excluded"
   | "other-excluded";
 
-export type ChatFieldCategory = "chat-string" | "chat-string-list";
+export type TranslationFieldCategory =
+  | "chat-string"
+  | "chat-string-list"
+  | "gui-string"
+  | "gui-lore"
+  | "dialog-string"
+  | "dialog-label-format"
+  | "configuration-string"
+  | "configuration-string-list";
+
+export type TranslationFieldScene =
+  | "gui-general"
+  | "gui-title"
+  | "gui-item-name"
+  | "gui-item-lore"
+  | "dialog-title"
+  | "dialog-button-label"
+  | "dialog-button-tooltip"
+  | "dialog-input-label"
+  | "dialog-label-format"
+  | "dialog-body-text"
+  | "category-name"
+  | "category-description"
+  | "level-title"
+  | "level-attribute-description"
+  | "level-requirement-title"
+  | "level-requirement-description"
+  | "role-name";
+
+export type TranslationFormat =
+  | "plain"
+  | "minimessage"
+  | "legacy-color"
+  | "legacy-color-minimessage"
+  | "label-format"
+  | "legacy-variable"
+  | "legacy-variable-minimessage"
+  | "legacy-color-variable-minimessage";
+
+export const translationFieldScenes = [
+  "gui-general",
+  "gui-title",
+  "gui-item-name",
+  "gui-item-lore",
+  "dialog-title",
+  "dialog-button-label",
+  "dialog-button-tooltip",
+  "dialog-input-label",
+  "dialog-label-format",
+  "dialog-body-text",
+  "category-name",
+  "category-description",
+  "level-title",
+  "level-attribute-description",
+  "level-requirement-title",
+  "level-requirement-description",
+  "role-name",
+] as const satisfies readonly TranslationFieldScene[];
+
+export const translationFieldCategories = [
+  "chat-string",
+  "chat-string-list",
+  "gui-string",
+  "gui-lore",
+  "dialog-string",
+  "dialog-label-format",
+  "configuration-string",
+  "configuration-string-list",
+] as const satisfies readonly TranslationFieldCategory[];
+
+export const translationFormats = [
+  "plain",
+  "minimessage",
+  "legacy-color",
+  "legacy-color-minimessage",
+  "label-format",
+  "legacy-variable",
+  "legacy-variable-minimessage",
+  "legacy-color-variable-minimessage",
+] as const satisfies readonly TranslationFormat[];
 
 export type MiniMessageSurface = "chat" | "gui" | "dialog" | "bedrock";
 
@@ -139,12 +219,14 @@ export interface ResourceInventoryEntry {
 
 export interface TranslationField {
   readonly path: readonly string[];
-  readonly category: ChatFieldCategory;
+  readonly category: TranslationFieldCategory;
+  readonly scene?: TranslationFieldScene;
 }
 
 export interface TranslationMapping {
   readonly source: string;
   readonly target: string;
+  readonly definitionsSource?: string;
   readonly fields: readonly TranslationField[];
 }
 
@@ -174,7 +256,9 @@ export interface MessageIdentity {
   readonly sourceFile: string;
   readonly targetFile: string;
   readonly path: readonly string[];
-  readonly category: ChatFieldCategory;
+  readonly category: TranslationFieldCategory;
+  readonly scene?: TranslationFieldScene;
+  readonly format?: TranslationFormat;
 }
 
 export interface ObservedMessage extends MessageIdentity {
@@ -189,8 +273,18 @@ export interface ProjectView {
   readonly resources: readonly ResourceInventoryEntry[];
   readonly messages: readonly ObservedMessage[];
   readonly targetMessages: readonly TargetMessage[];
+  readonly structures: readonly ProjectStructure[];
   readonly fileIssues: readonly ProjectFileIssue[];
   readonly miniMessage?: MiniMessageParseProject;
+}
+
+export interface ProjectStructure {
+  readonly sourceFile: string;
+  readonly definitionsSource: string;
+  readonly targetFile: string;
+  readonly definitions: JsonValue;
+  readonly target: JsonValue | undefined;
+  readonly translationPaths: readonly (readonly string[])[];
 }
 
 export interface TargetMessage extends Omit<MessageIdentity, "id"> {
@@ -308,11 +402,23 @@ export interface SyncMessageChange {
   readonly sourceFile: string;
   readonly targetFile: string;
   readonly path: readonly string[];
-  readonly category: ChatFieldCategory;
+  readonly category: TranslationFieldCategory;
+  readonly scene?: TranslationFieldScene;
+  readonly format?: TranslationFormat;
   readonly previousSource?: JsonValue;
   readonly source?: JsonValue;
   readonly previousTarget?: JsonValue;
   readonly target?: JsonValue;
+}
+
+export interface SyncStructureChange {
+  readonly sourceFile: string;
+  readonly definitionsSource: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
+  readonly action: "preserve" | "update" | "delete";
+  readonly previous?: JsonValue;
+  readonly expected?: JsonValue;
 }
 
 export interface SyncResourceChanges {
@@ -362,6 +468,7 @@ export interface SyncPlan {
   readonly jarSha256: string;
   readonly resourceChanges: SyncResourceChanges;
   readonly messages: readonly SyncMessageChange[];
+  readonly structures: readonly SyncStructureChange[];
   readonly targetFiles: readonly SyncTargetFilePlan[];
   readonly unmanagedTargets: readonly string[];
   readonly pendingTranslations: readonly string[];

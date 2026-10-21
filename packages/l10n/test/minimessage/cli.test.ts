@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 
 import {
   createProject,
+  createGuiProject,
   readReport,
   runCli,
   snapshotProjectFiles,
@@ -1079,6 +1080,123 @@ void describe("MiniMessage 官方检查制品", () => {
       ),
       [],
     );
+  });
+
+  void it("GUI lore 列表走整体 MiniMessage 输入与 GUI 主题", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "<t:gui_only>工具</t>",
+      lore: ["<t:gui_only>第一行</t>", "<t:missing>第二行</t>", "&c旧颜色码"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(checked.status, 1, checked.stderr);
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const sourceThemeIssues = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.theme-unknown" &&
+        diagnostic.origin === "source",
+    );
+    assert.equal(sourceThemeIssues.length, 1);
+    const [missingToken] = sourceThemeIssues;
+    assert.ok(missingToken);
+    assert.deepEqual(missingToken.location, {
+      file: "Locale/en-US_gui.yml",
+      path: ["physical", "selection", "lore"],
+    });
+    assert.match(JSON.stringify(missingToken.actual), /missing/u);
+    const loreIdentity = missingToken.message as Record<string, unknown>;
+    assert.equal(loreIdentity.sourceFile, "Locale/en-US_gui.yml");
+    assert.equal(loreIdentity.targetFile, "Locale/zh-CN_gui.yml");
+    assert.deepEqual(loreIdentity.path, ["physical", "selection", "lore"]);
+    assert.equal(loreIdentity.category, "gui-lore");
+    assert.equal(loreIdentity.scene, "gui-item-lore");
+    assert.equal(loreIdentity.format, "legacy-color-minimessage");
+    const coverage = report.coverage as Record<string, unknown>;
+    assert.ok(
+      (coverage.unavailableCapabilities as string[]).some((capability) =>
+        capability.includes("旧颜色码"),
+      ),
+    );
+  });
+
+  void it("按场景把对话框物品和混合配置字符串交给 GUI 主题", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "<t:gui_only>工具</t>",
+      lore: ["<t:gui_only>说明</t>"],
+      dialogItemName: "<t:gui_only>对话框物品</t> <t:dialog_missing>未知项</t>",
+      categoryName: "<t:gui_only>分类</t> <t:category_missing>未知项</t>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const sourceThemeIssues = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.theme-unknown" &&
+        diagnostic.origin === "source",
+    );
+    assert.equal(sourceThemeIssues.length, 2);
+
+    const dialogIssue = sourceThemeIssues.find(
+      ({ location }) =>
+        JSON.stringify((location as Record<string, unknown>).path) ===
+        '["dialogs","confirmation","bodies","icon","item","name"]',
+    );
+    assert.ok(dialogIssue);
+    assert.match(JSON.stringify(dialogIssue.actual), /dialog_missing/u);
+    const dialogIdentity = dialogIssue.message as Record<string, unknown>;
+    assert.equal(dialogIdentity.scene, "gui-item-name");
+    assert.equal(dialogIdentity.format, "legacy-color-minimessage");
+
+    const categoryIssue = sourceThemeIssues.find(
+      ({ location }) =>
+        JSON.stringify((location as Record<string, unknown>).path) ===
+        '["land","categories","peaceful","name"]',
+    );
+    assert.ok(categoryIssue);
+    assert.match(JSON.stringify(categoryIssue.actual), /category_missing/u);
+    const categoryIdentity = categoryIssue.message as Record<string, unknown>;
+    assert.equal(categoryIdentity.scene, "category-name");
+    assert.equal(categoryIdentity.format, "legacy-color-minimessage");
   });
 
   void it("为每个重复主题 token 保留各自的原文位置", async (t) => {
