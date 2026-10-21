@@ -171,6 +171,24 @@ export function adaptLegacyMiniMessageInput(
 
     const codePrefix = input[index];
     if (
+      codePrefix === "§" &&
+      !supportsSectionCodes &&
+      index + 1 < input.length
+    ) {
+      const code = input[index + 1]!.toLowerCase();
+      if (colorCodes.has(code) || decorationCodes.has(code) || code === "r") {
+        issues.push({
+          code: "legacy-format.code-unsupported",
+          position: { start: index, end: index + 2 },
+          expected: "8.0.1 支持的 & 颜色/格式码",
+          actual: input.slice(index, index + 2),
+        });
+      }
+      appendCopied(index, index + 2);
+      index += 1;
+      continue;
+    }
+    if (
       (codePrefix === "&" || (supportsSectionCodes && codePrefix === "§")) &&
       index + 1 < input.length
     ) {
@@ -228,17 +246,6 @@ export function adaptLegacyMiniMessageInput(
             position: { start: index, end: newerSequenceEnd },
             expected: "8.0.1 支持的旧颜色码",
             actual: input.slice(index, newerSequenceEnd),
-          });
-        }
-      }
-
-      if (codePrefix === "§" && !supportsSectionCodes) {
-        if (colorCodes.has(code) || decorationCodes.has(code) || code === "r") {
-          issues.push({
-            code: "legacy-format.code-unsupported",
-            position,
-            expected: "8.0.1 支持的 & 颜色/格式码",
-            actual: input.slice(index, index + 2),
           });
         }
       }
