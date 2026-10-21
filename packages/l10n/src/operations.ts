@@ -9,6 +9,10 @@ import {
 } from "#/configuration";
 import { readJarResources } from "#/jar";
 import { collectMessages } from "#/messages";
+import {
+  captureMiniMessageTheme,
+  validateMiniMessageThemeYaml,
+} from "#/minimessage-theme";
 import type {
   CheckCoverage,
   ConsumerConfiguration,
@@ -587,6 +591,47 @@ export async function initializeProject(
   const jarByPath = new Map(
     jar.resources.map((resource) => [resource.path, resource.bytes]),
   );
+  const capturedTheme = captureMiniMessageTheme(
+    configuration.resources,
+    jarByPath,
+  );
+  if (capturedTheme.ambiguousFiles.length > 0) {
+    throw new ProjectOperationError(
+      `主题资源不唯一：${capturedTheme.ambiguousFiles.join("、")}`,
+      "minimessage.theme-ambiguous",
+      { file: capturedTheme.ambiguousFiles[0]!, path: [] },
+    );
+  }
+  if (capturedTheme.unavailableFiles.length > 0) {
+    throw new ProjectOperationError(
+      `无法读取主题资源：${capturedTheme.unavailableFiles.join("、")}`,
+      "minimessage.theme-unavailable",
+      { file: capturedTheme.unavailableFiles[0]!, path: [] },
+    );
+  }
+  const themeYamlIssues =
+    capturedTheme.theme === undefined
+      ? []
+      : validateMiniMessageThemeYaml(capturedTheme.theme);
+  if (themeYamlIssues.length > 0) {
+    const details = themeYamlIssues
+      .map((issue) => `${issue.file}：${issue.reason}`)
+      .join("；");
+    throw new ProjectOperationError(
+      `主题 YAML 无法安全读取：${details}`,
+      themeYamlIssues[0]!.code,
+      {
+        file: themeYamlIssues[0]!.file,
+        path: themeYamlIssues[0]!.path,
+        ...(themeYamlIssues[0]!.line === undefined
+          ? {}
+          : { line: themeYamlIssues[0]!.line }),
+        ...(themeYamlIssues[0]!.column === undefined
+          ? {}
+          : { column: themeYamlIssues[0]!.column }),
+      },
+    );
+  }
   const resources: ResourceSnapshot[] = configuration.resources
     .map((resource) => ({
       ...resource,
@@ -696,6 +741,9 @@ export async function initializeProject(
     jarSha256: jarInput.sha256,
     resources,
     mappings,
+    ...(capturedTheme.theme === undefined
+      ? {}
+      : { miniMessageTheme: capturedTheme.theme }),
   };
   const baselineText = serializeBaseline(baseline);
   const baselineSha256 = sha256(baselineText);
