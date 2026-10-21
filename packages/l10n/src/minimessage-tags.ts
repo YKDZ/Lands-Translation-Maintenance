@@ -1521,6 +1521,8 @@ function tagOccurrences(
       return {
         kind: "tag",
         raw: "\n",
+        visibleText: "\n",
+        visibleSourceOffsets: [position.start, position.end],
         name: "newline",
         parameters: [],
         parameterPositions: [],
