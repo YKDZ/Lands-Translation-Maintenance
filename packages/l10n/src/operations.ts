@@ -2484,6 +2484,7 @@ async function evaluateSavedProject(
             loaded.view.messages,
             loaded.view.resources,
             loaded.baseline.miniMessageTheme,
+            loaded.configuration.source.version,
           ),
         }
       : loaded.view;
