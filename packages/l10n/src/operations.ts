@@ -1351,10 +1351,7 @@ function coverageUnavailable(
   view: ProjectView,
   configuration: ConsumerConfiguration,
 ): readonly string[] {
-  const unavailable = [
-    "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
-    "译文一致性检查尚未实现",
-  ];
+  const unavailable = ["译文一致性检查尚未实现"];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   unavailable.push(...translatableTextCoverageUnavailable(view));
   if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
