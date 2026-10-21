@@ -29,15 +29,15 @@
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
-        ".l10n/config.yml",
-        ".l10n/lock.json",
-        ".l10n/upstream/source-baseline.json",
-        ".l10n/exceptions.yml",
-        "Locale/**",
-        "Modules/**",
-        "categories.yml",
-        "levels.yml",
-        "roles.yml"
+        "translations/zhcn/.l10n/config.yml",
+        "translations/zhcn/.l10n/lock.json",
+        "translations/zhcn/.l10n/upstream/source-baseline.json",
+        "translations/zhcn/.l10n/exceptions.yml",
+        "translations/zhcn/Locale/**",
+        "translations/zhcn/Modules/**",
+        "translations/zhcn/categories.yml",
+        "translations/zhcn/levels.yml",
+        "translations/zhcn/roles.yml"
       ],
       "outputs": [],
       "tags": ["quality:heavy"]

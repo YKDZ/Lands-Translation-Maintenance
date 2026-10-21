@@ -24,7 +24,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json --pretty false",
+    "build": "tsc -p tsconfig.build.json --pretty false && chmod +x dist/cli.js",
     "build:minimessage": "node --conditions=source scripts/build-minimessage.ts",
     "format:check": "oxfmt --list-different .",
     "format:write": "oxfmt --write .",
