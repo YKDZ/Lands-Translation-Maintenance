@@ -895,6 +895,127 @@ void describe("MiniMessage 官方检查制品", () => {
     }
   });
 
+  void it("同消息的多个 click 参数问题可以分别确认并独立过期", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting:
+        "<click:run_command:'/a one'>A</click> <click:run_command:'/b two'>B</click>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    const mismatchedTarget =
+      "<click:run_command:'/a other'>甲</click> <click:run_command:'/b else'>乙</click>";
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(mismatchedTarget)}`,
+      ),
+    );
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeDiagnostics = readReport(before.stdout || before.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const issues = beforeDiagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.click-command-arguments-mismatch",
+    );
+    assert.equal(issues.length, 2, before.stdout || before.stderr);
+    assert.notEqual(issues[0]?.objectId, issues[1]?.objectId);
+
+    for (const [index, issue] of issues.entries()) {
+      const exemption = runCli(
+        "exempt",
+        "--project",
+        project.directory,
+        "--diagnostic",
+        String(issue.diagnosticId),
+        "--reason",
+        `此处命令参数由运行时约定，问题 ${index + 1}`,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(exemption.status, 0, exemption.stderr);
+    }
+
+    const exceptionText = await readFile(
+      join(project.directory, ".l10n/exceptions.yml"),
+      "utf8",
+    );
+    assert.equal(exceptionText.match(/diagnosticId:/gu)?.length, 2);
+    const afterBoth = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const afterBothDiagnostics = readReport(
+      afterBoth.stdout || afterBoth.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      afterBothDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "minimessage.click-command-arguments-mismatch",
+      ),
+      false,
+      afterBoth.stdout || afterBoth.stderr,
+    );
+
+    const currentTarget = await readFile(targetPath, "utf8");
+    await writeFile(targetPath, currentTarget.replace("/a other", "/a one"));
+    const afterFirstDisappears = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const afterFirstDiagnostics = readReport(
+      afterFirstDisappears.stdout || afterFirstDisappears.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      afterFirstDiagnostics.filter(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ).length,
+      1,
+      afterFirstDisappears.stdout || afterFirstDisappears.stderr,
+    );
+    assert.equal(
+      afterFirstDiagnostics.filter(
+        (diagnostic) => diagnostic.code === "exception.review-required",
+      ).length,
+      1,
+      afterFirstDisappears.stdout || afterFirstDisappears.stderr,
+    );
+    const remainingMismatch = afterFirstDiagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.click-command-arguments-mismatch",
+    );
+    assert.equal(
+      remainingMismatch.length,
+      1,
+      afterFirstDisappears.stdout || afterFirstDisappears.stderr,
+    );
+    assert.match(JSON.stringify(remainingMismatch[0]?.expected), /\/b two/u);
+    assert.match(JSON.stringify(remainingMismatch[0]?.actual), /\/b else/u);
+  });
+
   void it("按 Lands Java Pattern 行终止符边界保留多行 click 字面参数", async (t) => {
     const lineTerminators = ["\n", "\r", "\u0085", "\u2028", "\u2029"];
     const source = lineTerminators.map(
@@ -1669,6 +1790,255 @@ void describe("MiniMessage 官方检查制品", () => {
       false,
     );
     assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+  });
+
+  void it("变量覆盖不完整时保留豁免为无法评估", async (t) => {
+    const project = await createProject(t, { sourceGreeting: "Hello!" });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const writeGreeting = async (greeting: string): Promise<void> => {
+      const target = await readFile(targetPath, "utf8");
+      await writeFile(
+        targetPath,
+        target.replace(
+          /^  greeting:.*$/mu,
+          `  greeting: ${JSON.stringify(greeting)}`,
+        ),
+      );
+    };
+    await writeGreeting("你好 <v:other>");
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeDiagnostics = readReport(before.stdout || before.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const selected = beforeDiagnostics.find(
+      (diagnostic) => diagnostic.code === "minimessage.variable-added",
+    );
+    assert.ok(selected, before.stdout || before.stderr);
+    if (selected === undefined) throw new Error("缺少变量新增诊断");
+
+    const exempted = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(selected.diagnosticId),
+      "--reason",
+      "此变量由运行时接受",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr);
+
+    await writeGreeting("你好 §c世界 <v:other>");
+    const invalid = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const invalidDiagnostics = readReport(invalid.stdout || invalid.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      invalidDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+      ),
+      true,
+      invalid.stdout || invalid.stderr,
+    );
+    assert.equal(
+      invalidDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "minimessage.variable-coverage-unavailable",
+      ),
+      true,
+      invalid.stdout || invalid.stderr,
+    );
+    assert.equal(
+      invalidDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      true,
+      invalid.stdout || invalid.stderr,
+    );
+    assert.equal(
+      invalidDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      false,
+      invalid.stdout || invalid.stderr,
+    );
+
+    await writeGreeting("你好 <v:other> and again");
+    const recovered = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const recoveredDiagnostics = readReport(
+      recovered.stdout || recovered.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      recoveredDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.variable-added",
+      ),
+      true,
+      recovered.stdout || recovered.stderr,
+    );
+    assert.equal(
+      recoveredDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.review-required",
+      ),
+      true,
+      recovered.stdout || recovered.stderr,
+    );
+    assert.equal(
+      recoveredDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      recovered.stdout || recovered.stderr,
+    );
+
+    await writeGreeting("你好");
+    const disappeared = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const disappearedDiagnostics = readReport(
+      disappeared.stdout || disappeared.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      disappearedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.variable-added",
+      ),
+      false,
+      disappeared.stdout || disappeared.stderr,
+    );
+    assert.equal(
+      disappearedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      true,
+      disappeared.stdout || disappeared.stderr,
+    );
+    assert.equal(
+      disappearedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      disappeared.stdout || disappeared.stderr,
+    );
+  });
+
+  void it("语法错误诊断在变量覆盖不完整时仍可评估和豁免", async (t) => {
+    const project = await createProject(t, { sourceGreeting: "Hello" });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("你好 §c世界")}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const diagnostics = readReport(checked.stdout || checked.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const syntaxIssue = diagnostics.find(
+      (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+    );
+    assert.ok(syntaxIssue, checked.stdout || checked.stderr);
+    if (syntaxIssue === undefined) throw new Error("缺少语法诊断");
+    assert.equal(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "minimessage.variable-coverage-unavailable",
+      ),
+      true,
+      checked.stdout || checked.stderr,
+    );
+
+    const exemption = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(syntaxIssue.diagnosticId),
+      "--reason",
+      "此旧颜色码由上游运行时接受",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exemption.status, 0, exemption.stderr);
+    const after = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const afterDiagnostics = readReport(after.stdout || after.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      afterDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+      ),
+      false,
+      after.stdout || after.stderr,
+    );
+    assert.equal(
+      afterDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      after.stdout || after.stderr,
+    );
+    assert.equal(
+      afterDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      false,
+      after.stdout || after.stderr,
+    );
   });
 
   void it("同一消息同一规则的两个问题可以只豁免一个", async (t) => {

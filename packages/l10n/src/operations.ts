@@ -2544,12 +2544,24 @@ function ruleUnavailable(
   ruleId: string,
   operation: "status" | "check",
   messageId?: string,
+  diagnosticCode?: string,
 ): boolean {
+  const incompleteVariableEvaluation =
+    ruleId === "minimessage-variables" &&
+    diagnosticCode !== "minimessage.variable-coverage-unavailable" &&
+    messageId !== undefined &&
+    project.diagnostics.some(
+      (item) =>
+        item.ruleId === ruleId &&
+        item.message?.id === messageId &&
+        item.code === "minimessage.variable-coverage-unavailable",
+    );
   return (
     !project.coverage.enabledRuleIds.includes(ruleId) ||
     project.coverage.disabledRuleIds.includes(ruleId) ||
     project.coverage.unsupportedRuleIds.includes(ruleId) ||
-    requiredRuleInputUnavailable(project, ruleId, operation, messageId)
+    requiredRuleInputUnavailable(project, ruleId, operation, messageId) ||
+    incompleteVariableEvaluation
   );
 }
 
@@ -2633,7 +2645,13 @@ function applyExceptionRecords(
     );
     if (original !== undefined && !isExecutionPrecondition(original.code)) {
       if (
-        !ruleUnavailable(project, record.ruleId, operation, record.message?.id)
+        !ruleUnavailable(
+          project,
+          record.ruleId,
+          operation,
+          record.message?.id,
+          record.code,
+        )
       )
         suppressed.add(original.diagnosticId);
       else {
@@ -2655,6 +2673,7 @@ function applyExceptionRecords(
       record.ruleId,
       operation,
       record.message?.id,
+      record.code,
     );
     if (unavailable) {
       notices.push(
@@ -2893,7 +2912,13 @@ export async function recordDiagnosticExemption(
   }
   if (
     isExecutionPrecondition(selected.code) ||
-    ruleUnavailable(project, selected.ruleId, "check", selected.message?.id)
+    ruleUnavailable(
+      project,
+      selected.ruleId,
+      "check",
+      selected.message?.id,
+      selected.code,
+    )
   ) {
     throw new ProjectOperationError(
       "相关规则未完成评估，不能确认此诊断",
