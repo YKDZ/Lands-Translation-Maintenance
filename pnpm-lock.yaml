@@ -190,6 +190,9 @@ importers:
 
   .:
     devDependencies:
+      '@lands-l10n/l10n':
+        specifier: workspace:*
+        version: link:packages/l10n
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2

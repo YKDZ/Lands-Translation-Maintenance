@@ -1,6 +1,9 @@
 {
   "name": "@lands-l10n/l10n",
   "private": true,
+  "bin": {
+    "lands-l10n": "./dist/cli.js"
+  },
   "type": "module",
   "imports": {
     "#/*": {

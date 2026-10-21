@@ -22,6 +22,26 @@
     "//#check:heavy": {
       "tags": ["quality:entry"]
     },
+    "//#check:l10n": {
+      "dependsOn": [
+        "@lands-l10n/l10n#build",
+        "@lands-l10n/l10n#build:minimessage"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".l10n/config.yml",
+        ".l10n/lock.json",
+        ".l10n/upstream/source-baseline.json",
+        ".l10n/exceptions.yml",
+        "Locale/**",
+        "Modules/**",
+        "categories.yml",
+        "levels.yml",
+        "roles.yml"
+      ],
+      "outputs": [],
+      "tags": ["quality:heavy"]
+    },
     "//#fix": {
       "tags": ["work:repair"]
     },
