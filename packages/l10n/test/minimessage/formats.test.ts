@@ -407,7 +407,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
   });
 
-  void it("动态游戏组件明确降低静态可见文本覆盖", async (t) => {
+  void it("地图动态游戏组件明确降低静态可见文本覆盖", async (t) => {
     const project = await createFormatProject(t, {
       sourceVersion: "8.9.2",
       mapDescription: "<div><score:'Alex':'points'></div>",
@@ -426,6 +426,27 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       coverage?.unavailableCapabilities.some((reason) =>
         reason.includes("依赖游戏运行时数据"),
       ),
+    );
+  });
+
+  void it("普通聊天的动态结构不触发地图与旧变量的静态渲染限制", async (t) => {
+    const project = await createFormatProject(t, {
+      unrelatedText: "<score:'Alex':'points'>",
+      targetUnrelatedText: "<score:'Alex':'points'>",
+    });
+    const { report } = initAndCheck(project);
+    const coverage = report.coverage as
+      | {
+          readonly complete: boolean;
+          readonly unavailableCapabilities: readonly string[];
+        }
+      | undefined;
+
+    assert.equal(
+      coverage?.unavailableCapabilities.some((reason) =>
+        reason.includes("依赖游戏运行时数据"),
+      ),
+      false,
     );
   });
 
