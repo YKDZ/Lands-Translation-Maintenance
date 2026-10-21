@@ -38,11 +38,11 @@ const colorNames = [
   "white",
 ] as const;
 const colorCodes = new Map(
-  [..."0123456789abcdef"].map((code, index) => [code, colorNames[index]!]),
+  "0123456789abcdef".split("").map((code, index) => [code, colorNames[index]!]),
 );
 const decorationNames = ["obf", "b", "st", "u", "i"] as const;
 const decorationCodes = new Map(
-  [..."klmno"].map((code, index) => [code, decorationNames[index]!]),
+  "klmno".split("").map((code, index) => [code, decorationNames[index]!]),
 );
 const legacyHex = /^#[a-f\d]{6}$/iu;
 const htmlLikeTag = /<\/?[a-zA-Z#!][^<>]*>/uy;
