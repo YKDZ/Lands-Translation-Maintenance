@@ -105,17 +105,20 @@ void describe("MiniMessage 官方检查制品", () => {
         (diagnostic.expected as Record<string, unknown>).closing === true,
     );
     assert.ok(missingClose, checked.stderr || checked.stdout);
+    if (missingClose === undefined) {
+      throw new Error("缺少原文显式结束标签差异");
+    }
     assert.equal(
-      (missingClose?.expected as Record<string, unknown>).expectedCount,
+      (missingClose.expected as Record<string, unknown>).expectedCount,
       1,
     );
     assert.equal(
-      (missingClose?.actual as Record<string, unknown>).actualCount,
+      (missingClose.actual as Record<string, unknown>).actualCount,
       0,
     );
     assert.equal(
       (
-        (missingClose?.expected as Record<string, unknown>)
+        (missingClose.expected as Record<string, unknown>)
           .positions as readonly unknown[]
       ).length,
       1,
