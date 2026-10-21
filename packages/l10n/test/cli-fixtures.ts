@@ -157,6 +157,14 @@ export async function createFormatProject(
     readonly mapSpawn?: string;
     readonly targetMapDescription?: string;
     readonly targetMapSpawn?: string;
+    readonly nationsMapDescription?: string;
+    readonly targetNationsMapDescription?: string;
+    readonly nationsCapitalSpawn?: string;
+    readonly targetNationsCapitalSpawn?: string;
+    readonly rootNationsMapDescription?: string;
+    readonly targetRootNationsMapDescription?: string;
+    readonly rootNationsCapitalSpawn?: string;
+    readonly targetRootNationsCapitalSpawn?: string;
     readonly legacyTitle?: string;
     readonly targetLegacyTitle?: string;
     readonly unrelatedText?: string;
@@ -196,12 +204,75 @@ export async function createFormatProject(
     `    text: ${JSON.stringify(options.targetUnrelatedText ?? "普通 %owner% 文本")}`,
     "",
   ].join("\n");
+  const hasNationsMap = [
+    options.nationsMapDescription,
+    options.targetNationsMapDescription,
+    options.nationsCapitalSpawn,
+    options.targetNationsCapitalSpawn,
+    options.rootNationsMapDescription,
+    options.targetRootNationsMapDescription,
+    options.rootNationsCapitalSpawn,
+    options.targetRootNationsCapitalSpawn,
+  ].some((value) => value !== undefined);
+  const hasRootNationsIntegration = [
+    options.rootNationsMapDescription,
+    options.targetRootNationsMapDescription,
+    options.rootNationsCapitalSpawn,
+    options.targetRootNationsCapitalSpawn,
+  ].some((value) => value !== undefined);
+  const nationsSourceLocale = hasNationsMap
+    ? [
+        "general:",
+        "  integration:",
+        "    dynmap:",
+        "      capital:",
+        `        spawn: ${JSON.stringify(options.nationsCapitalSpawn ?? '<div class="capital">Spawn <v:public> /<v:cmd></div>')}`,
+        "      nation:",
+        `        description: ${JSON.stringify(options.nationsMapDescription ?? '<div class="nation">Land <v:land> · level <v:level></div>')}`,
+        ...(hasRootNationsIntegration
+          ? [
+              "integration:",
+              "  dynmap:",
+              "    capital:",
+              `      spawn: ${JSON.stringify(options.rootNationsCapitalSpawn ?? '<div class="root-capital">Capital</div>')}`,
+              "    nation:",
+              `      description: ${JSON.stringify(options.rootNationsMapDescription ?? '<div class="root-nation">Nation</div>')}`,
+            ]
+          : []),
+        "",
+      ].join("\n")
+    : undefined;
+  const nationsTargetLocale = hasNationsMap
+    ? [
+        "general:",
+        "  integration:",
+        "    dynmap:",
+        "      capital:",
+        `        spawn: ${JSON.stringify(options.targetNationsCapitalSpawn ?? '<div class="capital">在<v:public> /<v:cmd>生成</div>')}`,
+        "      nation:",
+        `        description: ${JSON.stringify(options.targetNationsMapDescription ?? '<div class="nation">城镇 <v:land> · 等级 <v:level></div>')}`,
+        ...(hasRootNationsIntegration
+          ? [
+              "integration:",
+              "  dynmap:",
+              "    capital:",
+              `      spawn: ${JSON.stringify(options.targetRootNationsCapitalSpawn ?? '<div class="root-capital">首都</div>')}`,
+              "    nation:",
+              `      description: ${JSON.stringify(options.targetRootNationsMapDescription ?? '<div class="root-nation">联邦</div>')}`,
+            ]
+          : []),
+        "",
+      ].join("\n")
+    : undefined;
   const jarFile = join(directory, "Lands.jar");
   await writeFile(
     jarFile,
     zipSync({
       "plugin.yml": strToU8("name: Lands\n"),
       "Locale/en-US.yml": strToU8(sourceLocale),
+      ...(nationsSourceLocale === undefined
+        ? {}
+        : { "Locale/Nations/en-US.yml": strToU8(nationsSourceLocale) }),
     }),
   );
   await mkdir(join(directory, ".l10n"), { recursive: true });
@@ -218,6 +289,9 @@ export async function createFormatProject(
       "    purpose: metadata",
       "  - path: Locale/en-US.yml",
       "    purpose: chat-language",
+      ...(nationsSourceLocale === undefined
+        ? []
+        : ["  - path: Locale/Nations/en-US.yml", "    purpose: chat-language"]),
       "translationScope:",
       '  sourceLanguage: "en-US"',
       '  targetLanguage: "zh-CN"',
@@ -227,10 +301,32 @@ export async function createFormatProject(
       "      fields:",
       "        - path: [general]",
       "          category: chat-string",
+      ...(nationsSourceLocale === undefined
+        ? []
+        : [
+            "    - source: Locale/Nations/en-US.yml",
+            "      target: Locale/Nations/zh-CN.yml",
+            "      fields:",
+            "        - path: [general]",
+            "          category: chat-string",
+            ...(hasRootNationsIntegration
+              ? [
+                  "        - path: [integration]",
+                  "          category: chat-string",
+                ]
+              : []),
+          ]),
       "",
     ].join("\n"),
   );
   await writeFile(join(directory, "Locale/zh-CN.yml"), targetLocale);
+  if (nationsTargetLocale !== undefined) {
+    await mkdir(join(directory, "Locale/Nations"), { recursive: true });
+    await writeFile(
+      join(directory, "Locale/Nations/zh-CN.yml"),
+      nationsTargetLocale,
+    );
+  }
 
   return { directory, jarFile };
 }

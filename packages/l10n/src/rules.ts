@@ -16,9 +16,22 @@ import type {
   RuleConfiguration,
   RuleContext,
   Severity,
+  RuleInputDependency,
 } from "#/model";
+import { translationConsistencyRule } from "#/translation-consistency";
 import { terminologyRule, translationStyleRule } from "#/terminology-rules";
 import { canonicalJson, compareText, deepFreeze, sha256 } from "#/value";
+
+const diagnosticInputDependencies = new WeakMap<
+  Diagnostic,
+  readonly RuleInputDependency[]
+>();
+
+export function inputDependenciesForDiagnostic(
+  diagnostic: Diagnostic,
+): readonly RuleInputDependency[] | undefined {
+  return diagnosticInputDependencies.get(diagnostic);
+}
 
 const structureRule: CheckRule = {
   id: "structure",
@@ -83,6 +96,7 @@ export const builtInRules: readonly CheckRule[] = [
   legacyVariableRule,
   mapHtmlRule,
   mapHtmlSourceLimitRule,
+  translationConsistencyRule,
 ];
 
 export interface RuleEvaluationOptions {
@@ -99,7 +113,6 @@ function ruleSettings(
 
 function diagnosticFromFinding(
   rule: CheckRule,
-  context: RuleContext,
   severity: Severity,
   finding: RuleFinding,
   project: ProjectView,
@@ -125,7 +138,7 @@ function diagnosticFromFinding(
   const contentFingerprint = sha256(
     canonicalJson({
       ruleId: rule.id,
-      severity: context.severity,
+      severity,
       message:
         observed === undefined
           ? null
@@ -138,6 +151,7 @@ function diagnosticFromFinding(
               targetStatus: observed.targetStatus,
             },
       dependencies: finding.fingerprint ?? null,
+      requiredInputDependencies: finding.requiredInputDependencies ?? null,
       expected: finding.expected,
       actual: finding.actual,
     }),
@@ -150,7 +164,7 @@ function diagnosticFromFinding(
       contentFingerprint,
     }),
   );
-  return {
+  const diagnostic: Diagnostic = {
     diagnosticId,
     objectId,
     contentFingerprint,
@@ -164,6 +178,13 @@ function diagnosticFromFinding(
     expected: finding.expected,
     actual: finding.actual,
   };
+  if (finding.requiredInputDependencies !== undefined) {
+    diagnosticInputDependencies.set(
+      diagnostic,
+      finding.requiredInputDependencies,
+    );
+  }
+  return diagnostic;
 }
 
 function compareDiagnostics(left: Diagnostic, right: Diagnostic): number {
@@ -209,15 +230,16 @@ export function evaluateRules(
     try {
       const findings = rule.evaluate(ruleInput, context);
       for (const finding of findings) {
+        const findingSeverity =
+          settings.severity ?? finding.severity ?? severity;
         diagnostics.push(
-          diagnosticFromFinding(rule, context, severity, finding, project),
+          diagnosticFromFinding(rule, findingSeverity, finding, project),
         );
       }
     } catch (error) {
       diagnostics.push(
         diagnosticFromFinding(
           rule,
-          context,
           severity,
           {
             code: "rule.execution-failed",
