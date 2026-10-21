@@ -288,6 +288,21 @@ async function readJournal(
   return parsed.data;
 }
 
+export async function readTransactionPhase(
+  projectDirectory: string,
+  transactionRelativePath: string,
+): Promise<TransactionJournal["phase"] | undefined> {
+  const root = resolve(projectDirectory);
+  const journalPath = safeProjectPath(root, transactionRelativePath);
+  const journal = await readJournal(journalPath);
+  if (journal === undefined) return undefined;
+  for (const file of journal.files) safeProjectPath(root, file.path);
+  for (const directory of journal.createdDirectories) {
+    safeProjectPath(root, directory);
+  }
+  return journal.phase;
+}
+
 async function moveOutputToRollback(
   target: string,
   rollback: string,

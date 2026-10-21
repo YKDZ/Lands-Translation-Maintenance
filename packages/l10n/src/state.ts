@@ -11,6 +11,7 @@ import type {
   ResourceInventoryEntry,
   TranslationMapping,
 } from "#/model";
+import { readTransactionPhase } from "#/transaction";
 import { canonicalJson, sha256 } from "#/value";
 
 export const configurationFileName = ".l10n/config.yml";
@@ -71,7 +72,11 @@ export type ReadStateResult =
       readonly baselineText: string;
       readonly lockText: string;
     }
-  | { readonly ok: false; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly code?: string;
+    };
 
 const mappingSchema = z
   .object({
@@ -193,6 +198,28 @@ async function readUtf8(path: string): Promise<string> {
 export async function readState(
   projectDirectory: string,
 ): Promise<ReadStateResult> {
+  let transactionPhase: "prepared" | "committed" | undefined;
+  try {
+    transactionPhase = await readTransactionPhase(
+      projectDirectory,
+      `${stateDirectoryName}/${transactionFileName}`,
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      code: "transaction.invalid",
+      message:
+        error instanceof Error ? error.message : "无法读取初始化事务记录",
+    };
+  }
+  if (transactionPhase === "prepared") {
+    return {
+      ok: false,
+      code: "transaction.prepared",
+      message: "发现尚未提交的初始化事务；status/check 不会恢复，请先运行 init",
+    };
+  }
+
   const baselinePath = join(
     projectDirectory,
     stateDirectoryName,

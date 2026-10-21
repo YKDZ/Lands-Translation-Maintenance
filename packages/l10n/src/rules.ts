@@ -41,7 +41,7 @@ const structureRule: CheckRule = {
     }
 
     for (const message of project.messages) {
-      if (message.target === undefined) {
+      if (message.targetStatus === "missing") {
         findings.push({
           code: "message.missing",
           message,
