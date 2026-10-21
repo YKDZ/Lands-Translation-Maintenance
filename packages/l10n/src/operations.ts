@@ -814,6 +814,31 @@ function planStructureChanges(
       }
     }
 
+    const update = (
+      path: readonly string[],
+      current: JsonValue,
+      actual: JsonValue | undefined,
+    ): void => {
+      changes.push({
+        sourceFile: mapping.source,
+        definitionsSource,
+        targetFile: mapping.target,
+        path,
+        action: "update",
+        ...(actual === undefined ? {} : { previous: actual }),
+        expected: current,
+      });
+    };
+    const blockTargetType = (
+      path: readonly string[],
+      actual: JsonValue,
+      expected: JsonValue,
+    ): void => {
+      blockers.push({
+        code: "sync.structure-target-path-type",
+        reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual)}，上游结构类型为${structureValueType(expected)}`,
+      });
+    };
     const visit = (
       path: readonly string[],
       previous: JsonValue | undefined,
@@ -821,108 +846,15 @@ function planStructureChanges(
       actual: JsonValue | undefined,
     ): void => {
       if (selectedAt(translationPaths, path)) return;
-      const hasSelectedDescendant = selectedBelow(translationPaths, path);
+
       const previousIsMap = isRecord(previous);
       const currentIsMap = isRecord(current);
       const actualIsMap = isRecord(actual);
-
-      if (hasSelectedDescendant) {
-        if (current !== undefined && !currentIsMap) {
-          blockers.push({
-            code: "sync.structure-source-shape",
-            reason: `${definitionsSource}:${path.join(".")} 无法与已选择的译文路径对应`,
-          });
-          return;
-        }
-        if (currentIsMap && previous !== undefined && !previousIsMap) {
-          if (actual === undefined || sameValue(actual, previous)) {
-            changes.push({
-              sourceFile: mapping.source,
-              definitionsSource,
-              targetFile: mapping.target,
-              path,
-              action: "update",
-              ...(actual === undefined ? {} : { previous: actual }),
-              expected: current,
-            });
-            return;
-          }
-          if (!actualIsMap) {
-            blockers.push({
-              code: "sync.structure-target-path-type",
-              reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual!)}，无法与上游映射结构合并`,
-            });
-            return;
-          }
-        }
-        if (actual !== undefined && !actualIsMap) {
-          blockers.push({
-            code: "sync.structure-target-path-type",
-            reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual)}，无法与上游映射结构合并`,
-          });
-          return;
-        }
-        const previousMap = previousIsMap ? previous : undefined;
-        const currentMap = currentIsMap ? current : undefined;
-        const actualMap = actualIsMap ? actual : undefined;
-        for (const key of sortedKeys(previous, current, actual)) {
-          visit(
-            [...path, key],
-            previousMap?.[key],
-            currentMap?.[key],
-            actualMap?.[key],
-          );
-        }
-        return;
-      }
-
-      if (
-        current !== undefined &&
-        actual !== undefined &&
-        structureValueType(current) !== structureValueType(actual) &&
-        (previous === undefined || !sameValue(actual, previous))
-      ) {
-        blockers.push({
-          code: "sync.structure-target-path-type",
-          reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual)}，上游结构类型为${structureValueType(current)}`,
-        });
-        return;
-      }
-
-      if (sameValue(previous, current)) {
-        if (currentIsMap && actualIsMap) {
-          for (const key of sortedKeys(current, actual)) {
-            visit([...path, key], current[key], current[key], actual[key]);
-          }
-        } else if (current !== undefined && actual === undefined) {
-          changes.push({
-            sourceFile: mapping.source,
-            definitionsSource,
-            targetFile: mapping.target,
-            path,
-            action: "update",
-            expected: current,
-          });
-        }
-        return;
-      }
+      const hasSelectedDescendant = selectedBelow(translationPaths, path);
 
       if (current === undefined) {
-        if (previous !== undefined && actual !== undefined) {
-          if (sameValue(actual, previous)) {
-            changes.push({
-              sourceFile: mapping.source,
-              definitionsSource,
-              targetFile: mapping.target,
-              path,
-              action: "delete",
-              previous: actual,
-            });
-          } else if (previousIsMap && actualIsMap) {
-            for (const key of sortedKeys(previous, actual)) {
-              visit([...path, key], previous[key], undefined, actual[key]);
-            }
-          } else {
+        if (previous === undefined) {
+          if (actual !== undefined) {
             changes.push({
               sourceFile: mapping.source,
               definitionsSource,
@@ -932,67 +864,77 @@ function planStructureChanges(
               previous: actual,
             });
           }
+          return;
         }
-        return;
-      }
-
-      if (previous === undefined) {
-        if (actual === undefined) {
-          changes.push({
-            sourceFile: mapping.source,
-            definitionsSource,
-            targetFile: mapping.target,
-            path,
-            action: "update",
-            expected: current,
-          });
-        } else if (!currentIsMap || !actualIsMap) {
-          changes.push({
-            sourceFile: mapping.source,
-            definitionsSource,
-            targetFile: mapping.target,
-            path,
-            action: "preserve",
-            previous: actual,
-            expected: current,
-          });
-        } else {
-          for (const key of sortedKeys(current, actual)) {
-            visit([...path, key], undefined, current[key], actual[key]);
+        if (actual === undefined) return;
+        if (previousIsMap) {
+          if (!actualIsMap) {
+            blockTargetType(path, actual, previous);
+            return;
           }
+          for (const key of sortedKeys(previous, actual)) {
+            visit([...path, key], previous[key], undefined, actual[key]);
+          }
+          return;
         }
-        return;
-      }
-
-      if (actual === undefined || sameValue(actual, previous)) {
+        if (structureValueType(actual) !== structureValueType(previous)) {
+          blockTargetType(path, actual, previous);
+          return;
+        }
         changes.push({
           sourceFile: mapping.source,
           definitionsSource,
           targetFile: mapping.target,
           path,
-          action: "update",
-          ...(actual === undefined ? {} : { previous: actual }),
-          expected: current,
+          action: "delete",
+          previous: actual,
         });
         return;
       }
 
-      if (previousIsMap && currentIsMap && actualIsMap) {
+      if (currentIsMap) {
+        if (actual !== undefined && !actualIsMap) {
+          if (previous !== undefined && sameValue(actual, previous)) {
+            update(path, current, actual);
+          } else {
+            blockTargetType(path, actual, current);
+          }
+          return;
+        }
         for (const key of sortedKeys(previous, current, actual)) {
-          visit([...path, key], previous[key], current[key], actual[key]);
+          visit(
+            [...path, key],
+            previousIsMap ? previous[key] : undefined,
+            current[key],
+            actualIsMap ? actual[key] : undefined,
+          );
         }
         return;
       }
 
-      changes.push({
-        sourceFile: mapping.source,
-        definitionsSource,
-        targetFile: mapping.target,
-        path,
-        action: "preserve",
-        previous: actual,
-        expected: current,
-      });
+      if (hasSelectedDescendant) {
+        blockers.push({
+          code: "sync.structure-source-shape",
+          reason: `${definitionsSource}:${path.join(".")} 无法与已选择的译文路径对应`,
+        });
+        return;
+      }
+
+      if (actual === undefined) {
+        update(path, current, undefined);
+        return;
+      }
+
+      if (structureValueType(actual) !== structureValueType(current)) {
+        if (previous !== undefined && sameValue(actual, previous)) {
+          update(path, current, actual);
+        } else {
+          blockTargetType(path, actual, current);
+        }
+        return;
+      }
+
+      if (!sameValue(actual, current)) update(path, current, actual);
     };
 
     visit([], previousDefinitions, currentDefinitions, target.value);
