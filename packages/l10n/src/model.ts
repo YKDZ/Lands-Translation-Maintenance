@@ -318,6 +318,10 @@ export interface ObservedMessage extends MessageIdentity {
   readonly source: JsonValue;
   readonly target: JsonValue | undefined;
   readonly targetStatus: "present" | "missing" | "blocked";
+  readonly translationReview?: {
+    readonly pendingReason?: "translation-seed" | "same-text-candidate";
+    readonly confirmedSameText: boolean;
+  };
 }
 
 export interface ProjectView {

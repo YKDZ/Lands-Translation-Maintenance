@@ -655,6 +655,14 @@ function diagnostic(
   };
 }
 
+function withoutTranslationReview(
+  message: ObservedMessage,
+): Omit<ObservedMessage, "translationReview"> {
+  const { translationReview, ...reviewIndependent } = message;
+  void translationReview;
+  return reviewIndependent;
+}
+
 function sameTextMessagesToConfirm(
   project: ProjectView,
   lock: SyncLock,
@@ -673,20 +681,24 @@ function sameTextMessagesToConfirm(
         message.target !== undefined &&
         sameValue(message.target, message.source),
     )
-    .map((message) => ({
-      message,
-      source: message.source,
-      target: message.target!,
-      pendingReason: seededIds.has(message.id)
+    .map((message) => {
+      const reviewIndependentMessage = withoutTranslationReview(message);
+      const pendingReason = seededIds.has(message.id)
         ? ("translation-seed" as const)
-        : ("same-text-candidate" as const),
-      candidateId: sameTextCandidateId(
-        message,
-        message.source,
-        message.target!,
-        seededIds.has(message.id) ? "translation-seed" : "same-text-candidate",
-      ),
-    }))
+        : ("same-text-candidate" as const);
+      return {
+        message: reviewIndependentMessage,
+        source: message.source,
+        target: message.target!,
+        pendingReason,
+        candidateId: sameTextCandidateId(
+          reviewIndependentMessage,
+          message.source,
+          message.target!,
+          pendingReason,
+        ),
+      };
+    })
     .sort((left, right) => compareText(left.message.id, right.message.id));
 }
 
@@ -1563,10 +1575,11 @@ export async function initializeProject(
 
   const targetAfter = await readTargets(project, baseline);
   const view = projectView(baseline, targetAfter.targets, targetAfter.issues);
-  const evaluated = evaluateRules(view, builtInRules, {
+  const reviewedView = withTranslationReview(view, lock, new Set());
+  const evaluated = evaluateRules(reviewedView, builtInRules, {
     configuration: configuration.rules,
   });
-  return makeReport("init", view, lock, evaluated.diagnostics);
+  return makeReport("init", reviewedView, lock, evaluated.diagnostics);
 }
 
 function currentResourceChanges(
@@ -2359,6 +2372,12 @@ interface EvaluatedSavedProject extends LoadedSavedProject {
   readonly diagnostics: readonly Diagnostic[];
   readonly coverage: CheckCoverage;
   readonly registeredRules: readonly CheckRule[];
+  readonly sameTextResolution: SameTextResolution;
+}
+
+interface SameTextResolution {
+  readonly notices: readonly Diagnostic[];
+  readonly confirmedSameTextIds: ReadonlySet<string>;
 }
 
 async function loadSavedProject(
@@ -2468,6 +2487,143 @@ async function loadSavedProject(
   };
 }
 
+function pendingReasonForMessage(
+  messageId: string,
+  lock: SyncLock,
+): SameTextPendingReason | undefined {
+  if (lock.translationSeeds.some((seed) => seed.id === messageId)) {
+    return "translation-seed";
+  }
+  return lock.sameTextCandidates.some((candidate) => candidate.id === messageId)
+    ? "same-text-candidate"
+    : undefined;
+}
+
+function withTranslationReview(
+  view: ProjectView,
+  lock: SyncLock,
+  confirmedSameTextIds: ReadonlySet<string>,
+): ProjectView {
+  return {
+    ...view,
+    messages: view.messages.map((message) => {
+      const pendingReason = pendingReasonForMessage(message.id, lock);
+      return {
+        ...message,
+        translationReview: {
+          ...(pendingReason === undefined ? {} : { pendingReason }),
+          confirmedSameText: confirmedSameTextIds.has(message.id),
+        },
+      };
+    }),
+  };
+}
+
+function resolveSameTextConfirmations(
+  view: ProjectView,
+  lock: SyncLock,
+  exceptions: ExceptionRecords,
+): SameTextResolution {
+  const notices: Diagnostic[] = [];
+  const confirmedSameTextIds = new Set<string>();
+  const messages = new Map(
+    view.messages.map((message) => [message.id, message]),
+  );
+
+  for (const record of exceptions.sameTextConfirmations) {
+    const message = messages.get(record.message.id);
+    if (message === undefined) {
+      notices.push(
+        exceptionNotice(
+          "same-text.orphaned",
+          `同文消息已删除，请清理此记录；原理由：${record.reason}`,
+          { file: record.message.targetFile, path: record.message.path },
+          { state: "same source and target" },
+          { state: "message-missing" },
+        ),
+      );
+      continue;
+    }
+    if (
+      message.targetStatus === "blocked" ||
+      view.fileIssues.some(
+        (issue) =>
+          issue.file === message.targetFile &&
+          ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
+            issue.code,
+          ),
+      )
+    ) {
+      notices.push(
+        exceptionNotice(
+          "same-text.unable-to-evaluate",
+          `目标 YAML 或映射无法可靠读取，不能评估此同文确认；原理由：${record.reason}`,
+          { file: message.targetFile, path: message.path },
+          { state: "same source and target" },
+          { state: "unable-to-evaluate" },
+        ),
+      );
+      continue;
+    }
+    const pendingReason = pendingReasonForMessage(message.id, lock);
+    const isSameText =
+      message.targetStatus === "present" &&
+      message.target !== undefined &&
+      sameValue(message.target, message.source);
+    const fingerprint =
+      message.target === undefined
+        ? undefined
+        : sameTextContentFingerprint(message, message.source, message.target);
+    const candidateId =
+      isSameText && pendingReason !== undefined && message.target !== undefined
+        ? sameTextCandidateId(
+            message,
+            message.source,
+            message.target,
+            pendingReason,
+          )
+        : undefined;
+    if (
+      isSameText &&
+      pendingReason !== undefined &&
+      fingerprint === record.contentFingerprint &&
+      candidateId === record.candidateId &&
+      pendingReason === record.pendingReason
+    ) {
+      confirmedSameTextIds.add(message.id);
+      continue;
+    }
+    if (pendingReason !== undefined) {
+      notices.push(
+        exceptionNotice(
+          "same-text.review-required",
+          `原文、译文或消息定位已变化，需要重新确认同文；原理由：${record.reason}`,
+          { file: message.targetFile, path: message.path },
+          { contentFingerprint: record.contentFingerprint },
+          {
+            contentFingerprint: fingerprint ?? null,
+            candidateId: candidateId ?? null,
+            pendingReason,
+            targetStatus: message.targetStatus,
+          },
+        ),
+      );
+      continue;
+    }
+    notices.push(
+      exceptionNotice(
+        "same-text.orphaned",
+        `此消息当前没有待确认的同文原因，请清理记录；原理由：${record.reason}`,
+        { file: message.targetFile, path: message.path },
+        { state: "pending same-text reason" },
+        { state: "no matching reason" },
+      ),
+    );
+  }
+
+  return { notices, confirmedSameTextIds };
+}
+
 function enabledRulesRequireInput(
   configuration: ConsumerConfiguration,
   input: RuleInput,
@@ -2499,13 +2655,24 @@ async function evaluateSavedProject(
           ),
         }
       : loaded.view;
-  const evaluation = evaluateProject(view, loaded.configuration, rules);
+  const sameTextResolution = resolveSameTextConfirmations(
+    view,
+    loaded.lock,
+    loaded.exceptions,
+  );
+  const reviewedView = withTranslationReview(
+    view,
+    loaded.lock,
+    sameTextResolution.confirmedSameTextIds,
+  );
+  const evaluation = evaluateProject(reviewedView, loaded.configuration, rules);
   return {
     ...loaded,
-    view,
+    view: reviewedView,
     diagnostics: [...loaded.staticDiagnostics, ...evaluation.diagnostics],
     coverage: evaluation.coverage,
     registeredRules: rules,
+    sameTextResolution,
   };
 }
 
@@ -2528,13 +2695,58 @@ function requiredInputDependencyUnavailable(
 ): boolean {
   const miniMessage = project.view.miniMessage;
   if (miniMessage === undefined) return true;
+  const message = project.view.messages.find(
+    (candidate) => candidate.id === dependency.messageId,
+  );
+  if (message === undefined) return false;
+
+  if (!message.path.every((part, index) => dependency.path[index] === part)) {
+    return true;
+  }
   if (
-    !project.view.messages.some(
-      (message) => message.id === dependency.messageId,
+    dependency.origin === "target" &&
+    (message.targetStatus !== "present" || message.target === undefined)
+  ) {
+    return true;
+  }
+  if (
+    dependency.origin === "target" &&
+    project.view.fileIssues.some(
+      (issue) =>
+        issue.file === message.targetFile &&
+        ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
+          issue.code,
+        ),
     )
   ) {
-    return false;
+    return true;
   }
+
+  const value =
+    dependency.origin === "source" ? message.source : message.target;
+  const relativePath = dependency.path.slice(message.path.length);
+  let current: JsonValue | undefined = value;
+  for (const part of relativePath) {
+    if (typeof part === "number") {
+      if (!Array.isArray(current) || !Object.hasOwn(current, part)) {
+        current = undefined;
+        break;
+      }
+      current = current[part];
+    } else {
+      if (
+        current === null ||
+        typeof current !== "object" ||
+        Array.isArray(current) ||
+        !Object.hasOwn(current, part)
+      ) {
+        current = undefined;
+        break;
+      }
+      current = (current as { readonly [key: string]: JsonValue })[part];
+    }
+  }
+  if (current === undefined) return false;
 
   const documentsForDependency = miniMessage.documents.filter(
     (document) =>
@@ -2555,7 +2767,7 @@ function requiredInputDependencyUnavailable(
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === 0 &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      canonicalJson(document.path) === canonicalJson(message.path),
   );
   return (
     rootDocuments.length === 0 ||
@@ -2710,7 +2922,7 @@ function applyExceptionRecords(
 } {
   const suppressed = new Set<string>();
   const notices: Diagnostic[] = [];
-  const confirmedSameTextIds = new Set<string>();
+  const confirmedSameTextIds = project.sameTextResolution.confirmedSameTextIds;
   const messages = new Map(
     project.view.messages.map((message) => [message.id, message]),
   );
@@ -2800,104 +3012,7 @@ function applyExceptionRecords(
     );
   }
 
-  for (const record of project.exceptions.sameTextConfirmations) {
-    const message = messages.get(record.message.id);
-    if (message === undefined) {
-      notices.push(
-        exceptionNotice(
-          "same-text.orphaned",
-          `同文消息已删除，请清理此记录；原理由：${record.reason}`,
-          { file: record.message.targetFile, path: record.message.path },
-          { state: "same source and target" },
-          { state: "message-missing" },
-        ),
-      );
-      continue;
-    }
-    if (
-      message.targetStatus === "blocked" ||
-      project.view.fileIssues.some(
-        (issue) =>
-          issue.file === message.targetFile &&
-          ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
-            issue.code,
-          ),
-      )
-    ) {
-      notices.push(
-        exceptionNotice(
-          "same-text.unable-to-evaluate",
-          `目标 YAML 或映射无法可靠读取，不能评估此同文确认；原理由：${record.reason}`,
-          { file: message.targetFile, path: message.path },
-          { state: "same source and target" },
-          { state: "unable-to-evaluate" },
-        ),
-      );
-      continue;
-    }
-    const pendingReason: SameTextPendingReason | undefined =
-      project.lock.translationSeeds.some((seed) => seed.id === message.id)
-        ? "translation-seed"
-        : project.lock.sameTextCandidates.some(
-              (candidate) => candidate.id === message.id,
-            )
-          ? "same-text-candidate"
-          : undefined;
-    const hasPendingReason = pendingReason !== undefined;
-    const isSameText =
-      message.targetStatus === "present" &&
-      message.target !== undefined &&
-      sameValue(message.target, message.source);
-    const fingerprint =
-      message.target === undefined
-        ? undefined
-        : sameTextContentFingerprint(message, message.source, message.target);
-    const candidateId =
-      isSameText && pendingReason !== undefined && message.target !== undefined
-        ? sameTextCandidateId(
-            message,
-            message.source,
-            message.target,
-            pendingReason,
-          )
-        : undefined;
-    if (
-      isSameText &&
-      hasPendingReason &&
-      fingerprint === record.contentFingerprint &&
-      candidateId === record.candidateId &&
-      pendingReason === record.pendingReason
-    ) {
-      confirmedSameTextIds.add(message.id);
-      continue;
-    }
-    if (hasPendingReason) {
-      notices.push(
-        exceptionNotice(
-          "same-text.review-required",
-          `原文、译文或消息定位已变化，需要重新确认同文；原理由：${record.reason}`,
-          { file: message.targetFile, path: message.path },
-          { contentFingerprint: record.contentFingerprint },
-          {
-            contentFingerprint: fingerprint ?? null,
-            candidateId: candidateId ?? null,
-            pendingReason,
-            targetStatus: message.targetStatus,
-          },
-        ),
-      );
-      continue;
-    }
-    notices.push(
-      exceptionNotice(
-        "same-text.orphaned",
-        `此消息当前没有待确认的同文原因，请清理记录；原理由：${record.reason}`,
-        { file: message.targetFile, path: message.path },
-        { state: "pending same-text reason" },
-        { state: "no matching reason" },
-      ),
-    );
-  }
+  notices.push(...project.sameTextResolution.notices);
 
   return {
     diagnostics: [
