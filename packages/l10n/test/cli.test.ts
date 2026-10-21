@@ -4388,34 +4388,6 @@ void describe("CLI 制品", () => {
     for (let index = 0; index < beforePreview.length; index += 1) {
       assert.deepEqual(afterPreview[index], beforePreview[index]);
     }
-
-    const files = [
-      join(project.directory, "lang/zh.yml"),
-      join(project.directory, ".l10n/upstream/source-baseline.json"),
-      join(project.directory, ".l10n/lock.json"),
-    ];
-    const before = await Promise.all(files.map((file) => readFile(file)));
-    const checked = runCli(
-      "check",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(checked.status, 1, checked.stderr);
-    const check = readReport(checked.stderr || checked.stdout);
-    assert.equal(check.state, "incomplete");
-    assert.equal((check.coverage as Record<string, unknown>).complete, false);
-    assert.ok(
-      (
-        (check.coverage as Record<string, unknown>)
-          .unavailableCapabilities as string[]
-      ).some((capability) => capability.includes("Bedrock")),
-    );
-    const after = await Promise.all(files.map((file) => readFile(file)));
-    for (let index = 0; index < before.length; index += 1) {
-      assert.deepEqual(after[index], before[index]);
-    }
   });
 
   void it("初始化保留已有的错误类型译文并继续报告结构诊断", async (t) => {

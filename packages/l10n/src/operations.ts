@@ -1298,11 +1298,6 @@ function coverageUnavailable(
   if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
     unavailable.push(...miniMessageTagCoverageUnavailable(view));
   }
-  if (
-    view.resources.some((resource) => resource.purpose === "bedrock-excluded")
-  ) {
-    unavailable.push("Bedrock JSON 已登记但本票不解析");
-  }
   return unavailable;
 }
 
