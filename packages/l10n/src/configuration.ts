@@ -49,26 +49,24 @@ const configurationSchema = z
       .object({
         sourceLanguage: z.string().trim().min(1),
         targetLanguage: z.string().trim().min(1),
-        mappings: z
-          .array(
-            z
-              .object({
-                source: safePathSchema,
-                target: safePathSchema,
-                fields: z
-                  .array(
-                    z
-                      .object({
-                        path: z.array(z.string().min(1)).min(1),
-                        category: z.enum(["chat-string", "chat-string-list"]),
-                      })
-                      .strict(),
-                  )
-                  .min(1),
-              })
-              .strict(),
-          )
-          .min(1),
+        mappings: z.array(
+          z
+            .object({
+              source: safePathSchema,
+              target: safePathSchema,
+              fields: z
+                .array(
+                  z
+                    .object({
+                      path: z.array(z.string().min(1)).min(1),
+                      category: z.enum(["chat-string", "chat-string-list"]),
+                    })
+                    .strict(),
+                )
+                .min(1),
+            })
+            .strict(),
+        ),
       })
       .strict(),
     rules: z
