@@ -1,3 +1,8 @@
+import {
+  legacyVariableRule,
+  mapHtmlRule,
+  mapHtmlSourceLimitRule,
+} from "#/format-rules";
 import { miniMessageVariablesRule } from "#/minimessage-variables";
 import type {
   CheckCoverage,
@@ -70,6 +75,9 @@ export const builtInRules: readonly CheckRule[] = [
   structureRule,
   miniMessageSyntaxRule,
   miniMessageVariablesRule,
+  legacyVariableRule,
+  mapHtmlRule,
+  mapHtmlSourceLimitRule,
 ];
 
 export interface RuleEvaluationOptions {

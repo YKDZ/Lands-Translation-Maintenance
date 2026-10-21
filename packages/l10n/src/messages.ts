@@ -9,6 +9,7 @@ import type {
   TranslationField,
   TranslationFieldCategory,
   TranslationMapping,
+  ResourcePurpose,
 } from "#/model";
 import { canonicalJson, compareText, sha256 } from "#/value";
 import { valueAtPath } from "#/yaml-data";
@@ -91,11 +92,13 @@ function messageIdentity(
   mapping: TranslationMapping,
   path: readonly string[],
   field: TranslationField,
+  sourcePurpose: ResourcePurpose | undefined,
 ) {
   const identity = {
     sourceFile: mapping.source,
     path,
   };
+  const format = formatForMessagePath(path, field.category, sourcePurpose);
   return {
     ...identity,
     targetFile: mapping.target,
@@ -103,8 +106,57 @@ function messageIdentity(
     ...(field.scene === undefined
       ? {}
       : { scene: field.scene, format: formatForScene(field.scene) }),
+    ...(field.scene !== undefined || format === undefined ? {} : { format }),
     id: sha256(canonicalJson(identity)),
   };
+}
+
+function formatForMessagePath(
+  path: readonly string[],
+  category: TranslationFieldCategory,
+  purpose: ResourcePurpose | undefined,
+): "legacy-variable-minimessage" | "map-html-minimessage" | undefined {
+  if (category !== "chat-string" || purpose !== "chat-language") {
+    return undefined;
+  }
+
+  if (
+    (path.length === 5 &&
+      path[0] === "general" &&
+      path[1] === "land" &&
+      path[2] === "title" &&
+      path[3] === "land" &&
+      (path[4] === "normal" || path[4] === "levels-disabled")) ||
+    (path.length === 4 &&
+      path[0] === "general" &&
+      path[1] === "land" &&
+      path[2] === "title" &&
+      (path[3] === "camp" || path[3] === "admin"))
+  ) {
+    return "legacy-variable-minimessage";
+  }
+
+  const mapNames = new Set(["dynmap", "bluemap", "squaremap", "pl3xmap"]);
+  if (
+    path.length === 5 &&
+    path[0] === "general" &&
+    path[1] === "integration" &&
+    mapNames.has(path[2]!) &&
+    path[3] === "land" &&
+    (path[4] === "description" || path[4] === "spawn")
+  ) {
+    return "map-html-minimessage";
+  }
+  if (
+    path.length === 4 &&
+    path[0] === "integration" &&
+    mapNames.has(path[1]!) &&
+    ((path[2] === "nation" && path[3] === "description") ||
+      (path[2] === "capital" && path[3] === "spawn"))
+  ) {
+    return "map-html-minimessage";
+  }
+  return undefined;
 }
 
 function walkStrings(
@@ -377,8 +429,12 @@ export function collectMessages(
   const messages: ObservedMessage[] = [];
   const targetMessages: TargetMessage[] = [];
   const issues: ProjectFileIssue[] = [];
+  const resourcePurposes = new Map(
+    resources.map((resource) => [resource.path, resource.purpose]),
+  );
   for (const saved of mappings) {
     const targetRoot = targets.get(saved.mapping.target);
+    const sourcePurpose = resourcePurposes.get(saved.mapping.source);
     for (const field of saved.mapping.fields) {
       const source = collectField(
         saved.sourceValue,
@@ -404,6 +460,7 @@ export function collectMessages(
           saved.mapping,
           sourceEntry.path,
           field,
+          sourcePurpose,
         );
         const targetValue = inspectPath(targetRoot, sourceEntry.path);
         if (
@@ -456,6 +513,7 @@ export function collectMessages(
           saved.mapping,
           targetEntry.path,
           field,
+          sourcePurpose,
         );
         targetMessages.push({
           ...identity,

@@ -2528,10 +2528,19 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.equal(loreIdentity.scene, "gui-item-lore");
     assert.equal(loreIdentity.format, "legacy-color-minimessage");
     const coverage = report.coverage as Record<string, unknown>;
-    assert.ok(
+    assert.equal(
       (coverage.unavailableCapabilities as string[]).some((capability) =>
         capability.includes("旧颜色码"),
       ),
+      false,
+      "已核实的 8.0.1 & 颜色码应先适配，再进入官方 MiniMessage 解析",
+    );
+    assert.equal(
+      diagnostics.some((diagnostic) =>
+        String(diagnostic.code).startsWith("legacy-format."),
+      ),
+      false,
+      "受支持的旧颜色码不应报告为格式错误",
     );
   });
 
