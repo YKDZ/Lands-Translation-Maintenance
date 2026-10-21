@@ -4,6 +4,7 @@ import { watch } from "node:fs";
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rename,
   rm,
@@ -67,6 +68,27 @@ async function writeJar(
     resources[path] = strToU8(content);
   }
   await writeFile(jarFile, zipSync(resources));
+}
+
+async function snapshotProjectFiles(projectDirectory: string) {
+  const paths: string[] = [];
+  async function collect(directory: string, prefix: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const relativePath = prefix ? join(prefix, entry.name) : entry.name;
+      const absolutePath = join(directory, entry.name);
+      if (entry.isDirectory()) await collect(absolutePath, relativePath);
+      else if (entry.isFile()) paths.push(relativePath);
+    }
+  }
+  await collect(projectDirectory, "");
+  return Promise.all(
+    paths
+      .sort()
+      .map(
+        async (path) =>
+          [path, await readFile(join(projectDirectory, path))] as const,
+      ),
+  );
 }
 
 async function createProject(t: TestContext) {
@@ -194,14 +216,15 @@ async function createInterruptedProject(t: TestContext, resourceCount = 150) {
   return { directory, jarFile, targetPaths };
 }
 
-function killInitWhenTargetAppears(
+function killInitWhenFileAppears(
   project: { readonly directory: string; readonly jarFile: string },
-  targetPath: string,
+  relativePath: string,
+  shouldKill?: (contents: string) => boolean,
 ) {
   return new Promise<{
     readonly code: number | null;
     readonly signal: NodeJS.Signals | null;
-    readonly killedAtTarget: boolean;
+    readonly killedAtFile: boolean;
     readonly stdout: string;
     readonly stderr: string;
   }>((resolve, reject) => {
@@ -221,16 +244,28 @@ function killInitWhenTargetAppears(
     );
     let stdout = "";
     let stderr = "";
-    let killedAtTarget = false;
+    let killedAtFile = false;
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => (stdout += chunk));
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
-    const watcher = watch(join(project.directory, "lang"), (_event, name) => {
-      if (name?.toString() === basename(targetPath)) {
-        killedAtTarget = child.kill("SIGKILL");
-      }
-    });
+    const watcher = watch(
+      join(project.directory, dirname(relativePath)),
+      (_event, name) => {
+        if (name?.toString() !== basename(relativePath) || killedAtFile) return;
+        if (shouldKill === undefined) {
+          killedAtFile = child.kill("SIGKILL");
+          return;
+        }
+        void readFile(join(project.directory, relativePath), "utf8").then(
+          (contents) => {
+            if (shouldKill(contents) && !killedAtFile) {
+              killedAtFile = child.kill("SIGKILL");
+            }
+          },
+        );
+      },
+    );
     const timeout = setTimeout(() => child.kill("SIGTERM"), 20_000);
     child.once("error", (error) => {
       clearTimeout(timeout);
@@ -240,7 +275,7 @@ function killInitWhenTargetAppears(
     child.once("exit", (code, signal) => {
       clearTimeout(timeout);
       watcher.close();
-      resolve({ code, signal, killedAtTarget, stdout, stderr });
+      resolve({ code, signal, killedAtFile, stdout, stderr });
     });
   });
 }
@@ -932,6 +967,255 @@ void describe("CLI 制品", () => {
     assert.deepEqual(await readFile(targetPath), targetBefore);
   });
 
+  void it("目标消息路径被字符串祖先阻断时只读保留整份中文", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const original = [
+      "messages: 整份旧中文",
+      "list:",
+      "  entries: [第一项, 第二项]",
+      "",
+    ].join("\n");
+    await writeFile(targetPath, original);
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.equal(await readFile(targetPath, "utf8"), original);
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    assert.ok(messages.length > 0);
+    assert.ok(messages.every(({ action }) => action === "preserve"));
+    const blockedMessages = messages.filter(
+      ({ path }) => (path as readonly string[])[0] === "messages",
+    );
+    assert.equal(blockedMessages.length, 3);
+    assert.ok(
+      blockedMessages.every(({ reason }) => reason === "target-path-blocked"),
+    );
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.equal(await readFile(targetPath, "utf8"), original);
+
+    const statePaths = [
+      targetPath,
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const beforeChangedPreview = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: New greeting",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "    added: New message",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const changedPreview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(changedPreview.status, 1);
+    const changedResult = readEnvelope(
+      changedPreview.stdout || changedPreview.stderr,
+    );
+    const blockedPreview = changedResult.data?.preview as Record<
+      string,
+      unknown
+    >;
+    assert.equal(blockedPreview.ready, false);
+    assert.ok(
+      (blockedPreview.blockers as readonly Record<string, unknown>[]).some(
+        ({ code }) => code === "sync.target-path-blocked",
+      ),
+    );
+    const afterChangedPreview = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforeChangedPreview.length; index += 1) {
+      assert.deepEqual(afterChangedPreview[index], beforeChangedPreview[index]);
+    }
+
+    await writeJar(project.jarFile, {
+      source: ["messages: {}", "list:", "  entries: [first, second]", ""].join(
+        "\n",
+      ),
+    });
+    const removedPreview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(removedPreview.status, 1);
+    const removedResult = readEnvelope(
+      removedPreview.stdout || removedPreview.stderr,
+    );
+    const removedBlockedPreview = removedResult.data?.preview as Record<
+      string,
+      unknown
+    >;
+    assert.equal(removedBlockedPreview.ready, false);
+    assert.ok(
+      (
+        removedBlockedPreview.blockers as readonly Record<string, unknown>[]
+      ).some(({ code }) => code === "sync.target-path-blocked"),
+    );
+    const afterRemovedPreview = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforeChangedPreview.length; index += 1) {
+      assert.deepEqual(afterRemovedPreview[index], beforeChangedPreview[index]);
+    }
+  });
+
+  void it("移出范围的缺失目标不因预演而新建", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await rm(targetPath);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        /  mappings:\n    - source: lang\/en\.yml\n      target: lang\/zh\.yml\n      fields:\n        - path: \[messages\]\n          category: chat-string\n        - path: \[list, entries\]\n          category: chat-string-list\n/,
+        "  mappings: []\n",
+      ),
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    await assert.rejects(readFile(targetPath));
+  });
+
+  void it("完全移出范围的无效旧目标不参与预演解析", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const unmanagedTarget = "messages: [\n";
+    await writeFile(targetPath, unmanagedTarget);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        /  mappings:\n    - source: lang\/en\.yml\n      target: lang\/zh\.yml\n      fields:\n        - path: \[messages\]\n          category: chat-string\n        - path: \[list, entries\]\n          category: chat-string-list\n/,
+        "  mappings: []\n",
+      ),
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.equal(await readFile(targetPath, "utf8"), unmanagedTarget);
+  });
+
   void it("预演更新原始主题 YAML 快照，不运行 Java MiniMessage 检查", async (t) => {
     const project = await createProject(t);
     const configPath = join(project.directory, ".l10n/config.yml");
@@ -1486,6 +1770,163 @@ void describe("CLI 制品", () => {
     assert.deepEqual(await readFile(targetPath), beforePreview);
   });
 
+  void it("已有消息路径为对象时保留结构，并只补写安全缺失项", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting:",
+        "    text: 旧中文",
+        "  commands:",
+        "    registered: 已注册",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal(report.state, "issues");
+    assert.equal(
+      (report.summary as Record<string, unknown>).pendingTranslations,
+      1,
+    );
+    assert.equal(
+      (report.summary as Record<string, unknown>).missingTranslations,
+      0,
+    );
+    assert.ok(
+      (report.diagnostics as Array<Record<string, unknown>>).some(
+        (item) => item.code === "message.type-mismatch",
+      ),
+    );
+    const target = await readFile(targetPath, "utf8");
+    assert.match(target, /text: 旧中文/);
+    assert.match(target, /welcome: Welcome/);
+    const lock = JSON.parse(
+      await readFile(join(project.directory, ".l10n/lock.json"), "utf8"),
+    ) as { readonly translationSeeds: readonly unknown[] };
+    assert.equal(lock.translationSeeds.length, 1);
+    const baseline = JSON.parse(
+      await readFile(
+        join(project.directory, ".l10n/upstream/source-baseline.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly mappings: readonly {
+        readonly sourceValue: {
+          readonly messages: { readonly greeting: string };
+        };
+      }[];
+    };
+    assert.equal(baseline.mappings[0]?.sourceValue.messages.greeting, "Hello");
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 1);
+    assert.match(status.stdout || status.stderr, /message.type-mismatch/);
+    assert.match(await readFile(targetPath, "utf8"), /text: 旧中文/);
+    const beforePreview = await readFile(targetPath);
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const greeting = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(greeting?.action, "preserve");
+    assert.equal(greeting?.reason, "unchanged");
+    assert.deepEqual(greeting?.previousTarget, { text: "旧中文" });
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.deepEqual(await readFile(targetPath), beforePreview);
+  });
+
+  void it("消息路径的字符串或列表祖先保持原样并建立质量基线", async (t) => {
+    for (const ancestor of ["旧中文", "[旧中文一, 旧中文二]"]) {
+      const project = await createProject(t);
+      const targetPath = join(project.directory, "lang/zh.yml");
+      const original = `messages: ${ancestor}\nlist:\n  entries: [第一项, 第二项]\n`;
+      await writeFile(targetPath, original);
+
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+
+      assert.equal(initialized.status, 0, initialized.stderr);
+      assert.equal(await readFile(targetPath, "utf8"), original);
+      const report = readReport(initialized.stdout);
+      assert.equal(report.state, "issues");
+      assert.equal(
+        (report.summary as Record<string, unknown>).missingTranslations,
+        0,
+      );
+      assert.ok(
+        (report.diagnostics as Array<Record<string, unknown>>).some(
+          (item) => item.code === "message.type-mismatch",
+        ),
+      );
+      const lock = JSON.parse(
+        await readFile(join(project.directory, ".l10n/lock.json"), "utf8"),
+      ) as { readonly translationSeeds: readonly unknown[] };
+      assert.equal(lock.translationSeeds.length, 0);
+      const baseline = JSON.parse(
+        await readFile(
+          join(project.directory, ".l10n/upstream/source-baseline.json"),
+          "utf8",
+        ),
+      ) as {
+        readonly mappings: readonly {
+          readonly sourceValue: {
+            readonly messages: { readonly greeting: string };
+          };
+        }[];
+      };
+      assert.equal(
+        baseline.mappings[0]?.sourceValue.messages.greeting,
+        "Hello",
+      );
+    }
+  });
+
   void it("资源清单不匹配时拒绝初始化且不留下目标或锁文件", async (t) => {
     const project = await createProject(t);
     const configPath = join(project.directory, ".l10n/config.yml");
@@ -1710,12 +2151,12 @@ void describe("CLI 制品", () => {
 
   void it("SIGKILL 后重试先回滚残留，再建立完整待翻译状态", async (t) => {
     const project = await createInterruptedProject(t);
-    const interrupted = await killInitWhenTargetAppears(
+    const interrupted = await killInitWhenFileAppears(
       project,
       project.targetPaths[0]!,
     );
     assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
-    assert.equal(interrupted.killedAtTarget, true);
+    assert.equal(interrupted.killedAtFile, true);
 
     const presentTargets = await Promise.all(
       project.targetPaths.map(async (target) => {
@@ -1757,12 +2198,102 @@ void describe("CLI 制品", () => {
     assert.equal(lock.sameTextCandidates.length, 0);
   });
 
+  void it("只读查询拒绝尚未提交的晚期事务，并保持文件不变", async (t) => {
+    const project = await createInterruptedProject(t);
+    const interrupted = await killInitWhenFileAppears(
+      project,
+      ".l10n/lock.json",
+    );
+    assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
+    assert.equal(interrupted.killedAtFile, true);
+    const transactionPath = join(project.directory, ".l10n/transaction.json");
+    const transaction = JSON.parse(await readFile(transactionPath, "utf8")) as {
+      readonly phase: string;
+    };
+    assert.equal(transaction.phase, "prepared");
+
+    const before = await snapshotProjectFiles(project.directory);
+    for (const command of ["status", "check"]) {
+      const result = runCli(
+        command,
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stderr);
+      const report = readReport(result.stderr || result.stdout);
+      assert.equal(report.state, "issues");
+      assert.ok(
+        (report.diagnostics as Array<Record<string, unknown>>).some(
+          (item) => item.code === "transaction.prepared",
+        ),
+      );
+      assert.deepEqual(await snapshotProjectFiles(project.directory), before);
+    }
+
+    const retried = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(retried.status, 0, retried.stderr);
+    const summary = readReport(retried.stdout).summary as Record<
+      string,
+      unknown
+    >;
+    assert.equal(summary.pendingTranslations, project.targetPaths.length);
+    assert.equal(summary.sameTextCandidates, 0);
+  });
+
+  void it("只读查询接受已提交但尚未清理的事务", async (t) => {
+    const project = await createInterruptedProject(t, 300);
+    const interrupted = await killInitWhenFileAppears(
+      project,
+      ".l10n/transaction.json",
+      (contents) =>
+        (JSON.parse(contents) as { readonly phase: string }).phase ===
+        "committed",
+    );
+    assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
+    assert.equal(interrupted.killedAtFile, true);
+    const transactionPath = join(project.directory, ".l10n/transaction.json");
+    const transaction = JSON.parse(await readFile(transactionPath, "utf8")) as {
+      readonly phase: string;
+    };
+    assert.equal(transaction.phase, "committed");
+
+    const before = await snapshotProjectFiles(project.directory);
+    for (const command of ["status", "check"]) {
+      const result = runCli(
+        command,
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(result.stderr || result.stdout);
+      assert.ok(
+        !(report.diagnostics as Array<Record<string, unknown>>).some(
+          (item) => item.code === "transaction.prepared",
+        ),
+      );
+      if (command === "status") assert.equal(result.status, 0, result.stderr);
+      else assert.equal(result.status, 1, result.stderr);
+      assert.deepEqual(await snapshotProjectFiles(project.directory), before);
+    }
+  });
+
   void it("中断后出现并行编辑时拒绝恢复且保留编辑内容", async (t) => {
     const project = await createInterruptedProject(t);
     const targetPath = project.targetPaths[0]!;
-    const interrupted = await killInitWhenTargetAppears(project, targetPath);
+    const interrupted = await killInitWhenFileAppears(project, targetPath);
     assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
-    assert.equal(interrupted.killedAtTarget, true);
+    assert.equal(interrupted.killedAtFile, true);
 
     const targetFile = join(project.directory, targetPath);
     const parallelEdit = "messages:\n  greeting: 并行编辑\n";

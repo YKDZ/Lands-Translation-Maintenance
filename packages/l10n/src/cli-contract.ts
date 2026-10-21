@@ -86,6 +86,7 @@ const syncPlanSchema = z.object({
       action: z.enum(["preserve", "seed", "reset", "delete"]),
       reason: z.enum([
         "unchanged",
+        "target-path-blocked",
         "missing-translation",
         "new-message",
         "source-changed",
@@ -248,6 +249,7 @@ function renderSyncPreview(preview: SyncPreviewPayload) {
   } as const;
   const reasonLabels = {
     unchanged: "原文未变",
+    "target-path-blocked": "目标路径被现有内容阻断",
     "missing-translation": "译文缺失",
     "new-message": "新增消息",
     "source-changed": "原文变化",

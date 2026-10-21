@@ -67,6 +67,7 @@ export interface MessageIdentity {
 export interface ObservedMessage extends MessageIdentity {
   readonly source: JsonValue;
   readonly target: JsonValue | undefined;
+  readonly targetStatus: "present" | "missing" | "blocked";
 }
 
 export interface ProjectView {
@@ -182,6 +183,7 @@ export interface SyncMessageChange {
   readonly action: "preserve" | "seed" | "reset" | "delete";
   readonly reason:
     | "unchanged"
+    | "target-path-blocked"
     | "missing-translation"
     | "new-message"
     | "source-changed"

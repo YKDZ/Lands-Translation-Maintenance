@@ -349,13 +349,6 @@ function updateDocumentValue(
   path: readonly string[],
   value: JsonValue,
 ): void {
-  for (let length = 1; length < path.length; length += 1) {
-    const prefix = path.slice(0, length);
-    const existing = document.getIn(prefix);
-    if (existing !== undefined && existing !== null && !isMap(existing)) {
-      setDocumentPath(document, prefix, {});
-    }
-  }
   setDocumentPath(document, path, value);
 }
 
@@ -442,11 +435,16 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
   let missingTranslations = 0;
 
   for (const message of project.messages) {
-    if (message.target === undefined) missingTranslations += 1;
+    if (message.targetStatus === "missing") missingTranslations += 1;
   }
   for (const seed of lock.translationSeeds) {
     const message = messages.get(seed.id);
-    if (message === undefined || message.target === undefined) continue;
+    if (
+      message === undefined ||
+      message.targetStatus !== "present" ||
+      message.target === undefined
+    )
+      continue;
     if (sameValue(message.target, message.source)) pendingTranslations += 1;
     else modifiedTranslations += 1;
   }
@@ -454,6 +452,7 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
     const message = messages.get(candidate.id);
     if (
       message !== undefined &&
+      message.targetStatus === "present" &&
       message.target !== undefined &&
       sameValue(message.target, message.source)
     ) {
@@ -737,7 +736,7 @@ export async function initializeProject(
   const sameTextCandidates: SameTextCandidate[] = [];
   const messagesNeedingSeed = new Set<string>();
   for (const message of initialCollection.messages) {
-    if (message.target === undefined) {
+    if (message.targetStatus === "missing") {
       seeds.push({
         id: message.id,
         sourceSha256: sha256(canonicalJson(message.source)),
@@ -1024,7 +1023,12 @@ export async function previewSyncProject(
   const combinedBaseline: SourceBaseline = {
     ...state.baseline,
     resources,
-    mappings: [...state.baseline.mappings, ...mappings],
+    mappings: [
+      ...state.baseline.mappings.filter(({ mapping }) =>
+        maintainedSources.has(mapping.source),
+      ),
+      ...mappings,
+    ],
   };
   const targetInput = await readTargets(project, combinedBaseline);
   const invalidTargetIssues = targetInput.issues.filter((issue) =>
@@ -1065,6 +1069,68 @@ export async function previewSyncProject(
       targetAddress(message.targetFile, message.path),
     ),
   );
+  const unsafeBlockedMessages = currentMessages.filter((message) => {
+    if (message.targetStatus !== "blocked") return false;
+    const previous = previousMessages.get(message.id);
+    return (
+      previous === undefined || !sameValue(previous.source, message.source)
+    );
+  });
+  if (unsafeBlockedMessages.length > 0) {
+    const paths = unsafeBlockedMessages
+      .map((message) => `${message.targetFile}:${message.path.join(".")}`)
+      .sort(compareText);
+    return {
+      ready: false,
+      blockers: [
+        {
+          code: "sync.target-path-blocked",
+          reason: `新增或变化的原文无法写入被现有结构阻断的目标路径：${paths.join("、")}`,
+        },
+      ],
+      resourceDifference,
+      resourceChanges,
+    };
+  }
+  const removedMessagesBelowBlockedAncestor = currentCollection.targetMessages
+    .filter(
+      (targetMessage) =>
+        !currentMessageAddresses.has(
+          targetAddress(targetMessage.targetFile, targetMessage.path),
+        ),
+    )
+    .flatMap((targetMessage) =>
+      [...previousMessages.values()]
+        .filter(
+          (previous) =>
+            previous.targetFile === targetMessage.targetFile &&
+            previous.path.length > targetMessage.path.length &&
+            targetMessage.path.every(
+              (segment, index) => previous.path[index] === segment,
+            ) &&
+            !currentMessages.some((message) => message.id === previous.id),
+        )
+        .map((previous) => ({ targetMessage, previous })),
+    );
+  if (removedMessagesBelowBlockedAncestor.length > 0) {
+    const paths = removedMessagesBelowBlockedAncestor
+      .map(
+        ({ targetMessage }) =>
+          `${targetMessage.targetFile}:${targetMessage.path.join(".")}`,
+      )
+      .sort(compareText);
+    return {
+      ready: false,
+      blockers: [
+        {
+          code: "sync.target-path-blocked",
+          reason: `目标路径被现有结构阻断，无法安全删除已移除的原文：${paths.join("、")}`,
+        },
+      ],
+      resourceDifference,
+      resourceChanges,
+    };
+  }
   const currentMappingsByTarget = new Map(
     mappings.map(({ mapping }) => [mapping.target, mapping]),
   );
@@ -1079,6 +1145,20 @@ export async function previewSyncProject(
   const requiresTranslation = new Set<string>();
   for (const message of currentMessages) {
     const previous = previousMessages.get(message.id);
+    if (message.targetStatus === "blocked") {
+      plannedMessages.push({
+        id: message.id,
+        action: "preserve",
+        reason: "target-path-blocked",
+        sourceFile: message.sourceFile,
+        targetFile: message.targetFile,
+        path: message.path,
+        category: message.category,
+        ...(previous === undefined ? {} : { previousSource: previous.source }),
+        source: message.source,
+      });
+      continue;
+    }
     const previousTargetRoot =
       previous === undefined
         ? undefined
@@ -1160,6 +1240,34 @@ export async function previewSyncProject(
   for (const targetMessage of currentCollection.targetMessages) {
     const address = targetAddress(targetMessage.targetFile, targetMessage.path);
     if (currentMessageAddresses.has(address)) continue;
+    if (
+      currentMessages.some(
+        (message) =>
+          message.targetStatus === "blocked" &&
+          message.targetFile === targetMessage.targetFile &&
+          targetMessage.path.length < message.path.length &&
+          targetMessage.path.every(
+            (segment, index) => message.path[index] === segment,
+          ),
+      )
+    ) {
+      continue;
+    }
+    if (
+      currentMessages.some(
+        (message) =>
+          message.targetStatus === "present" &&
+          message.target !== undefined &&
+          !isValidTargetValue(message.source, message.target) &&
+          message.targetFile === targetMessage.targetFile &&
+          message.path.length < targetMessage.path.length &&
+          message.path.every(
+            (segment, index) => targetMessage.path[index] === segment,
+          ),
+      )
+    ) {
+      continue;
+    }
     const target = targets.get(targetMessage.targetFile);
     if (target === undefined) continue;
     target.document.deleteIn(targetMessage.path);
@@ -1278,6 +1386,7 @@ export async function previewSyncProject(
   const targetPlans: SyncTargetFilePlan[] = [];
   const writes: SyncWrite[] = [];
   for (const [path, target] of targets) {
+    if (!currentTargetPaths.has(path)) continue;
     const content = target.document.toString({ lineWidth: 0 });
     const changed = changedTargetPaths.has(path);
     const contentSha256 = changed
@@ -1369,12 +1478,22 @@ async function loadSavedProject(projectDirectory: string): Promise<{
     `${stateDirectoryName}/${baselineDirectoryName}/${baselineFileName}`,
   );
   await assertNoSymlinkPath(project, `${stateDirectoryName}/${lockFileName}`);
+  await assertNoSymlinkPath(
+    project,
+    `${stateDirectoryName}/${transactionFileName}`,
+  );
   const state = await readState(project);
   if (!state.ok) {
-    throw new ProjectOperationError(state.message, "state.invalid", {
-      file: stateDirectoryName,
-      path: [],
-    });
+    throw new ProjectOperationError(
+      state.message,
+      state.code ?? "state.invalid",
+      {
+        file: state.code?.startsWith("transaction.")
+          ? `${stateDirectoryName}/${transactionFileName}`
+          : stateDirectoryName,
+        path: [],
+      },
+    );
   }
   const config = await loadConfiguration(project);
   if (!config.ok) {
