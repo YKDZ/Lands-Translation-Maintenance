@@ -357,9 +357,12 @@ export interface RuleContext {
   readonly parameters: Readonly<Record<string, unknown>>;
 }
 
+export type RuleInput = "minimessage-parse";
+
 export interface CheckRule {
   readonly id: string;
   readonly defaultSeverity: Severity;
+  readonly requiredInputs?: readonly RuleInput[];
   evaluate(project: ProjectView, context: RuleContext): readonly RuleFinding[];
 }
 
