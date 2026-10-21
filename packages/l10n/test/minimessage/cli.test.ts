@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { describe, it, type TestContext } from "node:test";
 
 import { strToU8, unzipSync, zipSync } from "fflate";
 
@@ -13,6 +13,58 @@ import {
   runCliWithoutJava,
   snapshotProjectFiles,
 } from "../cli-fixtures.ts";
+
+async function checkGreeting(
+  t: TestContext,
+  source: string,
+  targetText: string,
+  ruleConfiguration = "",
+) {
+  const project = await createProject(t, { sourceGreeting: source });
+  const initialized = runCli(
+    "init",
+    "--project",
+    project.directory,
+    "--jar",
+    project.jarFile,
+    "--output-format",
+    "structured",
+  );
+  assert.equal(initialized.status, 0, initialized.stderr);
+
+  const targetPath = join(project.directory, "lang/zh.yml");
+  const target = await readFile(targetPath, "utf8");
+  await writeFile(
+    targetPath,
+    target.replace(
+      "  greeting: 你好",
+      `  greeting: ${JSON.stringify(targetText)}`,
+    ),
+  );
+  if (ruleConfiguration !== "") {
+    const configurationPath = join(project.directory, ".l10n/config.yml");
+    const configuration = await readFile(configurationPath, "utf8");
+    await writeFile(
+      configurationPath,
+      `${configuration}\n${ruleConfiguration}`,
+    );
+  }
+
+  const checked = runCli(
+    "check",
+    "--project",
+    project.directory,
+    "--output-format",
+    "structured",
+  );
+  const report = readReport(checked.stdout || checked.stderr);
+  return {
+    project,
+    checked,
+    report,
+    diagnostics: report.diagnostics as readonly Record<string, unknown>[],
+  };
+}
 
 void describe("MiniMessage 官方检查制品", () => {
   void it("正式检查发现正文变量遗漏，即使译文句子可正常解析", async (t) => {
@@ -3057,6 +3109,365 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.equal(
       (invalidTheme.location as Record<string, unknown>).file,
       "Locale/theme.yml",
+    );
+  });
+});
+
+void describe("术语和风格正式检查", () => {
+  void it("保留 claims 名词句中同时出现的占领和领土", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "New claims will belong to this area.",
+      "新占领的领土将属于这个子区域.",
+    );
+    assert.equal(
+      result.diagnostics.some((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("terminology"),
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+    assert.equal(result.checked.status, 1);
+    assert.equal(result.report.state, "incomplete");
+  });
+
+  void it("把 Claim 动词误作领土时报告词义偏差", async (t) => {
+    const result = await checkGreeting(t, "Claim chunk(s)", "领土区块");
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.code === "terminology.opposite-sense",
+    );
+    assert.ok(issue, result.checked.stderr || result.checked.stdout);
+    if (issue === undefined) throw new Error("缺少 Claim 词义诊断");
+    assert.equal(issue.ruleId, "terminology");
+    assert.equal(issue.origin, "target");
+    assert.equal(
+      (issue.location as Record<string, unknown>).path instanceof Array,
+      true,
+    );
+    assert.match(JSON.stringify(issue.expected), /占领/u);
+    assert.match(JSON.stringify(issue.actual), /领土/u);
+  });
+
+  void it("按完整 Unclaim 处理且不把 Claimblock 拆成 Claim", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "Unclaim chunk(s) / Claimblock",
+      "取消占领区块 / 占领方块",
+    );
+    assert.equal(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+  });
+
+  void it("检查跨纯样式节点的短语，且不跨变量拼出术语", async (t) => {
+    const styled = await checkGreeting(t, "Na<red>tion</red>", "国家");
+    assert.ok(
+      styled.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" &&
+          diagnostic.code === "terminology.translation-missing",
+      ),
+      styled.checked.stderr || styled.checked.stdout,
+    );
+
+    const separated = await checkGreeting(
+      t,
+      "Na<v:player>tion",
+      "甲<v:player>乙",
+    );
+    assert.equal(
+      separated.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      separated.checked.stderr || separated.checked.stdout,
+    );
+  });
+
+  void it("将 Lands 产品名视为不适用的 Land 术语", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "This is the Lands plugin.",
+      "这是 Lands 插件.",
+    );
+    assert.equal(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+
+    const gameEntity = await checkGreeting(t, "Your Lands", "你的土地");
+    assert.ok(
+      gameEntity.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" &&
+          diagnostic.code === "terminology.translation-missing",
+      ),
+      gameEntity.checked.stderr || gameEntity.checked.stdout,
+    );
+  });
+
+  void it("区分两类 Flags 和普通 Personal Settings", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "Natural Flags; Role Flags; Personal Settings.",
+      "环境设置; 职位设置; 个人设置.",
+    );
+    assert.equal(
+      result.diagnostics.some((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("terminology"),
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+  });
+
+  void it("区分 Trust、Trusted Player 与黑名单中的普通加入", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "Trust this player. Trusted Player. Ban player from this area.",
+      "邀请此玩家. 成员. 将玩家加入此子区域黑名单.",
+    );
+    assert.equal(
+      result.diagnostics.some((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("terminology"),
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+
+    const banOnly = await checkGreeting(
+      t,
+      "Ban player from this area.",
+      "将玩家加入此子区域黑名单.",
+    );
+    assert.equal(
+      banOnly.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      banOnly.checked.stderr || banOnly.checked.stdout,
+    );
+
+    const joined = await checkGreeting(
+      t,
+      "Trust this player.",
+      "将此玩家加入此子区域.",
+    );
+    assert.equal(
+      joined.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      joined.checked.stderr || joined.checked.stdout,
+    );
+  });
+
+  void it("区分 war declarations 名词与 declare war 动词", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "Deny war declarations and declare war.",
+      "拒绝宣战书并宣战.",
+    );
+    assert.equal(
+      result.diagnostics.some((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("terminology"),
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+  });
+
+  void it("检查 hover 正文，但排除 click 命令里的术语", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "<click:run_command:\"/lands claim\">Click <hover:show_text:'Owner'>details</hover></click>",
+      "<click:run_command:\"/lands claim\">点击 <hover:show_text:'所有权'>说明</hover></click>",
+    );
+    const terminology = result.diagnostics.filter(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+    assert.equal(
+      terminology.length,
+      1,
+      result.checked.stderr || result.checked.stdout,
+    );
+    assert.match(JSON.stringify(terminology[0]?.expected), /所有者/u);
+    assert.match(JSON.stringify(terminology[0]?.actual), /所有权/u);
+  });
+
+  void it("变量和命令参数不参与术语或风格检查", async (t) => {
+    const result = await checkGreeting(
+      t,
+      '<click:run_command:"/lands claim,您？"><v:player>Click</click>',
+      '<click:run_command:"/lands claim,您？"><v:player>点击</click>',
+    );
+    assert.equal(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" ||
+          diagnostic.ruleId === "translation-style",
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+  });
+
+  void it("只报告 README 规定的全角标点和‘您’", async (t) => {
+    const result = await checkGreeting(t, "Hello", "您好吗？");
+    const style = result.diagnostics.filter(
+      (diagnostic) => diagnostic.ruleId === "translation-style",
+    );
+    assert.equal(
+      style.length,
+      2,
+      result.checked.stderr || result.checked.stdout,
+    );
+    assert.ok(
+      style.some(
+        (diagnostic) => diagnostic.code === "translation-style.honorific",
+      ),
+    );
+    assert.ok(
+      style.some(
+        (diagnostic) => diagnostic.code === "translation-style.punctuation",
+      ),
+    );
+    assert.ok(style.every((diagnostic) => diagnostic.origin === "target"));
+  });
+
+  void it("允许配置单项规范译法和规则严重级别", async (t) => {
+    const defaultResult = await checkGreeting(t, "Nation", "王国");
+    const result = await checkGreeting(
+      t,
+      "Nation",
+      "王国",
+      [
+        "rules:",
+        "  terminology:",
+        "    severity: warning",
+        "    parameters:",
+        "      translations:",
+        "        nation: 国家",
+      ].join("\n"),
+    );
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+    assert.ok(issue, result.checked.stderr || result.checked.stdout);
+    assert.equal(issue?.severity, "warning");
+    assert.match(JSON.stringify(issue?.expected), /国家/u);
+    assert.doesNotMatch(JSON.stringify(issue?.expected), /联邦/u);
+    const defaultIssue = defaultResult.diagnostics.find(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+    assert.ok(
+      defaultIssue,
+      defaultResult.checked.stderr || defaultResult.checked.stdout,
+    );
+    assert.notEqual(issue?.contentFingerprint, defaultIssue.contentFingerprint);
+  });
+
+  void it("可单独关闭术语规则并在覆盖状态中标出", async (t) => {
+    const result = await checkGreeting(
+      t,
+      "Nation",
+      "国家",
+      ["rules:", "  terminology:", "    enabled: false"].join("\n"),
+    );
+    assert.equal(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+    const coverage = result.report.coverage as Record<string, unknown>;
+    assert.ok((coverage.disabledRuleIds as string[]).includes("terminology"));
+    assert.equal(coverage.complete, false);
+  });
+
+  void it("片段抽取不完整时将旧术语豁免标为无法评估", async (t) => {
+    const result = await checkGreeting(t, "Nation", "王国");
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+    assert.ok(issue, result.checked.stderr || result.checked.stdout);
+    if (issue === undefined) throw new Error("缺少术语诊断");
+    const exemption = runCli(
+      "exempt",
+      "--project",
+      result.project.directory,
+      "--diagnostic",
+      String(issue.diagnosticId),
+      "--reason",
+      "原译文需要维护者复核",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exemption.status, 0, exemption.stderr);
+
+    const targetPath = join(result.project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace('greeting: "王国"', 'greeting: "王国 §c"'),
+    );
+    const afterIncompleteParse = runCli(
+      "check",
+      "--project",
+      result.project.directory,
+      "--output-format",
+      "structured",
+    );
+    const afterReport = readReport(
+      afterIncompleteParse.stdout || afterIncompleteParse.stderr,
+    );
+    const diagnostics = afterReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+      ),
+      afterIncompleteParse.stderr || afterIncompleteParse.stdout,
+    );
+    const coverage = afterReport.coverage as Record<string, unknown>;
+    assert.equal(coverage.complete, false);
+    assert.match(
+      JSON.stringify(coverage.unavailableCapabilities),
+      /可译文本片段不完整/u,
+    );
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      afterIncompleteParse.stderr || afterIncompleteParse.stdout,
+    );
+  });
+
+  void it("不因待翻译英文种子缺少中文术语而报告", async (t) => {
+    const result = await checkGreeting(t, "Nation", "Nation");
+    assert.equal(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
+    assert.equal(result.checked.status, 1);
+    assert.equal(result.report.state, "incomplete");
+    const coverage = result.report.coverage as Record<string, unknown>;
+    assert.ok((coverage.enabledRuleIds as string[]).includes("terminology"));
+    assert.ok(
+      (coverage.enabledRuleIds as string[]).includes("translation-style"),
     );
   });
 });

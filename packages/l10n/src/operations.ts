@@ -1286,12 +1286,71 @@ function structureFindingIssues(
   return issues;
 }
 
+function translatableTextCoverageUnavailable(
+  view: ProjectView,
+): readonly string[] {
+  const parsed = view.miniMessage;
+  if (parsed === undefined) return [];
+  const sourceKeys = new Set(
+    parsed.translatableText
+      .filter((document) => document.origin === "source")
+      .map((document) =>
+        canonicalJson({
+          messageId: document.message.id,
+          path: document.path,
+          documentIndex: document.documentIndex,
+        }),
+      ),
+  );
+  const targetKeys = new Set(
+    parsed.translatableText
+      .filter((document) => document.origin === "target")
+      .map((document) =>
+        canonicalJson({
+          messageId: document.message.id,
+          path: document.path,
+          documentIndex: document.documentIndex,
+        }),
+      ),
+  );
+  const translatableKeys = new Set(
+    parsed.translatableText.map((document) =>
+      canonicalJson({
+        messageId: document.message.id,
+        path: document.path,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+      }),
+    ),
+  );
+  if (
+    parsed.documents.some((document) => document.status !== "parsed") ||
+    parsed.documents.some(
+      (document) =>
+        !translatableKeys.has(
+          canonicalJson({
+            messageId: document.message.id,
+            path: document.path,
+            documentIndex: document.documentIndex,
+            origin: document.origin,
+          }),
+        ),
+    ) ||
+    [...sourceKeys].some((key) => !targetKeys.has(key)) ||
+    [...targetKeys].some((key) => !sourceKeys.has(key))
+  ) {
+    return ["术语和风格检查所需的可译文本片段不完整"];
+  }
+  return [];
+}
+
 function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable = [
     "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
-    "术语、风格和译文一致性检查尚未实现",
+    "译文一致性检查尚未实现",
   ];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
+  unavailable.push(...translatableTextCoverageUnavailable(view));
   if (
     view.resources.some((resource) => resource.purpose === "bedrock-excluded")
   ) {
@@ -2546,6 +2605,7 @@ function ruleUnavailable(
   operation: "status" | "check",
   messageId?: string,
   diagnosticCode?: string,
+  location?: DiagnosticLocation,
 ): boolean {
   const incompleteVariableEvaluation =
     ruleId === "minimessage-variables" &&
@@ -2557,12 +2617,76 @@ function ruleUnavailable(
         item.message?.id === messageId &&
         item.code === "minimessage.variable-coverage-unavailable",
     );
+  const incompleteTranslatableText =
+    (ruleId === "terminology" || ruleId === "translation-style") &&
+    messageId !== undefined &&
+    (() => {
+      const message = project.view.messages.find(
+        (candidate) => candidate.id === messageId,
+      );
+      if (message === undefined) return false;
+      if (message.targetStatus !== "present") return true;
+      const parsed = project.view.miniMessage;
+      if (parsed === undefined) return true;
+      const matchesPath = (path: readonly (string | number)[]) =>
+        location === undefined ||
+        canonicalJson(location.path) === canonicalJson(path);
+      const sourceText = parsed.translatableText.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "source" &&
+          document.file === message.sourceFile &&
+          matchesPath(document.path),
+      );
+      const targetText = parsed.translatableText.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "target" &&
+          document.file === message.targetFile &&
+          matchesPath(document.path) &&
+          (location === undefined || location.file === document.file),
+      );
+      const sourceDocuments = parsed.documents.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "source" &&
+          document.file === message.sourceFile &&
+          matchesPath(document.path),
+      );
+      const targetDocuments = parsed.documents.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "target" &&
+          document.file === message.targetFile &&
+          matchesPath(document.path) &&
+          (location === undefined || location.file === document.file),
+      );
+      const indexes = (
+        documents: readonly { readonly documentIndex: number }[],
+      ) =>
+        documents
+          .map((document) => document.documentIndex)
+          .sort((a, b) => a - b);
+      const sameIndexes = (left: readonly number[], right: readonly number[]) =>
+        canonicalJson(left) === canonicalJson(right);
+      return (
+        sourceText.length === 0 ||
+        targetText.length === 0 ||
+        !sameIndexes(indexes(sourceText), indexes(targetText)) ||
+        sourceDocuments.length === 0 ||
+        targetDocuments.length === 0 ||
+        !sameIndexes(indexes(sourceDocuments), indexes(targetDocuments)) ||
+        sourceDocuments.some((document) => document.status !== "parsed") ||
+        targetDocuments.some((document) => document.status !== "parsed")
+      );
+    })();
   return (
     !project.coverage.enabledRuleIds.includes(ruleId) ||
     project.coverage.disabledRuleIds.includes(ruleId) ||
     project.coverage.unsupportedRuleIds.includes(ruleId) ||
     requiredRuleInputUnavailable(project, ruleId, operation, messageId) ||
-    incompleteVariableEvaluation
+    incompleteVariableEvaluation ||
+    incompleteTranslatableText
   );
 }
 
@@ -2652,6 +2776,7 @@ function applyExceptionRecords(
           operation,
           record.message?.id,
           record.code,
+          record.location,
         )
       )
         suppressed.add(original.diagnosticId);
@@ -2675,6 +2800,7 @@ function applyExceptionRecords(
       operation,
       record.message?.id,
       record.code,
+      record.location,
     );
     if (unavailable) {
       notices.push(
@@ -2919,6 +3045,7 @@ export async function recordDiagnosticExemption(
       "check",
       selected.message?.id,
       selected.code,
+      selected.location,
     )
   ) {
     throw new ProjectOperationError(
