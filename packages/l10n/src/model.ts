@@ -113,6 +113,13 @@ export interface MiniMessagePosition {
   readonly end: number;
 }
 
+/** MiniMessage 接收适配后的内容，同时保留到原始 UTF-16 边界的位置映射。 */
+export interface AdaptedMiniMessageInput {
+  readonly input: string;
+  readonly sourceOffsets: readonly number[];
+  readonly exact: boolean;
+}
+
 export interface VariableContextPart {
   readonly kind: string;
   readonly identity: JsonValue;
