@@ -129,6 +129,14 @@ export const terminologyEntries: readonly TerminologyEntry[] = [
     source: { kind: "word", forms: ["trust", "trusts", "trusted", "trusting"] },
     allowedTranslations: ["邀请", "加入"],
     context: "对应其他领地插件的 invite；从玩家视角也可表达为被加入。",
+    notApplicableContext: [
+      { form: "trust", precedingWords: ["temporary"] },
+      { form: "trusted", precedingWords: ["not", "never"] },
+      {
+        form: "trusted",
+        followingWords: ["in", "inside", "here", "there", "for", "only"],
+      },
+    ],
     sourceReference: legacyReadme,
   },
   phrase(
@@ -160,11 +168,14 @@ export const terminologyEntries: readonly TerminologyEntry[] = [
     "领土",
     "名词义；与动词义占领区分。",
   ),
-  word(
-    "unclaim",
-    ["unclaim", "unclaims", "unclaimed", "unclaiming"],
-    "取消占领",
-  ),
+  {
+    ...word(
+      "unclaim",
+      ["unclaim", "unclaims", "unclaimed", "unclaiming"],
+      "取消占领",
+    ),
+    notApplicableContext: [{ form: "unclaimed", followingWords: ["location"] }],
+  },
   phrase(
     "natural-settings",
     ["natural flag", "natural flags", "natural setting", "natural settings"],

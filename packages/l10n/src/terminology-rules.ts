@@ -45,7 +45,8 @@ function positionValues(positions: readonly MiniMessagePosition[]) {
 
 const wordBoundary = "[\\p{L}\\p{N}_]";
 const ruleFingerprintVersion = "legacy-readme-terminology-v1";
-const styleFingerprintVersion = "legacy-readme-translation-style-v1";
+const styleFingerprintVersion = "legacy-readme-translation-style-v2";
+const sourceInheritedPunctuation = new Set(["•", "‹", "›", "«", "»", "·"]);
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -269,6 +270,69 @@ function claimSense(text: string, start: number, end: number): "verb" | "noun" {
   return "verb";
 }
 
+function textContextForRun(
+  runs: readonly TextRun[],
+  run: TextRun,
+): { readonly text: string; readonly start: number } {
+  const runIndex = runs.indexOf(run);
+  if (runIndex < 0) return { text: run.text, start: 0 };
+  let first = runIndex;
+  let last = runIndex;
+  while (first > 0 && runs[first - 1]?.contextKey === run.contextKey) {
+    first -= 1;
+  }
+  while (
+    last + 1 < runs.length &&
+    runs[last + 1]?.contextKey === run.contextKey
+  ) {
+    last += 1;
+  }
+  const contextRuns = runs.slice(first, last + 1);
+  const selectedStart = contextRuns
+    .slice(0, runIndex - first)
+    .reduce((length, contextRun) => length + contextRun.text.length + 1, 0);
+  return {
+    text: contextRuns.map((contextRun) => contextRun.text).join(" "),
+    start: selectedStart,
+  };
+}
+
+function enemyRelationContext(text: string, matchEnd: number): boolean {
+  const suffix = text.slice(matchEnd, matchEnd + 100);
+  const clause = suffix.split(/[.!?;\n]/u, 1)[0] ?? suffix;
+  return /^\s+(?:[\p{L}\p{N}_'-]+\s+){0,3}as\s+an\s+enemy\b/iu.test(clause);
+}
+
+function isConfigurationKeyFragment(
+  entry: (typeof terminologyEntries)[number],
+  text: string,
+  start: number,
+): boolean {
+  if (entry.id !== "claim-verb" && entry.id !== "claim-noun") return false;
+  // 这个真实配置键整体是技术标识，不能把开头的 claim 单独当作普通词。
+  return /^claim-worlds-list(?![\p{L}\p{N}_-])/iu.test(text.slice(start));
+}
+
+function isUntrustRemovalEvent(text: string, start: number, end: number) {
+  const precedingWord = text
+    .slice(0, start)
+    .match(/[\p{L}\p{N}_]+\s*$/u)?.[0]
+    .trim()
+    .toLowerCase();
+  const followingWord = text
+    .slice(end)
+    .match(/^\s*([\p{L}\p{N}_]+)/u)?.[1]
+    ?.toLowerCase();
+  // “was untrusted because … expired”表达已执行的移出；静态成员状态不如此解释。
+  return (
+    (["was", "were", "been"].includes(precedingWord ?? "") &&
+      !["in", "inside", "here", "there", "for", "only"].includes(
+        followingWord ?? "",
+      )) ||
+    followingWord === "this"
+  );
+}
+
 function notApplicableContext(
   entry: (typeof terminologyEntries)[number],
   text: string,
@@ -300,6 +364,8 @@ function notApplicableContext(
 function termMatches(
   text: string,
   path: readonly (string | number)[],
+  contextText = text,
+  contextStart = 0,
 ): readonly TermMatch[] {
   const unsuppressed = terminologyEntries.flatMap((entry) => {
     const matcher = entry.source;
@@ -315,6 +381,20 @@ function termMatches(
       if (matchedText === undefined || start === undefined) continue;
       const end = start + matchedText.length;
       if (notApplicableContext(entry, text, start, matchedText, path)) continue;
+      if (isConfigurationKeyFragment(entry, text, start)) continue;
+      if (
+        entry.id === "untrust" &&
+        matchedText.toLowerCase() === "untrusted" &&
+        !isUntrustRemovalEvent(text, start, end)
+      ) {
+        continue;
+      }
+      if (
+        entry.id === "declare-verb" &&
+        enemyRelationContext(contextText, contextStart + end)
+      ) {
+        continue;
+      }
       if (
         matcher.kind === "claim-sense" &&
         claimSense(text, start, end) !== matcher.sense
@@ -597,7 +677,13 @@ export const terminologyRule: CheckRule = {
       const sourceRuns = textRuns(project, source);
       const targetRuns = textRuns(project, target);
       for (const [runIndex, run] of sourceRuns.entries()) {
-        const matches = termMatches(run.text, source.path);
+        const sourceContext = textContextForRun(sourceRuns, run);
+        const matches = termMatches(
+          run.text,
+          source.path,
+          sourceContext.text,
+          sourceContext.start,
+        );
         for (const match of matches) {
           const finding = termFinding(
             project,
@@ -623,6 +709,7 @@ function styleFinding(
   character: string,
   occurrenceIndex: number,
   position: MiniMessagePosition,
+  sourceInheritedOccurrences?: number,
 ) {
   const punctuation = code === "translation-style.punctuation";
   return {
@@ -636,7 +723,17 @@ function styleFinding(
     fingerprint: {
       version: styleFingerprintVersion,
       sourceReference: terminologyStyleSource,
-      policy: punctuation ? "ASCII punctuation only" : "avoid 您",
+      policy: punctuation
+        ? "ASCII punctuation except source-inherited decor symbols"
+        : "avoid 您",
+      ...(sourceInheritedOccurrences === undefined
+        ? {}
+        : {
+            sourceInheritance: {
+              character,
+              occurrences: sourceInheritedOccurrences,
+            },
+          }),
     },
     message: document.message,
     origin: "target" as const,
@@ -670,6 +767,12 @@ export const translationStyleRule: CheckRule = {
     const parsed = project.miniMessage;
     if (parsed === undefined) return [];
     const findings: ReturnType<CheckRule["evaluate"]>[number][] = [];
+    const sourceByTarget = new Map(
+      pairedTextDocuments(project).map(({ sourceDocument, targetDocument }) => [
+        targetDocument,
+        sourceDocument,
+      ]),
+    );
     for (const document of parsed.translatableText) {
       if (document.origin !== "target") continue;
       const parsedDocument = parsed.documents.find(
@@ -681,6 +784,32 @@ export const translationStyleRule: CheckRule = {
           canonicalJson(candidate.path) === canonicalJson(document.path),
       );
       if (parsedDocument?.status === "parser-failed") continue;
+      const sourceDocument = sourceByTarget.get(document);
+      const parsedSourceDocument =
+        sourceDocument &&
+        parsed.documents.find(
+          (candidate) =>
+            candidate.message.id === sourceDocument.message.id &&
+            candidate.origin === "source" &&
+            candidate.documentIndex === sourceDocument.documentIndex &&
+            candidate.file === sourceDocument.file &&
+            canonicalJson(candidate.path) ===
+              canonicalJson(sourceDocument.path),
+        );
+      const sourceOccurrences = new Map<string, number>();
+      if (
+        sourceDocument !== undefined &&
+        parsedSourceDocument?.status === "parsed"
+      ) {
+        for (const run of textRuns(project, sourceDocument)) {
+          for (const character of run.text) {
+            if (!sourceInheritedPunctuation.has(character)) continue;
+            const key = canonicalJson([run.contextKey, character]);
+            sourceOccurrences.set(key, (sourceOccurrences.get(key) ?? 0) + 1);
+          }
+        }
+      }
+      const targetOccurrences = new Map<string, number>();
       let occurrenceIndex = 0;
       for (const run of textRuns(project, document)) {
         for (let offset = 0; offset < run.text.length;) {
@@ -703,6 +832,22 @@ export const translationStyleRule: CheckRule = {
             occurrenceIndex += 1;
           }
           if (codePoint > 0x7f && /\p{P}/u.test(character)) {
+            const inheritanceKey = canonicalJson([run.contextKey, character]);
+            const inheritedOccurrence = sourceInheritedPunctuation.has(
+              character,
+            )
+              ? (targetOccurrences.get(inheritanceKey) ?? 0) + 1
+              : 0;
+            if (sourceInheritedPunctuation.has(character)) {
+              targetOccurrences.set(inheritanceKey, inheritedOccurrence);
+              if (
+                inheritedOccurrence <=
+                (sourceOccurrences.get(inheritanceKey) ?? 0)
+              ) {
+                offset = end;
+                continue;
+              }
+            }
             findings.push(
               styleFinding(
                 document,
@@ -710,6 +855,9 @@ export const translationStyleRule: CheckRule = {
                 character,
                 occurrenceIndex,
                 position,
+                sourceInheritedPunctuation.has(character)
+                  ? (sourceOccurrences.get(inheritanceKey) ?? 0)
+                  : undefined,
               ),
             );
             occurrenceIndex += 1;

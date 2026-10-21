@@ -5382,6 +5382,54 @@ void describe("术语和风格正式检查", () => {
     assert.match(JSON.stringify(issue.actual), /领土/u);
   });
 
+  void it("不把 claim-worlds-list 技术键截成 Claim，保留动作和名词义", async (t) => {
+    const configKey = await checkGreeting(
+      t,
+      "The claim-worlds-list option is part of the configuration.",
+      "claim-worlds-list 选项属于配置内容.",
+    );
+    assert.deepEqual(
+      configKey.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      configKey.checked.stderr || configKey.checked.stdout,
+    );
+
+    const correct = await checkGreeting(
+      t,
+      "Claim this chunk. Claims of this world.",
+      "占领此区块. 本世界的领土.",
+    );
+    assert.deepEqual(
+      correct.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      correct.checked.stderr || correct.checked.stdout,
+    );
+
+    for (const [target, expectedTermId] of [
+      ["领土此区块. 本世界的领土.", "claim-verb"],
+      ["占领此区块. 本世界的占领.", "claim-noun"],
+    ] as const) {
+      const wrong = await checkGreeting(
+        t,
+        "Claim this chunk. Claims of this world.",
+        target,
+      );
+      assert.ok(
+        wrong.diagnostics.some(
+          (diagnostic) =>
+            diagnostic.code === "terminology.opposite-sense" &&
+            (diagnostic.expected as Record<string, unknown>).termId ===
+              expectedTermId,
+        ),
+        wrong.checked.stderr || wrong.checked.stdout,
+      );
+    }
+  });
+
   void it("按完整 Unclaim 处理且不把 Claimblock 拆成 Claim", async (t) => {
     const result = await checkGreeting(
       t,
@@ -5394,6 +5442,35 @@ void describe("术语和风格正式检查", () => {
       ),
       false,
       result.checked.stderr || result.checked.stdout,
+    );
+  });
+
+  void it("区分未占领地点状态和取消占领动作", async (t) => {
+    const location = await checkGreeting(
+      t,
+      "Successfully teleported into the nearest unclaimed location.",
+      "已成功传送到最近的未占领位置.",
+    );
+    assert.deepEqual(
+      location.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      location.checked.stderr || location.checked.stdout,
+    );
+
+    const action = await checkGreeting(
+      t,
+      "Unclaim this chunk.",
+      "未占领此区块.",
+    );
+    assert.ok(
+      action.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" &&
+          (diagnostic.expected as Record<string, unknown>).termId === "unclaim",
+      ),
+      action.checked.stderr || action.checked.stdout,
     );
   });
 
@@ -5503,6 +5580,80 @@ void describe("术语和风格正式检查", () => {
     );
   });
 
+  void it("区分成员身份、非成员访问状态与邀请或移出动作", async (t) => {
+    const states = await checkGreeting(
+      t,
+      "You're not trusted in the area. Temporary trust. " +
+        "Open to untrusted players. Untrusted. " +
+        "The player will be trusted only for the selected duration. " +
+        "The player was untrusted because their temporary trust expired.",
+      "你不是该子区域的成员. 临时成员. 向非成员开放. 游客. " +
+        "玩家仅在选定时长内作为成员. " +
+        "玩家因临时成员期限到期而被移出.",
+    );
+    assert.deepEqual(
+      states.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      states.checked.stderr || states.checked.stdout,
+    );
+
+    for (const [source, target, expectedTermId] of [
+      ["Trust this player.", "信任此玩家.", "trust"],
+      ["Untrust this player.", "保留非成员状态.", "untrust"],
+      [
+        "The player was untrusted because temporary trust expired.",
+        "玩家因临时成员期限到期而成为非成员.",
+        "untrust",
+      ],
+    ] as const) {
+      const wrongAction = await checkGreeting(t, source, target);
+      assert.ok(
+        wrongAction.diagnostics.some(
+          (diagnostic) =>
+            diagnostic.ruleId === "terminology" &&
+            (diagnostic.expected as Record<string, unknown>).termId ===
+              expectedTermId,
+        ),
+        wrongAction.checked.stderr || wrongAction.checked.stdout,
+      );
+    }
+
+    for (const source of [
+      "You untrusted this player.",
+      "Successfully untrusted this player.",
+    ]) {
+      const correctRemoval = await checkGreeting(
+        t,
+        source,
+        "你已将此玩家移出.",
+      );
+      assert.equal(
+        correctRemoval.diagnostics.some(
+          (diagnostic) => diagnostic.ruleId === "terminology",
+        ),
+        false,
+        correctRemoval.checked.stderr || correctRemoval.checked.stdout,
+      );
+
+      const wrongState = await checkGreeting(
+        t,
+        source,
+        "你已保留此玩家为非成员.",
+      );
+      assert.ok(
+        wrongState.diagnostics.some(
+          (diagnostic) =>
+            diagnostic.ruleId === "terminology" &&
+            (diagnostic.expected as Record<string, unknown>).termId ===
+              "untrust",
+        ),
+        wrongState.checked.stderr || wrongState.checked.stdout,
+      );
+    }
+  });
+
   void it("区分 war declarations 名词与 declare war 动词", async (t) => {
     const result = await checkGreeting(
       t,
@@ -5515,6 +5666,36 @@ void describe("术语和风格正式检查", () => {
       ),
       false,
       result.checked.stderr || result.checked.stdout,
+    );
+  });
+
+  void it("把 declare as an enemy 识别为政敌关系动作而非宣战", async (t) => {
+    const source =
+      `You can't declare land <v:land> as an enemy. ` +
+      `<hover:show_text:'Click here to declare nation <v:nation> as an enemy'>Details</hover> ` +
+      `<click:run_command:'/x'>Declare nation <v:nation> as an enemy instead</click>`;
+    const target =
+      `你不能将城镇 <v:land>设为政敌. ` +
+      `<hover:show_text:'单击此处将联邦 <v:nation>设为政敌'>详情</hover> ` +
+      `<click:run_command:'/x'>改为将联邦 <v:nation>设为政敌</click>`;
+    const relation = await checkGreeting(t, source, target);
+    assert.deepEqual(
+      relation.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      relation.checked.stderr || relation.checked.stdout,
+    );
+
+    const wrongWar = await checkGreeting(t, "Declare war.", "设为政敌.");
+    assert.ok(
+      wrongWar.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" &&
+          (diagnostic.expected as Record<string, unknown>).termId ===
+            "declare-verb",
+      ),
+      wrongWar.checked.stderr || wrongWar.checked.stdout,
     );
   });
 
@@ -5723,6 +5904,63 @@ void describe("术语和风格正式检查", () => {
       assert.notEqual(diagnostic.expected, undefined);
       assert.notEqual(diagnostic.actual, undefined);
     }
+  });
+
+  void it("仅继承对应原文表面的装饰符号标点", async (t) => {
+    const source =
+      `<hover:show_text:'Click here to navigate to the previous page.'>` +
+      `<click:run_command:'/pages previous'>«</click></hover> ` +
+      `<hover:show_text:'Click here to go to the next page.'>` +
+      `<click:run_command:'/pages next'>»</click></hover> •‹›«»·`;
+    const seed = await checkGreeting(t, source, source);
+    assert.deepEqual(
+      seed.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "translation-style",
+      ),
+      [],
+      seed.checked.stderr || seed.checked.stdout,
+    );
+
+    const translated = await checkGreeting(
+      t,
+      source,
+      `<hover:show_text:'点击返回上一页.'>` +
+        `<click:run_command:'/pages previous'>«</click></hover> ` +
+        `<hover:show_text:'点击前往下一页.'>` +
+        `<click:run_command:'/pages next'>»</click></hover> •‹›«»·`,
+    );
+    assert.deepEqual(
+      translated.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "translation-style",
+      ),
+      [],
+      translated.checked.stderr || translated.checked.stdout,
+    );
+
+    const added = await checkGreeting(t, "• Previous", "••‹上一页");
+    const addedPunctuation = added.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "translation-style" &&
+        diagnostic.code === "translation-style.punctuation",
+    );
+    assert.deepEqual(
+      addedPunctuation.map(
+        (diagnostic) =>
+          (diagnostic.actual as Record<string, unknown>).character,
+      ),
+      ["•", "‹"],
+      added.checked.stderr || added.checked.stdout,
+    );
+
+    const actualStyle = await checkGreeting(t, "Welcome", "您好吗，");
+    assert.deepEqual(
+      actualStyle.diagnostics
+        .filter((diagnostic) => diagnostic.ruleId === "translation-style")
+        .map((diagnostic) => diagnostic.code)
+        .sort((left, right) => String(left).localeCompare(String(right))),
+      ["translation-style.honorific", "translation-style.punctuation"],
+      actualStyle.checked.stderr || actualStyle.checked.stdout,
+    );
   });
 
   void it("在文本与结构化报告中定位同文档内的每处风格违规", async (t) => {
