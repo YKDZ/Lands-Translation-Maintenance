@@ -568,7 +568,7 @@ export async function initializeProject(
     await recoverInterruptedTransaction(project, transactionRelativePath);
   } catch (error) {
     throw new ProjectOperationError(
-      `发现未完成的初始化事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
+      `发现未完成的维护事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
       "transaction.recovery-failed",
       { file: transactionRelativePath, path: [] },
     );

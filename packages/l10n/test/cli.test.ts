@@ -282,6 +282,87 @@ void describe("CLI 制品", () => {
     );
   });
 
+  void it("同步应用候选原文并一致更新译文、基线和锁", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const lockPath = join(project.directory, ".l10n/lock.json");
+    const beforeBaseline = await readFile(baselinePath, "utf8");
+    const beforeLock = await readFile(lockPath, "utf8");
+    const candidateJar = join(project.directory, "Lands-8.9.2.jar");
+    await writeFile(
+      candidateJar,
+      zipSync({
+        "lang/en.yml": strToU8(
+          [
+            "messages:",
+            "  greeting: Bonjour",
+            "  welcome: Welcome",
+            "  commands:",
+            "    registered: Run",
+            "list:",
+            "  entries: [first, second]",
+            "",
+          ].join("\n"),
+        ),
+        "plugin.yml": strToU8("name: Lands\n"),
+        "settings.yml": strToU8("enabled: true\n"),
+        "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
+        "me/lands/Plugin.class": strToU8("class bytes"),
+      }),
+    );
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(applied.status, 0, applied.stderr);
+    const target = await readFile(
+      join(project.directory, "lang/zh.yml"),
+      "utf8",
+    );
+    assert.match(target, /greeting: Bonjour/);
+    assert.match(target, /welcome: Welcome/);
+    const afterBaseline = await readFile(baselinePath, "utf8");
+    const afterLock = await readFile(lockPath, "utf8");
+    assert.notEqual(afterBaseline, beforeBaseline);
+    assert.match(afterBaseline, /Bonjour/);
+    assert.notEqual(afterLock, beforeLock);
+
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    const summary = readReport(status.stdout).summary as Record<
+      string,
+      unknown
+    >;
+    assert.equal(summary.pendingTranslations, 2);
+  });
+
   void it("输出 CLI 契约生成的结构化 Schema", () => {
     const result = runCli("schema", "--output-format", "structured");
 
@@ -885,11 +966,11 @@ void describe("CLI 制品", () => {
       assert.equal(result.status, 1, result.stderr);
       const report = readReport(result.stderr || result.stdout);
       assert.equal(report.state, "issues");
-      assert.ok(
-        (report.diagnostics as Array<Record<string, unknown>>).some(
-          (item) => item.code === "transaction.prepared",
-        ),
-      );
+      const transactionIssue = (
+        report.diagnostics as Array<Record<string, unknown>>
+      ).find((item) => item.code === "transaction.prepared");
+      assert.ok(transactionIssue);
+      assert.match(String(transactionIssue.reason), /init 或 sync/);
       assert.deepEqual(await snapshotProjectFiles(project.directory), before);
     }
 
@@ -971,6 +1052,7 @@ void describe("CLI 制品", () => {
 
     assert.equal(retried.status, 1);
     assert.match(retried.stdout || retried.stderr, /中断|并行编辑/);
+    assert.match(retried.stdout || retried.stderr, /维护事务/);
     assert.equal(await readFile(targetFile, "utf8"), parallelEdit);
     await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
     await assert.rejects(
