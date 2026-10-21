@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { cp, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  readReport,
-  runCli,
-  runCliWithoutJava,
-  snapshotProjectFiles,
-} from "../cli-fixtures.ts";
+import { readReport, snapshotProjectFiles } from "../cli-fixtures.ts";
 
-const fixtureDirectory = resolve(
+const packageDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../fixtures/offline-check",
+  "../..",
+);
+const fixtureDirectory = resolve(
+  packageDirectory,
+  "test/fixtures/offline-check",
 );
 
 void describe("无 JAR 保存项目检查旅程", () => {
@@ -25,10 +25,38 @@ void describe("无 JAR 保存项目检查旅程", () => {
       rm(temporaryDirectory, { force: true, recursive: true }),
     );
     const projectDirectory = join(temporaryDirectory, "project");
+    const artifactDirectory = join(temporaryDirectory, "package");
     await cp(fixtureDirectory, projectDirectory, { recursive: true });
 
+    const deployed = spawnSync(
+      "pnpm",
+      ["--filter", "@lands-l10n/l10n", "deploy", "--prod", artifactDirectory],
+      { cwd: packageDirectory, encoding: "utf8" },
+    );
+    assert.equal(
+      deployed.status,
+      0,
+      deployed.stderr || deployed.stdout || deployed.error?.message,
+    );
+    const cliFile = join(artifactDirectory, "dist/cli.js");
+    const runArtifactCli = (...args: string[]) =>
+      spawnSync(process.execPath, [cliFile, ...args], {
+        cwd: temporaryDirectory,
+        encoding: "utf8",
+      });
+    const runArtifactCliWithoutJava = (...args: string[]) =>
+      spawnSync(process.execPath, [cliFile, ...args], {
+        cwd: temporaryDirectory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          JAVA_COMMAND: "java",
+          PATH: "/lands-l10n-missing-java",
+        },
+      });
+
     const initialFiles = await snapshotProjectFiles(projectDirectory);
-    const statusWithoutJava = runCliWithoutJava(
+    const statusWithoutJava = runArtifactCliWithoutJava(
       "status",
       "--project",
       projectDirectory,
@@ -60,12 +88,18 @@ void describe("无 JAR 保存项目检查旅程", () => {
         value: "Lands",
       },
     ]);
+    assert.deepEqual(statusReport.knownExcludedResources, [
+      {
+        path: "bedrock/lang/en_us.json",
+        purpose: "bedrock-excluded",
+      },
+    ]);
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
       initialFiles,
     );
 
-    const checkWithoutJava = runCliWithoutJava(
+    const checkWithoutJava = runArtifactCliWithoutJava(
       "check",
       "--project",
       projectDirectory,
@@ -99,7 +133,51 @@ void describe("无 JAR 保存项目检查旅程", () => {
       initialFiles,
     );
 
-    const checked = runCli(
+    for (const dependencyPath of [
+      join(artifactDirectory, "target/minimessage/lands-l10n-minimessage.jar"),
+      join(
+        artifactDirectory,
+        "target/minimessage/deps/adventure-text-minimessage-4.26.1.jar",
+      ),
+    ]) {
+      const temporarilyUnavailablePath = `${dependencyPath}.unavailable`;
+      await rename(dependencyPath, temporarilyUnavailablePath);
+      try {
+        const incompleteCheck = runArtifactCli(
+          "check",
+          "--project",
+          projectDirectory,
+          "--output-format",
+          "structured",
+        );
+        assert.equal(incompleteCheck.status, 1, incompleteCheck.stderr);
+        const incompleteReport = readReport(
+          incompleteCheck.stderr || incompleteCheck.stdout,
+        );
+        assert.notEqual(incompleteReport.state, "ready");
+        assert.equal(
+          (incompleteReport.coverage as { readonly complete: boolean })
+            .complete,
+          false,
+        );
+        assert.ok(
+          (
+            incompleteReport.diagnostics as readonly Record<string, unknown>[]
+          ).some(
+            (diagnostic) =>
+              diagnostic.code === "minimessage.variable-coverage-unavailable",
+          ),
+        );
+        assert.deepEqual(
+          await snapshotProjectFiles(projectDirectory),
+          initialFiles,
+        );
+      } finally {
+        await rename(temporarilyUnavailablePath, dependencyPath);
+      }
+    }
+
+    const checked = runArtifactCli(
       "check",
       "--project",
       projectDirectory,
@@ -122,6 +200,12 @@ void describe("无 JAR 保存项目检查旅程", () => {
         capability.includes("Bedrock"),
       ),
     );
+    assert.deepEqual(report.knownExcludedResources, [
+      {
+        path: "bedrock/lang/en_us.json",
+        purpose: "bedrock-excluded",
+      },
+    ]);
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
       initialFiles,
@@ -132,12 +216,15 @@ void describe("无 JAR 保存项目检查旅程", () => {
     await writeFile(
       targetPath,
       initialTarget
-        .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
+        .replace(
+          "<green>欢迎，%player%</green>",
+          "<blue>欢迎，%player% §c世界</blue>",
+        )
         .replace("draft: Review this policy", "draft: 请审阅此政策"),
     );
     const editedFiles = await snapshotProjectFiles(projectDirectory);
 
-    const editedStatus = runCliWithoutJava(
+    const editedStatus = runArtifactCliWithoutJava(
       "status",
       "--project",
       projectDirectory,
@@ -158,7 +245,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     });
     assert.deepEqual(await snapshotProjectFiles(projectDirectory), editedFiles);
 
-    const editedCheck = runCli(
+    const editedCheck = runArtifactCli(
       "check",
       "--project",
       projectDirectory,
@@ -175,12 +262,38 @@ void describe("无 JAR 保存项目检查旅程", () => {
         diagnostic.code === "minimessage.tag-mismatch",
     );
     assert.equal(tagDiagnostics.length, 2);
+    assert.ok(
+      (editedReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-syntax" &&
+          diagnostic.code === "minimessage.syntax-invalid" &&
+          diagnostic.origin === "target",
+      ),
+    );
 
-    const editedTextCheck = runCli("check", "--project", projectDirectory);
+    const editedTextCheck = runArtifactCli(
+      "check",
+      "--project",
+      projectDirectory,
+    );
     assert.equal(editedTextCheck.status, editedCheck.status);
     const textOutput = editedTextCheck.stderr || editedTextCheck.stdout;
     assert.match(textOutput, /已修改 1 条/u);
     assert.match(textOutput, /检查覆盖不完整/u);
+    assert.match(textOutput, /Bedrock/u);
+    assert.match(textOutput, /bedrock\/lang\/en_us\.json/u);
+    assert.match(textOutput, /不解析/u);
+    const editedCoverage = editedReport.coverage as {
+      readonly unavailableCapabilities: readonly string[];
+    };
+    for (const capability of editedCoverage.unavailableCapabilities) {
+      const escapedCapability = capability
+        .replaceAll("\r", "\\r")
+        .replaceAll("\n", "\\n")
+        .replaceAll("\0", "\\0");
+      assert.ok(textOutput.includes(`尚未覆盖：${escapedCapability}`));
+    }
+    assert.ok(textOutput.includes("minimessage.syntax-invalid"));
     for (const diagnostic of tagDiagnostics) {
       assert.ok(textOutput.includes(String(diagnostic.code)));
     }

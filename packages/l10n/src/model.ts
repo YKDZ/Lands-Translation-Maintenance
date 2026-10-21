@@ -270,6 +270,10 @@ export interface ResourceInventoryEntry {
   readonly purpose: ResourcePurpose;
 }
 
+export interface KnownExcludedResource extends ResourceInventoryEntry {
+  readonly purpose: "bedrock-excluded" | "other-excluded";
+}
+
 export interface TranslationField {
   readonly path: readonly string[];
   readonly category: TranslationFieldCategory;
@@ -444,6 +448,7 @@ export interface ProjectReport {
     readonly target: JsonValue;
     readonly pendingReason: "translation-seed" | "same-text-candidate";
   }[];
+  readonly knownExcludedResources: readonly KnownExcludedResource[];
   readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly coverage?: CheckCoverage;
 }

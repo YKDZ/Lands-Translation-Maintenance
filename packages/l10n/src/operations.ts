@@ -34,6 +34,7 @@ import type {
   Diagnostic,
   DiagnosticLocation,
   JsonValue,
+  KnownExcludedResource,
   KnownOutOfScopeVisibleText,
   ObservedMessage,
   ProjectFileIssue,
@@ -710,6 +711,14 @@ function makeReport(
       lock,
       confirmedSameTextIds,
     ),
+    knownExcludedResources: project.resources
+      .filter(
+        (resource): resource is KnownExcludedResource =>
+          resource.purpose === "bedrock-excluded" ||
+          resource.purpose === "other-excluded",
+      )
+      .map(({ path, purpose }) => ({ path, purpose }))
+      .sort((left, right) => compareText(left.path, right.path)),
     knownOutOfScopeVisibleTexts: project.knownOutOfScopeVisibleTexts,
     ...(coverage === undefined ? {} : { coverage }),
   };
