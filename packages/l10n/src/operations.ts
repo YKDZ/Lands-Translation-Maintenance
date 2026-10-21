@@ -581,11 +581,23 @@ function diagnostic(
   expected: JsonValue,
   actual: JsonValue,
 ): Diagnostic {
+  const objectId = sha256(
+    canonicalJson({
+      ruleId,
+      code,
+      location: { file: location.file, path: location.path },
+    }),
+  );
+  const contentFingerprint = sha256(
+    canonicalJson({ ruleId, severity, expected, actual }),
+  );
   const diagnosticId = sha256(
-    canonicalJson({ ruleId, code, location, expected, actual }),
+    canonicalJson({ ruleId, code, objectId, contentFingerprint, location }),
   );
   return {
     diagnosticId,
+    objectId,
+    contentFingerprint,
     ruleId,
     severity,
     code,
