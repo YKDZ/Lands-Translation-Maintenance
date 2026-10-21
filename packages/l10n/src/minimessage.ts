@@ -1176,15 +1176,52 @@ export async function parseMiniMessages(
   const java = await runOfficialParser(theme.definitions, inputs);
   const findings = [...theme.findings];
   const unavailable = new Set<string>();
-  if (
-    inputs.some(
-      ({ message, input }) =>
-        (message.format === "legacy-color-minimessage" ||
-          message.format === "legacy-color-variable-minimessage") &&
-        /[&§][0-9a-fk-orx]|(?<!<)#[0-9a-f]{6}/iu.test(input),
-    )
-  ) {
-    unavailable.add("旧颜色码到 MiniMessage 的运行时转换尚未纳入检查");
+  const legacyIssueOccurrences = new Map<string, number>();
+  for (const input of inputs) {
+    if (input.legacyAdapterUnsupported) {
+      unavailable.add(
+        "旧颜色格式的来源 Lands 版本未受支持；运行时转换规则无法确认",
+      );
+      findings.push(
+        findingForMessage(
+          input,
+          "legacy-format.source-version-unsupported",
+          `无法按未知 Lands 版本 ${sourceVersion} 确认旧颜色码转换行为`,
+          { supportedVersions: ["8.0.1", "8.9.2"] },
+          { sourceVersion, format: input.message.format ?? "unknown" },
+          { format: input.message.format ?? "legacy-color", occurrence: 0 },
+          { sourceVersion },
+        ),
+      );
+    }
+    for (const issue of input.legacyIssues) {
+      const key = `${input.index}\0${issue.code}`;
+      const occurrence = legacyIssueOccurrences.get(key) ?? 0;
+      legacyIssueOccurrences.set(key, occurrence + 1);
+      findings.push(
+        findingForMessage(
+          input,
+          issue.code,
+          "旧颜色格式与该 Lands 版本支持的转换形式不一致",
+          {
+            expected: issue.expected,
+            position: {
+              start: issue.position.start,
+              end: issue.position.end,
+            },
+          },
+          {
+            actual: issue.actual,
+            position: {
+              start: issue.position.start,
+              end: issue.position.end,
+            },
+          },
+          { format: input.message.format ?? "legacy-color", occurrence },
+          { sourceVersion },
+        ),
+      );
+    }
   }
   if (java.unavailable === undefined) {
     for (const definition of theme.definitions) {
