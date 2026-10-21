@@ -780,6 +780,171 @@ void describe("跨消息翻译一致性", () => {
     assert.deepEqual(consistencyDiagnostics(report), []);
   });
 
+  void it("列表项 hover 真消失与输入解析失败使用不同豁免状态", async (t) => {
+    const sourceEntries = [
+      "<hover:show_text:'Welcome'>One</hover>",
+      "<hover:show_text:'Welcome'>Two</hover>",
+    ] as const;
+    const targetEntries = [
+      "<hover:show_text:'你好'>一</hover>",
+      "<hover:show_text:'欢迎'>二</hover>",
+    ] as const;
+    const project = await createProject(t, { sourceEntries });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const writeEntries = async (entries: readonly string[]) => {
+      const contents = await readFile(targetPath, "utf8");
+      const updated = contents.replace(
+        /^  entries:\n(?:    - .*\n){2}/mu,
+        `  entries:\n${entries.map((entry) => `    - ${JSON.stringify(entry)}\n`).join("")}`,
+      );
+      assert.notEqual(updated, contents);
+      await writeFile(targetPath, updated);
+    };
+    await writeEntries(targetEntries);
+
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const group = consistencyDiagnostics(beforeReport).find(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.ok(group, before.stderr || before.stdout);
+    const exempted = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(group.diagnosticId),
+      "--reason",
+      "临时复核列表项 hover 生命周期",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr || exempted.stdout);
+
+    await writeEntries([targetEntries[0], "二"]);
+    const removed = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const removedReport = readReport(removed.stdout || removed.stderr);
+    const removedDiagnostics = removedReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const removedExceptions = removedDiagnostics.filter(
+      (diagnostic) => diagnostic.ruleId === "exceptions",
+    );
+    assert.ok(
+      removedExceptions.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      removed.stderr || removed.stdout,
+    );
+    assert.equal(
+      removedExceptions.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      removed.stderr || removed.stdout,
+    );
+    assert.ok(
+      removedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      removed.stderr || removed.stdout,
+    );
+
+    await writeEntries(targetEntries);
+    const restored = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const restoredReport = readReport(restored.stdout || restored.stderr);
+    assert.equal(
+      (restoredReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.code === "exception.orphaned" ||
+          diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      restored.stderr || restored.stdout,
+    );
+
+    await writeEntries([targetEntries[0], "§c未完成"]);
+    const unavailable = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const unavailableReport = readReport(
+      unavailable.stdout || unavailable.stderr,
+    );
+    const unavailableExceptions = (
+      unavailableReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "exceptions");
+    assert.ok(
+      unavailableExceptions.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      unavailable.stderr || unavailable.stdout,
+    );
+    assert.equal(
+      unavailableExceptions.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      false,
+      unavailable.stderr || unavailable.stdout,
+    );
+
+    await writeEntries(targetEntries);
+    const recovered = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const recoveredReport = readReport(recovered.stdout || recovered.stderr);
+    assert.equal(
+      (recoveredReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.code === "exception.orphaned" ||
+          diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      recovered.stderr || recovered.stdout,
+    );
+  });
+
   void it("已解析的参与 hover 表面消失时仍孤立旧组豁免", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "<hover:show_text:'Welcome'>First</hover>",
@@ -1097,6 +1262,59 @@ void describe("跨消息翻译一致性", () => {
       readonly semanticEquivalence: string;
     };
     assert.equal(actual.similarity, 0.8);
+    assert.ok(
+      [
+        ...actual.sourceDifferences.negations.left,
+        ...actual.sourceDifferences.negations.right,
+      ].includes("not"),
+    );
+    assert.equal(actual.semanticEquivalence, "unknown");
+  });
+
+  void it("为三词与四词短句提供有界相似否定候选", async (t) => {
+    const project = await createMessageProject(
+      t,
+      ["You may go.", "You may not go.", "Open settings.", "Close the menu."],
+      ["你可以走。", "你不可以走。", "打开设置。", "关闭菜单。"],
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const candidates = consistencyDiagnostics(report).filter(
+      (diagnostic) =>
+        diagnostic.code === "translation-consistency.similar-source-candidate",
+    );
+    const negative = candidates.find((diagnostic) => {
+      const actual = diagnostic.actual as {
+        readonly messages?: readonly {
+          readonly source?: { readonly text?: string };
+        }[];
+      };
+      const sources =
+        actual.messages?.map((message) => message.source?.text) ?? [];
+      return (
+        sources.includes("You may go.") && sources.includes("You may not go.")
+      );
+    });
+
+    assert.ok(negative, checked.stderr || checked.stdout);
+    assert.equal(negative.severity, "warning");
+    const actual = negative.actual as {
+      readonly similarity: number;
+      readonly sourceDifferences: {
+        readonly negations: {
+          readonly left: readonly string[];
+          readonly right: readonly string[];
+        };
+      };
+      readonly semanticEquivalence: string;
+    };
+    assert.equal(actual.similarity, 0.75);
     assert.ok(
       [
         ...actual.sourceDifferences.negations.left,
