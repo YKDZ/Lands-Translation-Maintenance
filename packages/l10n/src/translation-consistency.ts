@@ -710,20 +710,23 @@ function candidateIndexKeys(tokens: readonly string[]): readonly string[] {
   const keys = new Set(
     commonIndexTokens(tokens).map((token) => `word:${token}`),
   );
+  // 默认 0.65 阈值下，2 对 3 词的单词增删仍可过线；短语限定为 2–6 词，删词签名至少保留两个词。
   if (
-    tokens.length < 4 ||
+    tokens.length < 2 ||
     tokens.length > 6 ||
     tokens.some((token) => token.length >= 4)
   ) {
     return [...keys];
   }
   const phraseSignatures = new Set<string>([canonicalJson(tokens)]);
-  for (let index = 0; index < tokens.length; index += 1) {
-    phraseSignatures.add(
-      canonicalJson(
-        tokens.filter((_token, tokenIndex) => tokenIndex !== index),
-      ),
-    );
+  if (tokens.length >= 3) {
+    for (let index = 0; index < tokens.length; index += 1) {
+      phraseSignatures.add(
+        canonicalJson(
+          tokens.filter((_token, tokenIndex) => tokenIndex !== index),
+        ),
+      );
+    }
   }
   for (const signature of phraseSignatures)
     keys.add(`short-phrase:${signature}`);

@@ -2826,7 +2826,7 @@ function requiredInputDependencyUnavailable(
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === 0 &&
-      canonicalJson(document.path) === canonicalJson(message.path),
+      canonicalJson(document.path) === canonicalJson(dependency.path),
   );
   return (
     rootDocuments.length === 0 ||
