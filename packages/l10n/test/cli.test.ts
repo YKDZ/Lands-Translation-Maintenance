@@ -17,7 +17,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { applySyncProject, initializeProject } from "@lands-l10n/l10n";
+import {
+  applySyncProject,
+  confirmSameText,
+  initializeProject,
+} from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
@@ -441,8 +445,14 @@ void describe("CLI 制品", () => {
     assert.match(result.stdout, /初始化/);
     assert.match(result.stdout, /状态/);
     assert.match(result.stdout, /检查/);
+    assert.match(result.stdout, /exempt/);
+    assert.match(result.stdout, /confirm-same-text/);
     assert.match(result.stdout, /sync/);
     assert.match(result.stdout, /schema/);
+    const confirmHelp = runCli("confirm-same-text", "--help");
+    assert.equal(confirmHelp.status, 0, confirmHelp.stderr);
+    assert.match(confirmHelp.stdout, /--candidate/);
+    assert.match(confirmHelp.stdout, /--reason/);
   });
 
   void it("在已确认的 .l10n 布局建立配置、锁和原文基线", async (t) => {
@@ -2536,6 +2546,8 @@ void describe("CLI 制品", () => {
     assert.equal((envelope as { readonly kind?: unknown }).kind, "data");
     assert.match(result.stdout, /schemaVersion/);
     assert.match(result.stdout, /status/);
+    assert.match(result.stdout, /confirm-same-text/);
+    assert.match(result.stdout, /--candidate/);
   });
 
   void it("sync --dry-run 返回可应用的结构化计划且不写入项目", async (t) => {
@@ -5520,6 +5532,78 @@ void describe("CLI 制品", () => {
     assert.equal(coverage.complete, false);
   });
 
+  void it("结构规则禁用后仍按映射事实阻止同文确认", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const initialTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      initialTarget.replace("greeting: 你好", "greeting: Hello"),
+    );
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${config}\nrules:\n  structure:\n    enabled: false\n`,
+    );
+    await writeFile(
+      targetPath,
+      (await readFile(targetPath, "utf8")).replace(
+        "welcome: Welcome",
+        "welcome: [broken]",
+      ),
+    );
+
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    const candidate = (
+      readReport(status.stdout || status.stderr)
+        .sameTextToConfirm as readonly Record<string, unknown>[]
+    ).find(
+      (item) =>
+        (item.message as Record<string, unknown>).path !== undefined &&
+        JSON.stringify((item.message as Record<string, unknown>).path) ===
+          '["messages","greeting"]',
+    );
+    assert.ok(candidate);
+    if (candidate === undefined) throw new Error("缺少同文候选");
+
+    const confirmation = runCli(
+      "confirm-same-text",
+      "--project",
+      project.directory,
+      "--candidate",
+      String(candidate.candidateId),
+      "--reason",
+      "结构规则关闭时仍须检查映射前提",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(confirmation.status, 1);
+    assert.match(confirmation.stdout || confirmation.stderr, /执行前提/u);
+    await assert.rejects(
+      readFile(join(project.directory, ".l10n/exceptions.yml")),
+      { code: "ENOENT" },
+    );
+  });
+
   void it("同步锁内部状态不一致时拒绝状态查询", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
@@ -5591,5 +5675,615 @@ void describe("CLI 制品", () => {
       unknown
     >;
     assert.equal(statusSummary.sameTextCandidates, 1);
+  });
+
+  void it("按当前诊断 ID 记录精确豁免，邻近诊断仍然报告", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target
+        .replace("  welcome: Welcome\n", "")
+        .replace("  greeting: 你好\n", ""),
+    );
+    const firstCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(firstCheck.status, 1, firstCheck.stderr);
+    const diagnostics = readReport(firstCheck.stdout || firstCheck.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const welcome = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === "message.missing" &&
+        (diagnostic.message as Record<string, unknown> | undefined)?.path &&
+        JSON.stringify((diagnostic.message as Record<string, unknown>).path) ===
+          JSON.stringify(["messages", "welcome"]),
+    );
+    const registered = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === "message.missing" &&
+        JSON.stringify(
+          (diagnostic.message as Record<string, unknown> | undefined)?.path,
+        ) === JSON.stringify(["messages", "greeting"]),
+    );
+    assert.ok(welcome);
+    assert.ok(registered);
+    if (welcome === undefined || registered === undefined)
+      throw new Error("缺少预期的消息诊断");
+
+    const added = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(welcome.diagnosticId),
+      "--reason",
+      "此提示由维护者决定保留为空",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(added.status, 0, added.stderr);
+    const confirmation = readEnvelope(added.stdout).data?.confirmation as
+      | Record<string, unknown>
+      | undefined;
+    assert.equal(confirmation?.diagnosticId, welcome.diagnosticId);
+    assert.equal(confirmation?.contentFingerprint, welcome.contentFingerprint);
+
+    const exceptionPath = join(project.directory, ".l10n/exceptions.yml");
+    const exceptionBytes = await readFile(exceptionPath);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const originalConfig = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${originalConfig}\nrules:\n  minimessage-syntax:\n    severity: warning\n`,
+    );
+    await writeFile(
+      join(project.directory, "lang/zh.yml"),
+      `${await readFile(join(project.directory, "lang/zh.yml"), "utf8")}# comment-only edit\n`,
+    );
+
+    const after = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(after.status, 1, after.stderr);
+    const afterDiagnostics = readReport(after.stdout || after.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      afterDiagnostics.some(
+        (diagnostic) => diagnostic.diagnosticId === welcome.diagnosticId,
+      ),
+      false,
+    );
+    assert.equal(
+      afterDiagnostics.some(
+        (diagnostic) => diagnostic.diagnosticId === registered.diagnosticId,
+      ),
+      true,
+      JSON.stringify(afterDiagnostics),
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+    const exceptionFile = parseYaml(exceptionBytes.toString("utf8")) as {
+      diagnosticExemptions: readonly Record<string, unknown>[];
+    };
+    assert.equal(exceptionFile.diagnosticExemptions.length, 1);
+    assert.equal(
+      exceptionFile.diagnosticExemptions[0]?.diagnosticId,
+      welcome.diagnosticId,
+    );
+    assert.equal(
+      exceptionFile.diagnosticExemptions[0]?.reason,
+      "此提示由维护者决定保留为空",
+    );
+
+    await writeFile(
+      configPath,
+      `${originalConfig}\nrules:\n  structure:\n    severity: warning\n`,
+    );
+    const relatedConfigCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(relatedConfigCheck.status, 1);
+    const relatedDiagnostics = readReport(
+      relatedConfigCheck.stdout || relatedConfigCheck.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      relatedDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "message.missing" &&
+          JSON.stringify(
+            (diagnostic.message as Record<string, unknown> | undefined)?.path,
+          ) === '["messages","welcome"]',
+      ),
+      true,
+    );
+    assert.equal(
+      relatedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.review-required",
+      ),
+      true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+
+    await writeFile(
+      configPath,
+      `${originalConfig}\nrules:\n  structure:\n    enabled: false\n`,
+    );
+    const disabledRuleCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(disabledRuleCheck.status, 1);
+    const disabledDiagnostics = readReport(
+      disabledRuleCheck.stdout || disabledRuleCheck.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      disabledDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+
+    await writeFile(configPath, originalConfig);
+    const syncAfterConfirmation = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(syncAfterConfirmation.status, 0, syncAfterConfirmation.stderr);
+    const repeatedSync = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeatedSync.status, 0, repeatedSync.stderr);
+    const afterSync = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const syncDiagnostics = readReport(afterSync.stdout || afterSync.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      syncDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+  });
+
+  void it("合理同文只解除同文待处理原因并保留其他质量诊断", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetBeforeInit = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetBeforeInit.replace("greeting: 你好", "greeting: Hello"),
+    );
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const beforeSync = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(beforeSync.status, 0, beforeSync.stderr);
+    const oldCandidates = readReport(beforeSync.stdout || beforeSync.stderr)
+      .sameTextToConfirm as readonly Record<string, unknown>[];
+    const oldGreeting = oldCandidates.find(
+      (candidate) =>
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+        '["messages","greeting"]',
+    );
+    assert.ok(oldGreeting);
+    if (oldGreeting === undefined) throw new Error("缺少旧同文候选");
+    const oldCandidateId = String(oldGreeting.candidateId);
+
+    const candidateJar = join(project.directory, "candidate.jar");
+    await writeJar(candidateJar, {
+      source: [
+        "messages:",
+        "  greeting: Hola",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const synced = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(synced.status, 0, synced.stderr);
+
+    const oldSelection = runCli(
+      "confirm-same-text",
+      "--project",
+      project.directory,
+      "--candidate",
+      oldCandidateId,
+      "--reason",
+      "不应沿用旧内容选择",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(oldSelection.status, 1);
+    await assert.rejects(
+      readFile(join(project.directory, ".l10n/exceptions.yml")),
+      { code: "ENOENT" },
+    );
+
+    await writeFile(
+      targetPath,
+      (await readFile(targetPath, "utf8")).replace("  welcome: Welcome\n", ""),
+    );
+    const before = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(before.status, 1, before.stderr);
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const candidates = beforeReport.sameTextToConfirm as readonly Record<
+      string,
+      unknown
+    >[];
+    const greeting = candidates.find(
+      (candidate) =>
+        (candidate.message as Record<string, unknown>).path &&
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+          JSON.stringify(["messages", "greeting"]),
+    );
+    assert.ok(greeting);
+    if (greeting === undefined) throw new Error("缺少同文待确认消息");
+    const greetingMessage = greeting.message as Record<string, unknown>;
+    const greetingId = String(greetingMessage.id);
+    const candidateId = String(greeting.candidateId);
+    assert.match(candidateId, /^[0-9a-f]{64}$/u);
+    assert.notEqual(candidateId, oldCandidateId);
+
+    const beforeRace = await readFile(targetPath, "utf8");
+    await assert.rejects(
+      confirmSameText(
+        project.directory,
+        candidateId,
+        "写入前内容变化时不得确认旧候选",
+        {
+          beforeApply: async () => {
+            await writeFile(
+              targetPath,
+              beforeRace.replace("greeting: Hola", "greeting: Changed"),
+            );
+          },
+        },
+      ),
+      (error: unknown) =>
+        error instanceof Error && /写入前同文候选已变化/u.test(error.message),
+    );
+    await assert.rejects(
+      readFile(join(project.directory, ".l10n/exceptions.yml")),
+      { code: "ENOENT" },
+    );
+    await writeFile(targetPath, beforeRace);
+
+    const confirmed = runCli(
+      "confirm-same-text",
+      "--project",
+      project.directory,
+      "--candidate",
+      candidateId,
+      "--reason",
+      "品牌名在此处保留英文",
+    );
+    assert.equal(confirmed.status, 0, confirmed.stderr);
+    assert.match(confirmed.stdout, /已确认同文候选/u);
+    assert.match(confirmed.stdout, new RegExp(candidateId));
+    assert.match(confirmed.stdout, /品牌名在此处保留英文/u);
+    const exceptionPath = join(project.directory, ".l10n/exceptions.yml");
+    const exceptionBytes = await readFile(exceptionPath);
+    const savedExceptions = parseYaml(exceptionBytes.toString("utf8")) as {
+      sameTextConfirmations: readonly Record<string, unknown>[];
+    };
+    assert.equal(savedExceptions.sameTextConfirmations.length, 1);
+    assert.equal(
+      (
+        savedExceptions.sameTextConfirmations[0]?.message as Record<
+          string,
+          unknown
+        >
+      )?.id,
+      greetingId,
+    );
+    assert.equal(
+      savedExceptions.sameTextConfirmations[0]?.candidateId,
+      candidateId,
+    );
+
+    const quotedTarget = (await readFile(targetPath, "utf8")).replace(
+      "greeting: Hola",
+      "greeting: 'Hola'",
+    );
+    const commentedTarget = `${quotedTarget}# YAML comment only\n`;
+    await writeFile(targetPath, commentedTarget);
+
+    const afterStatus = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(afterStatus.status, 1, afterStatus.stderr);
+    const afterReport = readReport(afterStatus.stdout || afterStatus.stderr);
+    const summary = afterReport.summary as Record<string, unknown>;
+    assert.equal(summary.confirmedSameText, 1, JSON.stringify(afterReport));
+    assert.equal(summary.sameTextCandidates, 0);
+    assert.equal(summary.pendingTranslations, 0);
+    const currentCandidates = afterReport.sameTextToConfirm as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.equal(currentCandidates.length, 0);
+    assert.equal(
+      (afterReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) => diagnostic.code === "same-text.unable-to-evaluate",
+      ),
+      false,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(checked.status, 1);
+    const checkedReport = readReport(checked.stdout || checked.stderr);
+    const checkDiagnostics = checkedReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const checkSummary = checkedReport.summary as Record<string, unknown>;
+    assert.equal(checkSummary.confirmedSameText, 1);
+    assert.equal(checkSummary.pendingTranslations, 0);
+    assert.equal(
+      (checkedReport.sameTextToConfirm as readonly unknown[]).length,
+      0,
+    );
+    assert.equal(
+      checkDiagnostics.some(
+        (diagnostic) => diagnostic.code === "message.missing",
+      ),
+      true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+
+    await writeFile(
+      targetPath,
+      commentedTarget.replace("greeting: 'Hola'", "greeting: 'Different'"),
+    );
+    const staleStatus = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(staleStatus.status, 1);
+    const staleDiagnostics = readReport(
+      staleStatus.stdout || staleStatus.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      staleDiagnostics.some(
+        (diagnostic) => diagnostic.code === "same-text.review-required",
+      ),
+      true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+
+    const deletionJar = join(project.directory, "deletion.jar");
+    await writeJar(deletionJar, {
+      source: [
+        "messages:",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const deletedSource = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      deletionJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(deletedSource.status, 0, deletedSource.stderr);
+    const afterDeletion = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const deletionDiagnostics = readReport(
+      afterDeletion.stdout || afterDeletion.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      deletionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "same-text.orphaned",
+      ),
+      true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+  });
+
+  void it("同文确认与诊断豁免都不能绕过尚未同步的维护声明", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("greeting: 你好", "greeting: Hello"),
+    );
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeFile(
+      targetPath,
+      (await readFile(targetPath, "utf8")).replace("  welcome: Welcome\n", ""),
+    );
+
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const sameTextCandidate = (
+      readReport(status.stdout || status.stderr)
+        .sameTextToConfirm as readonly Record<string, unknown>[]
+    ).find(
+      (candidate) =>
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+        '["messages","greeting"]',
+    );
+    assert.ok(sameTextCandidate);
+    if (sameTextCandidate === undefined)
+      throw new Error("缺少待确认的同文候选");
+    const check = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const missing = (
+      readReport(check.stdout || check.stderr).diagnostics as readonly Record<
+        string,
+        unknown
+      >[]
+    ).find(
+      (diagnostic) =>
+        diagnostic.code === "message.missing" &&
+        JSON.stringify((diagnostic.message as Record<string, unknown>).path) ===
+          '["messages","welcome"]',
+    );
+    assert.ok(missing);
+    if (missing === undefined) throw new Error("缺少目标消息诊断");
+
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "b8f6985a4ad2af1b76b05f0f79b718a2234623ad",
+        "a8f6985a4ad2af1b76b05f0f79b718a2234623ad",
+      ),
+    );
+
+    for (const result of [
+      runCli(
+        "confirm-same-text",
+        "--project",
+        project.directory,
+        "--candidate",
+        String(sameTextCandidate.candidateId),
+        "--reason",
+        "未同步时不得确认",
+        "--output-format",
+        "structured",
+      ),
+      runCli(
+        "exempt",
+        "--project",
+        project.directory,
+        "--diagnostic",
+        String(missing.diagnosticId),
+        "--reason",
+        "未同步时不得豁免",
+        "--output-format",
+        "structured",
+      ),
+    ]) {
+      assert.equal(result.status, 1);
+      assert.match(result.stdout || result.stderr, /执行前提/u);
+    }
+    await assert.rejects(
+      readFile(join(project.directory, ".l10n/exceptions.yml")),
+      { code: "ENOENT" },
+    );
   });
 });

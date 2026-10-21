@@ -342,6 +342,7 @@ export interface ProjectSummary {
   readonly messages: number;
   readonly pendingTranslations: number;
   readonly sameTextCandidates: number;
+  readonly confirmedSameText: number;
   readonly modifiedTranslations: number;
   readonly missingTranslations: number;
 }
@@ -359,6 +360,13 @@ export interface ProjectReport {
   readonly state: "ready" | "issues" | "incomplete";
   readonly summary: ProjectSummary;
   readonly diagnostics: readonly Diagnostic[];
+  readonly sameTextToConfirm: readonly {
+    readonly candidateId: string;
+    readonly message: MessageIdentity;
+    readonly source: JsonValue;
+    readonly target: JsonValue;
+    readonly pendingReason: "translation-seed" | "same-text-candidate";
+  }[];
   readonly coverage?: CheckCoverage;
 }
 
