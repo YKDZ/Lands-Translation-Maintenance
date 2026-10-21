@@ -2507,7 +2507,7 @@ async function loadSavedProject(
         "structure",
         "sync.configuration-changed",
         "error",
-        "影响原文解析或同步的维护声明已更改，需重新初始化以保存新基线",
+        "影响原文解析或同步的维护声明已更改，尚未同步。请使用 `lands-l10n sync --project <项目目录> --jar <候选 JAR>` 正式同步；如需先预览，可额外加 `--dry-run`（只生成计划、不写入项目），确认后去掉该选项再执行。",
         { file: configurationFileName, path: ["translationScope"] },
         { syncConfigurationSha256: state.lock.syncConfigurationSha256 },
         {

@@ -276,8 +276,7 @@ function nodeOutput(
 ): string | undefined {
   if (node.kind !== "tag") return node.visibleText;
   if (marker !== undefined) return marker;
-  // Lands 8.0.1 keeps map placeholders inside HTML attributes literal; this
-  // versioned behavior is separate from official MiniMessage insertions.
+  // Lands 8.0.1 会将地图占位符在 HTML 属性中按字面内容保留；这是该版本的行为，与官方 MiniMessage 插入项分开处理。
   if (withinAttribute && node.name === "v") {
     return node.raw;
   }
