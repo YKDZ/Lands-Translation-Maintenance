@@ -1,0 +1,10 @@
+physical:
+  selection:
+    material: GOLDEN_HOE
+gui:
+  main:
+    items:
+      default:
+        lands:
+          material: skin:8449b9318e33158e64a46ab0de121c3d40000e3332c1574932b3c849d8fa0dc2
+          slots: 11

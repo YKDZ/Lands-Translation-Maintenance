@@ -234,6 +234,32 @@ function matchingEntries(
   return entries;
 }
 
+export function fieldSelectorMatchesPath(
+  path: readonly string[],
+  field: TranslationField,
+): boolean {
+  if (field.category === "chat-string") {
+    return (
+      path.length >= field.path.length &&
+      field.path.every((segment, index) => path[index] === segment)
+    );
+  }
+  const selector = field.path;
+  const recursiveIndex = selector.indexOf("**");
+  const fixedLength = recursiveIndex === -1 ? selector.length : recursiveIndex;
+  if (
+    (recursiveIndex === -1 && path.length !== selector.length) ||
+    (recursiveIndex !== -1 && path.length <= fixedLength)
+  ) {
+    return false;
+  }
+  for (let index = 0; index < fixedLength; index += 1) {
+    const segment = selector[index]!;
+    if (segment !== "*" && segment !== path[index]) return false;
+  }
+  return true;
+}
+
 function collectField(
   root: JsonValue | undefined,
   field: TranslationField,

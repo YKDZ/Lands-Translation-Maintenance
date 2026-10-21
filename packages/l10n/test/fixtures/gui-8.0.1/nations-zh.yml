@@ -1,0 +1,17 @@
+general:
+  nation:
+    role:
+      capital: <t:entity_land><b>首都</t>
+gui:
+  nation:
+    title: <t:menu_title><v:level> <v:nation>
+    items:
+      default:
+        role:
+          name: <t:regular_heading>联邦职位
+          lore:
+            - <t:decoration>✖ </t><t:regular>为联邦成员配置
+            - "   在该联邦的每个城镇中"
+            - "   可执行的操作."
+          material: INHERIT
+          slots: 30

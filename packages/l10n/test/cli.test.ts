@@ -23,6 +23,58 @@ import { parse as parseYaml } from "yaml";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
+const guiFixtureDirectory = resolve(
+  packageDirectory,
+  "test/fixtures/gui-8.0.1",
+);
+
+const guiModules = [
+  {
+    source: "Locale/en-US_gui.yml",
+    definitions: "Locale/definitions_gui.yml",
+    target: "Locale/zh-CN_gui.yml",
+    sourceFixture: "main-en.yml",
+    definitionsFixture: "main-definitions.yml",
+    targetFixture: "main-zh.yml",
+  },
+  {
+    source: "Locale/Nations/en-US_gui.yml",
+    definitions: "Locale/Nations/definitions_gui.yml",
+    target: "Locale/Nations/zh-CN_gui.yml",
+    sourceFixture: "nations-en.yml",
+    definitionsFixture: "nations-definitions.yml",
+    targetFixture: "nations-zh.yml",
+  },
+  {
+    source: "Locale/Wars/en-US_gui.yml",
+    definitions: "Locale/Wars/definitions_gui.yml",
+    target: "Locale/Wars/zh-CN_gui.yml",
+    sourceFixture: "wars-en.yml",
+    definitionsFixture: "wars-definitions.yml",
+    targetFixture: "wars-zh.yml",
+  },
+] as const;
+
+const guiFieldDeclarations = [
+  '        - path: [general, "**"]',
+  "          category: gui-string",
+  "          scene: gui-general",
+  '        - path: [physical, "*", name]',
+  "          category: gui-string",
+  "          scene: gui-item-name",
+  '        - path: [physical, "*", lore]',
+  "          category: gui-lore",
+  "          scene: gui-item-lore",
+  '        - path: [gui, "*", title]',
+  "          category: gui-string",
+  "          scene: gui-title",
+  '        - path: [gui, "*", items, "*", "*", name]',
+  "          category: gui-string",
+  "          scene: gui-item-name",
+  '        - path: [gui, "*", items, "*", "*", lore]',
+  "          category: gui-lore",
+  "          scene: gui-item-lore",
+];
 
 function runCli(...args: string[]) {
   return spawnSync(process.execPath, [cliFile, ...args], {
@@ -168,6 +220,71 @@ async function createProject(t: TestContext) {
     ].join("\n"),
   );
 
+  return { directory, jarFile };
+}
+
+async function createGuiProject(t: TestContext) {
+  const directory = await mkdtemp(join(tmpdir(), "lands-l10n-gui-"));
+  t.after(async () => rm(directory, { force: true, recursive: true }));
+  await mkdir(join(directory, ".l10n"), { recursive: true });
+
+  const resources = [
+    { path: "plugin.yml", purpose: "metadata" },
+    ...guiModules.flatMap(({ source, definitions }) => [
+      { path: source, purpose: "gui-language" },
+      { path: definitions, purpose: "configuration" },
+    ]),
+  ];
+  const mappings = guiModules.flatMap(({ source, definitions, target }) => [
+    `    - source: ${source}`,
+    `      target: ${target}`,
+    `      definitionsSource: ${definitions}`,
+    "      fields:",
+    ...guiFieldDeclarations,
+  ]);
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.0.1"',
+      '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+      "resources:",
+      ...resources.flatMap(({ path, purpose }) => [
+        `  - path: ${path}`,
+        `    purpose: ${purpose}`,
+      ]),
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      ...mappings,
+      "",
+    ].join("\n"),
+  );
+
+  const jarEntries: Record<string, Uint8Array> = {
+    "plugin.yml": strToU8("name: Lands\n"),
+  };
+  for (const module of guiModules) {
+    jarEntries[module.source] = strToU8(
+      await readFile(join(guiFixtureDirectory, module.sourceFixture), "utf8"),
+    );
+    jarEntries[module.definitions] = strToU8(
+      await readFile(
+        join(guiFixtureDirectory, module.definitionsFixture),
+        "utf8",
+      ),
+    );
+    const targetPath = join(directory, module.target);
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(
+      targetPath,
+      await readFile(join(guiFixtureDirectory, module.targetFixture), "utf8"),
+    );
+  }
+  const jarFile = join(directory, "Lands.jar");
+  await writeFile(jarFile, zipSync(jarEntries));
   return { directory, jarFile };
 }
 
@@ -481,6 +598,104 @@ void describe("CLI 制品", () => {
     assert.match(targetAfter, /material: STONE/);
     assert.match(targetAfter, /hide-tooltip: true/);
     assert.match(targetAfter, /- 第一行\n            - 第二行/);
+  });
+
+  void it("初始化三模块 GUI 时保留中文和已合入的结构定义", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal((report.summary as Record<string, unknown>).messages, 14);
+    const mainTarget = await readFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      "utf8",
+    );
+    const nationTarget = await readFile(
+      join(project.directory, "Locale/Nations/zh-CN_gui.yml"),
+      "utf8",
+    );
+    const warTarget = await readFile(
+      join(project.directory, "Locale/Wars/zh-CN_gui.yml"),
+      "utf8",
+    );
+    assert.match(mainTarget, /all: <green>所有<\/green>/);
+    assert.match(mainTarget, /name: <t:regular_heading>选区工具/);
+    assert.match(mainTarget, /material: GOLDEN_HOE/);
+    assert.match(
+      mainTarget,
+      /material: skin:8449b9318e33158e64a46ab0de121c3d40000e3332c1574932b3c849d8fa0dc2/,
+    );
+    assert.match(nationTarget, /name: <t:regular_heading>联邦职位/);
+    assert.match(nationTarget, /material: INHERIT/);
+    assert.match(warTarget, /name: <t:negative_heading>攻方/);
+    assert.match(warTarget, /material: IRON_SWORD/);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const checkReport = readReport(checked.stdout || checked.stderr);
+    const diagnostics = checkReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.equal(
+      diagnostics.some(({ code }) =>
+        ["message.extra", "message.type-mismatch"].includes(String(code)),
+      ),
+      false,
+    );
+    const coverage = checkReport.coverage as Record<string, unknown>;
+    assert.equal(
+      (coverage.unavailableCapabilities as string[]).some((capability) =>
+        capability.includes("GUI 语言资源"),
+      ),
+      false,
+    );
+
+    const invalidMainTarget = mainTarget.replace(
+      /    lore:\n(?:      - [^\n]*\n)+(?=    material: GOLDEN_HOE)/u,
+      "    lore: 7\n",
+    );
+    assert.notEqual(invalidMainTarget, mainTarget);
+    await writeFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      invalidMainTarget,
+    );
+    const invalidCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const invalidReport = readReport(
+      invalidCheck.stdout || invalidCheck.stderr,
+    );
+    const invalidDiagnostics = invalidReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      invalidDiagnostics.some(
+        ({ code, location }) =>
+          code === "message.type-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["physical","selection","lore"]',
+      ),
+    );
   });
 
   void it("同步应用候选原文并一致更新译文、基线和锁", async (t) => {
@@ -1173,6 +1388,91 @@ void describe("CLI 制品", () => {
     assert.equal(appliedEnvelope.variant, "applied");
     assert.deepEqual(appliedEnvelope.data?.plan, plan);
     assert.doesNotMatch(await readFile(targetPath, "utf8"), /greeting|text/);
+  });
+
+  void it("通配聊天列表中的旧类型路径可由新子列表替换", async (t) => {
+    const project = await createProject(t);
+    await writeFile(
+      join(project.directory, ".l10n/config.yml"),
+      (
+        await readFile(join(project.directory, ".l10n/config.yml"), "utf8")
+      ).replace("[list, entries]", '[list, "**"]'),
+    );
+    await writeFile(
+      join(project.directory, "lang/zh.yml"),
+      [
+        "messages:",
+        "  greeting: 你好",
+        "list:",
+        "  greeting: [旧译文]",
+        "",
+      ].join("\n"),
+    );
+    const oldSource = [
+      "messages:",
+      "  greeting: Hello",
+      "  welcome: Welcome",
+      "  commands:",
+      "    registered: Run",
+      "list:",
+      "  greeting: [Hello]",
+      "",
+    ].join("\n");
+    await writeJar(project.jarFile, { source: oldSource });
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const newSource = [
+      "messages:",
+      "  greeting: Hello",
+      "  welcome: Welcome",
+      "  commands:",
+      "    registered: Run",
+      "list:",
+      "  greeting:",
+      "    child: [New]",
+      "",
+    ].join("\n");
+    await writeJar(project.jarFile, { source: newSource });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldList = messages.find(
+      ({ path }) => JSON.stringify(path) === '["list","greeting"]',
+    );
+    const newList = messages.find(
+      ({ path }) => JSON.stringify(path) === '["list","greeting","child"]',
+    );
+    assert.equal(oldList?.action, "delete");
+    assert.equal(oldList?.reason, "source-removed");
+    assert.deepEqual(oldList?.previousTarget, ["旧译文"]);
+    assert.equal(newList?.action, "seed");
+    assert.equal(newList?.reason, "new-message");
+    assert.deepEqual(newList?.target, ["New"]);
   });
 
   void it("旧标量消息变为分支时先删除旧身份再新增子消息", async (t) => {

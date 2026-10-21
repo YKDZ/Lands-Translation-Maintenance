@@ -1,0 +1,21 @@
+general:
+  inbox-filter:
+    war: <t:negative>战争 ⚔</t>
+gui:
+  war:
+    title: <t:menu_title>战争
+    items:
+      default:
+        war_attackers:
+          name: <t:negative_heading>攻方 <v:object>
+          lore:
+            - <t:decoration>✖ </t><t:regular>查看所有攻方城镇.
+            - "   玩家数: <t:regular_value><v:players></t>"
+            - ""
+            - <t:regular_heading>进度</t>
+            - " <t:decoration>• </t><t:regular>占领区块数: <t:regular_value><v:cap></t>"
+            - " <t:decoration>• </t><t:regular>击杀数: <t:regular_value><v:kills></t>"
+            - "   <t:decoration>= </t><t:regular_value><v:points></t> / <t:regular_value><v:towin></t> <t:regular>胜利所需的点数"
+            - "   <v:bar>"
+          material: IRON_SWORD
+          slots: 11

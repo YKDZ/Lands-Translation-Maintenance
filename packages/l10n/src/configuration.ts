@@ -419,10 +419,15 @@ export function validateConfiguration(
       const wildcards = field.path.filter(
         (part) => part === "*" || part === "**",
       );
+      const supportsPathPattern =
+        field.category === "chat-string-list" ||
+        field.category.startsWith("gui-") ||
+        field.category.startsWith("dialog-");
       if (
-        (wildcards.length > 0 && field.category.startsWith("chat-")) ||
+        (wildcards.length > 0 && !supportsPathPattern) ||
         (field.path.includes("**") &&
-          (field.path.at(-1) !== "**" || scene !== "gui-general"))
+          (field.path.at(-1) !== "**" ||
+            (scene !== "gui-general" && field.category !== "chat-string-list")))
       ) {
         issues.push({
           code: "configuration.mapping-field-pattern",
@@ -435,7 +440,7 @@ export function validateConfiguration(
             "path",
           ],
           reason:
-            "路径通配符只用于明确的 GUI 或对话框场景；** 仅限通用 GUI 文本的末尾",
+            "路径通配符只用于明确的聊天列表、GUI 或对话框字段；** 仅限通用 GUI 文本或聊天列表字段的末尾",
           actual: field.path.join("."),
         });
       }
