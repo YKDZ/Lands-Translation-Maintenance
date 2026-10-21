@@ -166,6 +166,20 @@ const landsControls = new Set([
   "noprefix",
 ]);
 const landsPreprocessors = new Set(["action", "label", "desc", "indent"]);
+const technicalRenderedContentTags = new Set([
+  "key",
+  "keybind",
+  "lang",
+  "translate",
+  "tr",
+  "selector",
+  "sel",
+  "score",
+  "nbt",
+  "data",
+  "head",
+  "sprite",
+]);
 const standardTags = new Set([
   "black",
   "dark_blue",
@@ -1463,6 +1477,7 @@ function translatableSegments(
       position: node.position,
       context: node.context,
     });
+    if (technicalRenderedContentTags.has(node.name)) continue;
     appendTextSegment(
       segments,
       node.visibleText,
