@@ -5592,4 +5592,167 @@ void describe("CLI 制品", () => {
     >;
     assert.equal(statusSummary.sameTextCandidates, 1);
   });
+
+  void it("已存在的对话与分类字段祖先形状错误会阻断初始化和同步", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config
+        .replace(
+          "  - path: settings.yml",
+          [
+            "  - path: dialogs/en.yml",
+            "    purpose: dialog-language",
+            "  - path: land/categories.yml",
+            "    purpose: configuration",
+            "  - path: settings.yml",
+          ].join("\n"),
+        )
+        .replace(
+          "  mappings:\n    - source: lang/en.yml",
+          [
+            "  mappings:",
+            "    - source: dialogs/en.yml",
+            "      target: dialogs/zh.yml",
+            "      definitionsSource: dialogs/en.yml",
+            "      fields:",
+            '        - path: [dialogs, "*", title]',
+            "          category: dialog-string",
+            "          scene: dialog-title",
+            "    - source: land/categories.yml",
+            "      target: land/zh-categories.yml",
+            "      definitionsSource: land/categories.yml",
+            "      fields:",
+            '        - path: [land, categories, "*", name]',
+            "          category: configuration-string",
+            "          scene: category-name",
+            "    - source: lang/en.yml",
+          ].join("\n"),
+        ),
+    );
+
+    const dialog = "dialogs: Broken layout\n";
+    const categories = "land:\n  categories:\n    - Broken layout\n";
+    await writeJar(project.jarFile, {
+      extra: {
+        "dialogs/en.yml": dialog,
+        "land/categories.yml": categories,
+      },
+    });
+    const beforeInvalidInit = await snapshotProjectFiles(project.directory);
+    const invalidInit = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(invalidInit.status, 1);
+    assert.match(invalidInit.stdout || invalidInit.stderr, /dialogs\/en\.yml/);
+    assert.match(
+      invalidInit.stdout || invalidInit.stderr,
+      /land\/categories\.yml/,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforeInvalidInit,
+    );
+
+    await writeJar(project.jarFile, {
+      extra: {
+        "dialogs/en.yml": "dialogs: {}\n",
+        "land/categories.yml":
+          "land:\n  categories:\n    dormant:\n      description: []\n",
+      },
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stdout || initialized.stderr,
+    );
+
+    await writeJar(project.jarFile, {
+      extra: {
+        "dialogs/en.yml": dialog,
+        "land/categories.yml": categories,
+      },
+    });
+    const beforeInvalidSync = await snapshotProjectFiles(project.directory);
+    for (const args of [["sync", "--dry-run"], ["sync"]]) {
+      const result = runCli(
+        ...args,
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stdout || result.stderr);
+      assert.match(result.stdout || result.stderr, /dialogs\/en\.yml/);
+      assert.match(result.stdout || result.stderr, /land\/categories\.yml/);
+      assert.deepEqual(
+        await snapshotProjectFiles(project.directory),
+        beforeInvalidSync,
+      );
+    }
+  });
+
+  void it("GUI 已选字段的非映射祖先会阻断同步并保留中文", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stdout || initialized.stderr,
+    );
+
+    const brokenGui = "physical: Broken layout\n";
+    await writeGuiJar(project.jarFile, {
+      "Locale/en-US_gui.yml": brokenGui,
+    });
+    const beforeSync = await snapshotProjectFiles(project.directory);
+    for (const args of [["sync", "--dry-run"], ["sync"]]) {
+      const result = runCli(
+        ...args,
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stdout || result.stderr);
+      assert.match(result.stdout || result.stderr, /Locale\/en-US_gui\.yml/);
+      assert.deepEqual(
+        await snapshotProjectFiles(project.directory),
+        beforeSync,
+      );
+    }
+    assert.match(
+      await readFile(join(project.directory, "Locale/zh-CN_gui.yml"), "utf8"),
+      /选区工具/,
+    );
+  });
 });
