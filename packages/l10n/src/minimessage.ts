@@ -5,6 +5,16 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { adaptLegacyMiniMessageInput } from "#/legacy-format";
+import {
+  analyzeMapHtml,
+  isMapHtmlAttributeTag,
+  isKnownMapVariable,
+  isMapHtmlParserTag,
+  mapHtmlSegments,
+  mapHtmlTagRanges,
+  supportsMapHtmlVersion,
+} from "#/map-html";
+import { translationFallbackSegment } from "#/minimessage-text";
 import type {
   AdaptedMiniMessageInput,
   JsonValue,
@@ -20,6 +30,8 @@ import type {
   ObservedMessage,
   ParsedMiniMessageDocument,
   ResourceInventoryEntry,
+  TranslatableTextDocument,
+  TranslatableTextSegment,
 } from "#/model";
 import { parseYaml } from "#/yaml-data";
 
@@ -832,7 +844,7 @@ async function runOfficialParser(
       const closing = fields[8];
       const selfClosing = fields[9];
       const parameterCount = Number(fields[10]);
-      const paramsEnd = 11 + parameterCount * 3;
+      const paramsEnd = 11 + parameterCount * 4;
       const context = readContextFrames(fields, paramsEnd);
       if (
         !Number.isSafeInteger(messageIndex) ||
@@ -856,21 +868,32 @@ async function runOfficialParser(
       }
       const parameters: string[] = [];
       const parameterPositions: MiniMessagePosition[] = [];
-      for (let index = 11; index < paramsEnd; index += 3) {
+      const parameterSourceOffsets: number[][] = [];
+      for (let index = 11; index < paramsEnd; index += 4) {
         const value = fields[index];
         const parameterStart = Number(fields[index + 1]);
         const parameterEnd = Number(fields[index + 2]);
+        const sourceOffsetField = fields[index + 3];
+        const decodedValue = value === undefined ? undefined : decode(value);
+        const sourceOffsets =
+          sourceOffsetField === undefined
+            ? undefined
+            : sourceOffsetField.split(",").map(Number);
         if (
-          value === undefined ||
+          decodedValue === undefined ||
           !Number.isSafeInteger(parameterStart) ||
-          !Number.isSafeInteger(parameterEnd)
+          !Number.isSafeInteger(parameterEnd) ||
+          sourceOffsets === undefined ||
+          sourceOffsets.length !== decodedValue.length + 1 ||
+          sourceOffsets.some((offset) => !Number.isSafeInteger(offset))
         ) {
           return javaUnavailable(
             "官方 MiniMessage 辅助程序返回无效标签参数；完整检查未完成",
           );
         }
-        parameters.push(decode(value));
+        parameters.push(decodedValue);
         parameterPositions.push({ start: parameterStart, end: parameterEnd });
+        parameterSourceOffsets.push(sourceOffsets);
       }
       let node: MiniMessageSourceNode;
       if (kind === "text") {
@@ -888,6 +911,7 @@ async function runOfficialParser(
           name: tagName,
           parameters,
           parameterPositions,
+          parameterSourceOffsets,
           closing: closing === "true",
           selfClosing: selfClosing === "true",
           semanticKind: styleKind(tagName),
@@ -1006,6 +1030,26 @@ function appendParserFindings(
     return;
   }
   const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));
+  const mapNodesByIndex = new Map(
+    inputs
+      .filter((input) => input.message.format === "map-html-minimessage")
+      .map((input) => [
+        input.index,
+        java.documents.find(
+          (document) =>
+            document.messageIndex === input.index &&
+            document.documentIndex === 0,
+        )?.nodes ?? [],
+      ]),
+  );
+  const mapTagRangesByIndex = new Map(
+    inputs
+      .filter((input) => input.message.format === "map-html-minimessage")
+      .map((input) => [
+        input.index,
+        mapHtmlTagRanges(input.input, mapNodesByIndex.get(input.index) ?? []),
+      ]),
+  );
   for (const warning of java.warnings) {
     if (inputsByIndex.has(warning.messageIndex))
       unavailable.add(warning.reason);
@@ -1077,10 +1121,23 @@ function appendParserFindings(
       parserDetail: unresolved.detail,
     };
     const name = unresolved.name;
-    const isMapTemplate =
-      input.message.path.slice(0, 2).join(".") === "general.integration";
-    if (isMapTemplate) {
-      unavailable.add("地图 HTML 与 MiniMessage 混合字段尚未完成专用检查");
+    const isMapTemplate = input.message.format === "map-html-minimessage";
+    if (isMapTemplate && name === "v") continue;
+    if (
+      isMapTemplate &&
+      isMapHtmlAttributeTag(input.input, unresolved.position, unresolved.raw)
+    ) {
+      continue;
+    }
+    if (
+      isMapTemplate &&
+      isMapHtmlParserTag(
+        input.input,
+        unresolved.position,
+        unresolved.raw,
+        mapTagRangesByIndex.get(input.index) ?? [],
+      )
+    ) {
       continue;
     }
     if (landsControls.has(name) || landsPreprocessors.has(name)) {
@@ -1165,6 +1222,336 @@ function appendParserFindings(
   }
 }
 
+const legacyTitleVariablePattern = /%(owner|player|nation|level)%/gu;
+
+function appendTextSegment(
+  segments: TranslatableTextSegment[],
+  value: string,
+  raw: string,
+  position: MiniMessagePosition,
+  context: readonly MiniMessageContextFrame[],
+): void {
+  if (value === "") return;
+  segments.push({ kind: "text", value, raw, position, context });
+}
+
+function legacyVariableSegments(
+  document: ParsedMiniMessageDocument,
+): readonly TranslatableTextSegment[] {
+  interface TextChunk {
+    readonly value: string;
+    readonly sourceOffsets: readonly number[];
+    readonly context: readonly MiniMessageContextFrame[];
+    readonly start: number;
+    readonly end: number;
+  }
+
+  const segments: TranslatableTextSegment[] = [];
+  let chunks: TextChunk[] = [];
+  let visibleText = "";
+
+  const flush = (): void => {
+    if (chunks.length === 0) return;
+    const positionAt = (offset: number, end: boolean): number => {
+      for (const chunk of chunks) {
+        if (
+          (end && chunk.start < offset && offset <= chunk.end) ||
+          (!end && chunk.start <= offset && offset < chunk.end)
+        ) {
+          return chunk.sourceOffsets[offset - chunk.start] ?? -1;
+        }
+      }
+      const last = chunks.at(-1)!;
+      return offset <= 0
+        ? (chunks[0]!.sourceOffsets[0] ?? -1)
+        : (last.sourceOffsets.at(-1) ?? -1);
+    };
+
+    const appendVisibleRange = (start: number, end: number): void => {
+      for (const chunk of chunks) {
+        const overlapStart = Math.max(start, chunk.start);
+        const overlapEnd = Math.min(end, chunk.end);
+        if (overlapStart >= overlapEnd) continue;
+        const localStart = overlapStart - chunk.start;
+        const localEnd = overlapEnd - chunk.start;
+        const value = chunk.value.slice(localStart, localEnd);
+        const sourceStart = chunk.sourceOffsets[localStart] ?? -1;
+        const sourceEnd = chunk.sourceOffsets[localEnd] ?? -1;
+        const position = { start: sourceStart, end: sourceEnd };
+        const raw =
+          sourceStart >= 0 && sourceEnd >= sourceStart
+            ? document.input.slice(sourceStart, sourceEnd)
+            : value;
+        appendTextSegment(segments, value, raw, position, chunk.context);
+      }
+    };
+
+    let visibleOffset = 0;
+    for (const match of visibleText.matchAll(legacyTitleVariablePattern)) {
+      const start = match.index;
+      const raw = match[0];
+      const name = match[1];
+      if (raw === undefined || name === undefined) continue;
+      appendVisibleRange(visibleOffset, start);
+      const position = {
+        start: positionAt(start, false),
+        end: positionAt(start + raw.length, true),
+      };
+      const context =
+        chunks.find((chunk) => chunk.start <= start && start < chunk.end)
+          ?.context ?? [];
+      segments.push({
+        kind: "variable",
+        value: name,
+        raw:
+          position.start >= 0 && position.end >= position.start
+            ? document.input.slice(position.start, position.end)
+            : raw,
+        position,
+        context,
+      });
+      visibleOffset = start + raw.length;
+    }
+    appendVisibleRange(visibleOffset, visibleText.length);
+    chunks = [];
+    visibleText = "";
+  };
+
+  for (const node of document.nodes) {
+    if (node.kind === "text") {
+      const start = visibleText.length;
+      visibleText += node.raw;
+      chunks.push({
+        value: node.raw,
+        sourceOffsets: Array.from(
+          { length: node.raw.length + 1 },
+          (_, index) => node.position.start + index,
+        ),
+        context: node.context,
+        start,
+        end: visibleText.length,
+      });
+      continue;
+    }
+    if (node.semanticKind === "style") continue;
+    const fallback = translationFallbackSegment(document, node);
+    if (fallback !== undefined) {
+      const sourceOffsets = node.parameterSourceOffsets[1];
+      if (
+        sourceOffsets !== undefined &&
+        sourceOffsets.length === fallback.value.length + 1
+      ) {
+        const start = visibleText.length;
+        visibleText += fallback.value;
+        chunks.push({
+          value: fallback.value,
+          sourceOffsets,
+          context: fallback.context,
+          start,
+          end: visibleText.length,
+        });
+      }
+      continue;
+    }
+    flush();
+  }
+  flush();
+  return segments;
+}
+
+function translatableSegments(
+  document: ParsedMiniMessageDocument,
+): readonly TranslatableTextSegment[] {
+  const segments: TranslatableTextSegment[] = [];
+  const hasLegacyTitleVariables =
+    document.message.format === "legacy-variable-minimessage" &&
+    document.parent === undefined;
+  if (hasLegacyTitleVariables) return legacyVariableSegments(document);
+
+  for (const node of document.nodes) {
+    if (node.kind === "text") {
+      appendTextSegment(
+        segments,
+        node.raw,
+        node.raw,
+        node.position,
+        node.context,
+      );
+      continue;
+    }
+    if (
+      node.name === "translate_or" ||
+      node.name === "lang_or" ||
+      node.name === "tr_or"
+    ) {
+      segments.push({
+        kind: "structure",
+        value: node.parameters[0] ?? "",
+        raw: node.raw,
+        position: node.position,
+        context: node.context,
+      });
+      const fallback = translationFallbackSegment(document, node);
+      if (fallback !== undefined) segments.push(fallback);
+      continue;
+    }
+    if (
+      node.name === "v" &&
+      !node.closing &&
+      node.parameters[0] !== undefined
+    ) {
+      segments.push({
+        kind: "variable",
+        value: node.parameters[0],
+        raw: node.raw,
+        position: node.position,
+        context: node.context,
+      });
+      continue;
+    }
+    if (node.closing || node.semanticKind === "style") continue;
+    if (node.name === "click") {
+      segments.push({
+        kind: "command",
+        value: node.parameters.join(":"),
+        raw: node.raw,
+        position: node.position,
+        context: node.context,
+      });
+      continue;
+    }
+    if (node.name === "br" || node.name === "newline") {
+      segments.push({
+        kind: "boundary",
+        value: "\n",
+        raw: node.raw,
+        position: node.position,
+        context: node.context,
+      });
+      continue;
+    }
+    segments.push({
+      kind: "structure",
+      value: node.parameters.join(":"),
+      raw: node.raw,
+      position: node.position,
+      context: node.context,
+    });
+  }
+  return segments;
+}
+
+function translatableTextDocuments(
+  documents: readonly ParsedMiniMessageDocument[],
+  mapSegments: ReadonlyMap<
+    ParsedMiniMessageDocument,
+    readonly TranslatableTextSegment[]
+  >,
+): readonly TranslatableTextDocument[] {
+  return documents.map((document) => ({
+    message: document.message,
+    documentIndex: document.documentIndex,
+    origin: document.origin,
+    file: document.file,
+    path: document.path,
+    surface: document.surface,
+    range: document.range,
+    context: document.context,
+    segments: mapSegments.get(document) ?? translatableSegments(document),
+  }));
+}
+
+function appendMapVariableFindings(
+  inputs: readonly MessageInput[],
+  documents: readonly ParsedMiniMessageDocument[],
+  findings: MiniMessageFinding[],
+  unavailable: Set<string>,
+  sourceVersion: string,
+): void {
+  const mapInputs = inputs.filter(
+    (input) => input.message.format === "map-html-minimessage",
+  );
+  if (!supportsMapHtmlVersion(sourceVersion)) {
+    for (const input of mapInputs) {
+      if (input.origin !== "source") continue;
+      findings.push(
+        findingForMessage(
+          input,
+          "map-html.source-version-unsupported",
+          "地图模板的来源版本未受支持；动态变量供值无法完整核对",
+          { supportedVersions: ["8.0.1", "8.9.2"] },
+          { sourceVersion },
+          { kind: "source-version" },
+          { sourceVersion, supportedVersions: ["8.0.1", "8.9.2"] },
+        ),
+      );
+    }
+    if (mapInputs.length > 0) {
+      unavailable.add("Lands 地图模板变量供值不支持此来源版本");
+    }
+    return;
+  }
+
+  const inputByDocument = new Map(
+    mapInputs.map((input) => [`${input.message.id}\0${input.origin}`, input]),
+  );
+  const occurrences = new Map<string, number>();
+  for (const document of documents) {
+    if (
+      document.message.format !== "map-html-minimessage" ||
+      document.status !== "parsed"
+    ) {
+      continue;
+    }
+    const input = inputByDocument.get(
+      `${document.message.id}\0${document.origin}`,
+    );
+    if (input === undefined) continue;
+    for (const node of document.nodes) {
+      if (
+        node.kind !== "tag" ||
+        node.name !== "v" ||
+        node.closing ||
+        node.parameters[0] === undefined ||
+        isMapHtmlAttributeTag(input.input, node.position.start, node.raw)
+      ) {
+        continue;
+      }
+      const variable = node.parameters[0];
+      if (isKnownMapVariable(variable, sourceVersion)) continue;
+      const key = `${input.index}\0${document.documentIndex}\0${variable}`;
+      const occurrenceIndex = occurrences.get(key) ?? 0;
+      occurrences.set(key, occurrenceIndex + 1);
+      const context: JsonValue = node.context.map(
+        (frame) =>
+          [
+            frame.kind,
+            frame.name,
+            frame.position.start,
+            frame.position.end,
+          ] as const,
+      );
+      findings.push(
+        findingForMessage(
+          input,
+          "map-html.variable-unknown",
+          "地图模板使用了 Lands 未提供的动态变量",
+          { state: "known map v variable" },
+          {
+            variable,
+            tag: node.raw,
+            position: { start: node.position.start, end: node.position.end },
+            documentIndex: document.documentIndex,
+            context,
+          },
+          { documentIndex: document.documentIndex, variable, occurrenceIndex },
+          { sourceVersion, supportedVariables: "Lands map resolver" },
+        ),
+      );
+    }
+  }
+}
+
 export async function parseMiniMessages(
   messages: readonly ObservedMessage[],
   resources: readonly ResourceInventoryEntry[],
@@ -1175,6 +1562,7 @@ export async function parseMiniMessages(
   const inputs = messagesToParseInputs(messages, resources, sourceVersion);
   const java = await runOfficialParser(theme.definitions, inputs);
   const findings = [...theme.findings];
+  const mapFindings: MiniMessageFinding[] = [];
   const unavailable = new Set<string>();
   const legacyIssueOccurrences = new Map<string, number>();
   for (const input of inputs) {
@@ -1189,7 +1577,7 @@ export async function parseMiniMessages(
           `无法按未知 Lands 版本 ${sourceVersion} 确认旧颜色码转换行为`,
           { supportedVersions: ["8.0.1", "8.9.2"] },
           { sourceVersion, format: input.message.format ?? "unknown" },
-          { format: input.message.format ?? "legacy-color", occurrence: 0 },
+          { format: input.message.format ?? "unknown", occurrence: 0 },
           { sourceVersion },
         ),
       );
@@ -1264,8 +1652,8 @@ export async function parseMiniMessages(
             .reverse()
             .find((frame) => frame.kind === "hover-text");
     documentResults.push({
-      documentIndex: parsed.documentIndex,
       message: input.message,
+      documentIndex: parsed.documentIndex,
       origin: input.origin,
       file: input.file,
       path: input.path,
@@ -1286,8 +1674,8 @@ export async function parseMiniMessages(
     if (rootDocuments.has(input.index)) continue;
     const result = java.messages.get(input.index);
     documentResults.push({
-      documentIndex: 0,
       message: input.message,
+      documentIndex: 0,
       origin: input.origin,
       file: input.file,
       path: input.path,
@@ -1302,10 +1690,69 @@ export async function parseMiniMessages(
       context: [],
     });
   }
+  appendMapVariableFindings(
+    inputs,
+    documentResults,
+    mapFindings,
+    unavailable,
+    sourceVersion,
+  );
+  const mapSegmentOverrides = new Map<
+    ParsedMiniMessageDocument,
+    readonly TranslatableTextSegment[]
+  >();
+  for (const document of documentResults) {
+    if (
+      document.message.format === "map-html-minimessage" &&
+      document.parent === undefined &&
+      document.status === "parsed"
+    ) {
+      mapSegmentOverrides.set(document, mapHtmlSegments(document));
+    }
+  }
+  for (const message of messages) {
+    if (message.format !== "map-html-minimessage") continue;
+    const sourceDocument = documentResults.find(
+      (document) =>
+        document.message.id === message.id &&
+        document.origin === "source" &&
+        document.parent === undefined &&
+        document.documentIndex === 0,
+    );
+    const targetDocument = documentResults.find(
+      (document) =>
+        document.message.id === message.id &&
+        document.origin === "target" &&
+        document.parent === undefined &&
+        document.documentIndex === 0,
+    );
+    if (
+      sourceDocument === undefined ||
+      targetDocument === undefined ||
+      sourceDocument.status !== "parsed" ||
+      targetDocument.status !== "parsed"
+    ) {
+      continue;
+    }
+    const analysis = analyzeMapHtml(
+      sourceDocument,
+      targetDocument,
+      sourceVersion,
+    );
+    mapFindings.push(...analysis.findings);
+    mapSegmentOverrides.set(sourceDocument, analysis.sourceSegments);
+    mapSegmentOverrides.set(targetDocument, analysis.targetSegments);
+  }
   return {
+    sourceVersion,
     documents: documentResults,
+    translatableText: translatableTextDocuments(
+      documentResults,
+      mapSegmentOverrides,
+    ),
     themes: themeEntryResults(theme.definitions, java.themes),
     findings,
+    mapFindings,
     unavailableCapabilities: [...unavailable].sort(),
   };
 }

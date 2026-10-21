@@ -220,6 +220,9 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -688,6 +691,10 @@ packages:
     resolution: {integrity: sha512-0SYE3OHjAmDpqS54yPOUgBqkF6ywJ5CNZ86BACGAWpMx9q5+m8au8xx2SyLoj956SjqrkzOtzUujQ2MvlThivQ==}
     engines: {node: '>=24'}
 
+  entities@8.1.0:
+    resolution: {integrity: sha512-kxL7msIffSuh9aaFAMD7rxAIuTRMAHMeBtgHW2yUdWw732ZNh4MehkF2gdjvtdmikkaIP9bFDDJOPlsvm7avrA==}
+    engines: {node: '>=20.19.0'}
+
   fflate@0.8.3:
     resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
@@ -720,6 +727,9 @@ packages:
         optional: true
       vite-plus:
         optional: true
+
+  parse5@8.0.1:
+    resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
 
   smol-toml@1.9.1:
     resolution: {integrity: sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==}
@@ -972,6 +982,8 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@types/node': 24.19.2
 
+  entities@8.1.0: {}
+
   fflate@0.8.3: {}
 
   oxfmt@0.71.0:
@@ -1029,6 +1041,10 @@ snapshots:
       '@oxlint/binding-win32-ia32-msvc': 1.88.0
       '@oxlint/binding-win32-x64-msvc': 1.88.0
       oxlint-tsgolint: 7.0.2004
+
+  parse5@8.0.1:
+    dependencies:
+      entities: 8.1.0
 
   smol-toml@1.9.1: {}
 

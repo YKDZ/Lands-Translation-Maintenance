@@ -56,7 +56,7 @@ public final class MiniMessageBridge {
 
   private record Frame(String kind, String name, Position position) {}
 
-  private record Parameter(String value, Position position) {}
+  private record Parameter(String value, Position position, int[] sourceOffsets) {}
 
   private record NodeOutput(
       String kind,
@@ -332,12 +332,25 @@ public final class MiniMessageBridge {
     List<TagPart> officialParts = treeTag == null ? List.of() : treeTag.parts();
     for (int index = 1; index < childTokens.size(); index++) {
       Token partToken = childTokens.get(index);
+      MappedValue decoded = decodePart(input, partToken, sourceMap);
       String value = index < officialParts.size()
           ? officialParts.get(index).value()
-          : decodePart(input, partToken, sourceMap).value();
-      result.add(new Parameter(value, sourceMap.range(partToken.startIndex(), partToken.endIndex())));
+          : decoded.value();
+      Position position = sourceMap.range(partToken.startIndex(), partToken.endIndex());
+      int[] sourceOffsets = decoded.value().equals(value)
+          ? decoded.sourceOffsets()
+          : unavailableSourceOffsets(value, position);
+      result.add(new Parameter(value, position, sourceOffsets));
     }
     return result;
+  }
+
+  private static int[] unavailableSourceOffsets(String value, Position position) {
+    int[] offsets = new int[value.length() + 1];
+    java.util.Arrays.fill(offsets, -1);
+    offsets[0] = position.start();
+    if (offsets.length > 1) offsets[offsets.length - 1] = position.end();
+    return offsets;
   }
 
   private static List<String> partValues(String input, Token token, TagNode treeTag, SourceMap sourceMap) {
@@ -632,10 +645,20 @@ public final class MiniMessageBridge {
     for (Parameter parameter : node.parameters()) {
       line.append('\t').append(encode(parameter.value()))
           .append('\t').append(parameter.position().start())
-          .append('\t').append(parameter.position().end());
+          .append('\t').append(parameter.position().end())
+          .append('\t').append(offsetFields(parameter.sourceOffsets()));
     }
     line.append('\t').append(frameFields(node.context()));
     return line.toString();
+  }
+
+  private static String offsetFields(int[] offsets) {
+    StringBuilder result = new StringBuilder();
+    for (int index = 0; index < offsets.length; index++) {
+      if (index > 0) result.append(',');
+      result.append(offsets[index]);
+    }
+    return result.toString();
   }
 
   private static List<String> readInput() throws Exception {

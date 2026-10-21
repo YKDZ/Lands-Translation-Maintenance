@@ -1,3 +1,4 @@
+import { isMapHtmlAttributeTag } from "#/map-html";
 import type {
   CheckRule,
   JsonValue,
@@ -82,6 +83,16 @@ const commandActions = new Set(["run_command", "suggest_command"]);
 
 function isVariable(node: MiniMessageTagNode): boolean {
   return node.name === "v" && !node.closing && node.parameters[0] !== undefined;
+}
+
+function isLiteralMapAttributeVariable(
+  document: ParsedMiniMessageDocument,
+  node: MiniMessageTagNode,
+): boolean {
+  return (
+    document.message.format === "map-html-minimessage" &&
+    isMapHtmlAttributeTag(document.input, node.position.start, node.raw)
+  );
 }
 
 function isJsonObject(value: JsonValue): value is {
@@ -500,6 +511,7 @@ function interactionTree(
       if (
         node.kind !== "tag" ||
         !isVariable(node) ||
+        isLiteralMapAttributeVariable(document, node) ||
         isInsideTagParameter(document, node)
       ) {
         continue;
@@ -628,6 +640,7 @@ function extractSide(
       if (
         node.kind !== "tag" ||
         !isVariable(node) ||
+        isLiteralMapAttributeVariable(document, node) ||
         isInsideTagParameter(document, node)
       ) {
         continue;

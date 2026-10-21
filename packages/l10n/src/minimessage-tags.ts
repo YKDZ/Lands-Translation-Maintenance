@@ -1,3 +1,8 @@
+import {
+  isMapHtmlParserTag,
+  mapHtmlTagRanges,
+  type HtmlTagRange,
+} from "#/map-html";
 import type {
   CheckRule,
   JsonValue,
@@ -1496,9 +1501,13 @@ function tagOccurrences(
 ): readonly TagOccurrence[] {
   const occurrences: TagOccurrence[] = [];
   const semanticNodes = (
+    document: ParsedMiniMessageDocument,
     node: ParsedMiniMessageDocument["nodes"][number],
+    htmlTagRanges: readonly HtmlTagRange[],
   ): readonly MiniMessageTagNode[] => {
-    if (node.kind === "tag") return [node];
+    if (node.kind === "tag") {
+      return isMapHtmlNode(document, node, htmlTagRanges) ? [] : [node];
+    }
     return [...node.raw.matchAll(/\n/gu)].map((match) => {
       const offset = match.index!;
       const position =
@@ -1515,6 +1524,7 @@ function tagOccurrences(
         name: "newline",
         parameters: [],
         parameterPositions: [],
+        parameterSourceOffsets: [],
         closing: false,
         selfClosing: false,
         semanticKind: "content",
@@ -1526,8 +1536,12 @@ function tagOccurrences(
   const nodesByPosition = new Map<string, MiniMessageTagNode>();
   for (const document of documents) {
     if (document.status !== "parsed") continue;
+    const htmlTagRanges =
+      document.message.format === "map-html-minimessage"
+        ? mapHtmlTagRanges(document.input, document.nodes)
+        : [];
     for (const sourceNode of document.nodes) {
-      for (const node of semanticNodes(sourceNode)) {
+      for (const node of semanticNodes(document, sourceNode, htmlTagRanges)) {
         if (node.kind !== "tag" || node.raw === "") continue;
         const key = nodePositionKey(node.position);
         const current = nodesByPosition.get(key);
@@ -1540,8 +1554,12 @@ function tagOccurrences(
   const semantic = { project, nodesByPosition, landsContextByPosition };
   for (const document of documents) {
     if (document.status !== "parsed") continue;
+    const htmlTagRanges =
+      document.message.format === "map-html-minimessage"
+        ? mapHtmlTagRanges(document.input, document.nodes)
+        : [];
     for (const sourceNode of document.nodes) {
-      for (const node of semanticNodes(sourceNode)) {
+      for (const node of semanticNodes(document, sourceNode, htmlTagRanges)) {
         if (node.kind !== "tag" || node.raw === "") continue;
         const signature: TagSignature = {
           name: canonicalTagName(node),
@@ -1743,15 +1761,36 @@ function closeMatches(
   );
 }
 
+function isMapHtmlNode(
+  document: ParsedMiniMessageDocument,
+  node: MiniMessageTagNode,
+  ranges: readonly HtmlTagRange[],
+): boolean {
+  return (
+    document.message.format === "map-html-minimessage" &&
+    node.position.start >= 0 &&
+    isMapHtmlParserTag(document.input, node.position.start, node.raw, ranges)
+  );
+}
+
 function nestingFindings(
   documents: readonly ParsedMiniMessageDocument[],
 ): readonly RuleFinding[] {
   const findings: RuleFinding[] = [];
   for (const document of documents) {
     if (document.status !== "parsed") continue;
+    const htmlTagRanges =
+      document.message.format === "map-html-minimessage"
+        ? mapHtmlTagRanges(document.input, document.nodes)
+        : [];
     const opensByPosition = new Map<string, MiniMessageTagNode>();
     for (const node of document.nodes) {
-      if (node.kind === "tag" && !node.closing && !node.selfClosing) {
+      if (
+        node.kind === "tag" &&
+        !node.closing &&
+        !node.selfClosing &&
+        !isMapHtmlNode(document, node, htmlTagRanges)
+      ) {
         opensByPosition.set(
           `${node.position.start}:${node.position.end}`,
           node,
@@ -1759,7 +1798,13 @@ function nestingFindings(
       }
     }
     for (const [occurrence, node] of document.nodes.entries()) {
-      if (node.kind !== "tag" || !node.closing) continue;
+      if (
+        node.kind !== "tag" ||
+        !node.closing ||
+        isMapHtmlNode(document, node, htmlTagRanges)
+      ) {
+        continue;
+      }
       if (
         landsControls.has(node.name.toLowerCase()) ||
         landsPreprocessors.has(node.name.toLowerCase())
