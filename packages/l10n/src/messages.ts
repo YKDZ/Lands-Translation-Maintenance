@@ -148,15 +148,6 @@ function formatForMessagePath(
     return "map-html-minimessage";
   }
   if (
-    path.length === 4 &&
-    path[0] === "integration" &&
-    mapNames.has(path[1]!) &&
-    ((path[2] === "nation" && path[3] === "description") ||
-      (path[2] === "capital" && path[3] === "spawn"))
-  ) {
-    return "map-html-minimessage";
-  }
-  if (
     path.length === 5 &&
     path[0] === "general" &&
     path[1] === "integration" &&

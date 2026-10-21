@@ -161,6 +161,10 @@ export async function createFormatProject(
     readonly targetNationsMapDescription?: string;
     readonly nationsCapitalSpawn?: string;
     readonly targetNationsCapitalSpawn?: string;
+    readonly rootNationsMapDescription?: string;
+    readonly targetRootNationsMapDescription?: string;
+    readonly rootNationsCapitalSpawn?: string;
+    readonly targetRootNationsCapitalSpawn?: string;
     readonly legacyTitle?: string;
     readonly targetLegacyTitle?: string;
     readonly unrelatedText?: string;
@@ -205,6 +209,16 @@ export async function createFormatProject(
     options.targetNationsMapDescription,
     options.nationsCapitalSpawn,
     options.targetNationsCapitalSpawn,
+    options.rootNationsMapDescription,
+    options.targetRootNationsMapDescription,
+    options.rootNationsCapitalSpawn,
+    options.targetRootNationsCapitalSpawn,
+  ].some((value) => value !== undefined);
+  const hasRootNationsIntegration = [
+    options.rootNationsMapDescription,
+    options.targetRootNationsMapDescription,
+    options.rootNationsCapitalSpawn,
+    options.targetRootNationsCapitalSpawn,
   ].some((value) => value !== undefined);
   const nationsSourceLocale = hasNationsMap
     ? [
@@ -215,6 +229,16 @@ export async function createFormatProject(
         `        spawn: ${JSON.stringify(options.nationsCapitalSpawn ?? '<div class="capital">Spawn <v:public> /<v:cmd></div>')}`,
         "      nation:",
         `        description: ${JSON.stringify(options.nationsMapDescription ?? '<div class="nation">Land <v:land> · level <v:level></div>')}`,
+        ...(hasRootNationsIntegration
+          ? [
+              "integration:",
+              "  dynmap:",
+              "    capital:",
+              `      spawn: ${JSON.stringify(options.rootNationsCapitalSpawn ?? '<div class="root-capital">Capital</div>')}`,
+              "    nation:",
+              `      description: ${JSON.stringify(options.rootNationsMapDescription ?? '<div class="root-nation">Nation</div>')}`,
+            ]
+          : []),
         "",
       ].join("\n")
     : undefined;
@@ -227,6 +251,16 @@ export async function createFormatProject(
         `        spawn: ${JSON.stringify(options.targetNationsCapitalSpawn ?? '<div class="capital">在<v:public> /<v:cmd>生成</div>')}`,
         "      nation:",
         `        description: ${JSON.stringify(options.targetNationsMapDescription ?? '<div class="nation">城镇 <v:land> · 等级 <v:level></div>')}`,
+        ...(hasRootNationsIntegration
+          ? [
+              "integration:",
+              "  dynmap:",
+              "    capital:",
+              `      spawn: ${JSON.stringify(options.targetRootNationsCapitalSpawn ?? '<div class="root-capital">首都</div>')}`,
+              "    nation:",
+              `      description: ${JSON.stringify(options.targetRootNationsMapDescription ?? '<div class="root-nation">联邦</div>')}`,
+            ]
+          : []),
         "",
       ].join("\n")
     : undefined;
@@ -275,6 +309,12 @@ export async function createFormatProject(
             "      fields:",
             "        - path: [general]",
             "          category: chat-string",
+            ...(hasRootNationsIntegration
+              ? [
+                  "        - path: [integration]",
+                  "          category: chat-string",
+                ]
+              : []),
           ]),
       "",
     ].join("\n"),

@@ -268,14 +268,24 @@ void describe("地图 HTML 与旧格式正式检查", () => {
         "<div><a href=/spawn>Capital <v:public> /<v:cmd></a></div>";
       const targetCapitalSpawn =
         "<div><a href=/spawn>首都 <v:public> /<v:cmd></a></div>";
+      const rootNationDescription = "<div><a href=/root-keep>Nation</a></div>";
+      const targetRootNationDescription =
+        "<div><a href=/root-drop>联邦</a></div>";
+      const rootCapitalSpawn = "<div><a href=/root-spawn>Capital</a></div>";
+      const targetRootCapitalSpawn = "<div><a href=/root-spawn>首都</a></div>";
       const project = await createFormatProject(t, {
         sourceVersion,
         nationsMapDescription: nationDescription,
         targetNationsMapDescription: targetNationDescription,
         nationsCapitalSpawn: capitalSpawn,
         targetNationsCapitalSpawn: targetCapitalSpawn,
+        rootNationsMapDescription: rootNationDescription,
+        targetRootNationsMapDescription: targetRootNationDescription,
+        rootNationsCapitalSpawn: rootCapitalSpawn,
+        targetRootNationsCapitalSpawn: targetRootCapitalSpawn,
       });
       const { checked, report } = initAndCheck(project);
+      const view = await inspectTranslatableView(project.directory);
       const findings = diagnostics(report);
       const nationsMapFindings = findings.filter((finding) => {
         const message = finding.message as
@@ -309,9 +319,53 @@ void describe("地图 HTML 与旧格式正式检查", () => {
             ])
         );
       });
+      const rootNationMessage = view.messages.find(
+        (message) =>
+          message.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path.join(".") === "integration.dynmap.nation.description",
+      );
+      const rootCapitalMessage = view.messages.find(
+        (message) =>
+          message.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path.join(".") === "integration.dynmap.capital.spawn",
+      );
+      const rootFindings = findings.filter((finding) => {
+        const message = finding.message as
+          | {
+              readonly sourceFile?: string;
+              readonly path?: readonly string[];
+            }
+          | undefined;
+        return (
+          message?.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path?.[0] === "integration"
+        );
+      });
 
       assert.deepEqual(unknownHtmlTags, [], checked.stderr || checked.stdout);
       assert.ok(hrefFinding, checked.stderr || checked.stdout);
+      assert.equal(
+        rootNationMessage?.format,
+        undefined,
+        "根级四段 Nations 路径不属于实际地图字段",
+      );
+      assert.equal(
+        rootCapitalMessage?.format,
+        undefined,
+        "根级四段首都路径不属于实际地图字段",
+      );
+      assert.ok(
+        rootFindings.some(
+          (finding) => finding.code === "minimessage.tag-unknown",
+        ),
+        "根级四段 HTML 应回到普通 MiniMessage 检查",
+      );
+      assert.ok(
+        rootFindings.every(
+          (finding) => !String(finding.code).startsWith("map-html."),
+        ),
+        "根级四段 HTML 不应进入地图检查",
+      );
     }
   });
 
