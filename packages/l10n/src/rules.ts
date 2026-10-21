@@ -56,7 +56,18 @@ const structureRule: CheckRule = {
   },
 };
 
-export const builtInRules: readonly CheckRule[] = [structureRule];
+const miniMessageSyntaxRule: CheckRule = {
+  id: "minimessage-syntax",
+  defaultSeverity: "error",
+  evaluate(project) {
+    return project.miniMessage?.findings ?? [];
+  },
+};
+
+export const builtInRules: readonly CheckRule[] = [
+  structureRule,
+  miniMessageSyntaxRule,
+];
 
 export interface RuleEvaluationOptions {
   readonly configuration?: ConsumerConfiguration["rules"];
@@ -81,6 +92,7 @@ function diagnosticFromFinding(
       ruleId: rule.id,
       code: finding.code,
       messageId: message?.id,
+      origin: finding.origin,
       location: finding.location,
       expected: finding.expected,
       actual: finding.actual,
@@ -92,6 +104,7 @@ function diagnosticFromFinding(
     severity,
     code: finding.code,
     ...(message === undefined ? {} : { message }),
+    ...(finding.origin === undefined ? {} : { origin: finding.origin }),
     location: finding.location,
     reason: finding.reason,
     expected: finding.expected,
