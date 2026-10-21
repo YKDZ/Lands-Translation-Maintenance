@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import type { ProjectReport, SyncPlan, SyncPreviewResult } from "#/model";
 import {
+  applySyncProject,
   initializeProject,
   inspectProject,
   operationExitCode,
@@ -283,6 +284,21 @@ function renderSyncPreview(preview: SyncPreviewPayload) {
   return text.lines(lines as [string, ...string[]]);
 }
 
+function renderSyncApplied(plan: SyncPlanPayload, status: ReportPayload) {
+  const stateNames = {
+    ready: "正常",
+    issues: "发现问题",
+    incomplete: "覆盖不完整",
+  } as const;
+  const lines = [
+    `sync：已应用来源 ${plan.sourceVersion}`,
+    `更新文件 ${plan.writes.length} 项；待翻译 ${status.summary.pendingTranslations} 条；已修改 ${status.summary.modifiedTranslations} 条；缺失 ${status.summary.missingTranslations} 条。`,
+    `应用后状态：${stateNames[status.state]}；诊断 ${status.diagnostics.length} 条。`,
+  ];
+  if (status.diagnostics.length > 0) lines.push("运行 check 查看具体诊断。");
+  return text.lines(lines as [string, ...string[]]);
+}
+
 const define = defineCli<CliDependencies>();
 
 const initCommand = define.command("init")({
@@ -338,7 +354,7 @@ const syncCommand = define.command("sync")({
   kind: "command",
   parent: "lands",
   name: "sync",
-  description: "预演指定上游 JAR 的同步计划",
+  description: "预演或应用指定上游 JAR 的同步计划",
   fields: {
     project: {
       kind: "valueOption",
@@ -372,35 +388,42 @@ const syncCommand = define.command("sync")({
         text: ({ plan }) =>
           renderSyncPreview({ ready: true, plan } as SyncPreviewPayload),
       },
+      applied: {
+        description: "同步计划已应用",
+        schema: z.object({ plan: syncPlanSchema, status: reportSchema }),
+        exitCode: 0,
+        text: ({ plan, status }) => renderSyncApplied(plan, status),
+      },
     },
   },
   failures: {
     blocked: {
-      description: "资源文件声明与指定 JAR 不一致",
+      description: "同步计划被资源差异或目标结构阻断",
       schema: z.object({ preview: syncPreviewSchema }),
       exitCode: 1,
       text: ({ preview }) => renderSyncPreview(preview),
     },
-    unavailable: {
-      description: "实际同步尚未交付",
-      schema: z.object({ message: z.string() }),
-      exitCode: 1,
-      text: ({ message }) => text.line(message),
-    },
     rejected: {
-      description: "预演输入无法安全处理",
+      description: "同步输入或写入无法安全处理",
       schema: z.object({ message: z.string() }),
       exitCode: 1,
-      text: ({ message }) => text.line(`预演失败：${message}`),
+      text: ({ message }) => text.line(`同步失败：${message}`),
     },
   },
   async handler({ input, outcome }) {
-    if (!input.dryRun) {
-      return outcome.failure.unavailable({
-        message: "实际同步尚未交付；当前仅支持 `sync --dry-run` 生成计划。",
-      });
-    }
     try {
+      if (!input.dryRun) {
+        const result = await applySyncProject(input.project, input.jar);
+        return result.applied
+          ? outcome.data.applied({
+              plan: syncPlanPayload(result.plan),
+              status: reportPayload(result.status),
+            })
+          : outcome.failure.blocked({
+              preview: syncPreviewPayload(result.preview),
+            });
+      }
+
       const preview = await previewSyncProject(input.project, input.jar);
       return preview.ready
         ? outcome.data.plan({ plan: syncPlanPayload(preview.plan) })
