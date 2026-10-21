@@ -246,7 +246,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "<data:storage:lands:data:time>",
       "<pride:pride>彩虹</pride>",
       "<shadow:#ff55557f>阴影</shadow>",
-      "<sprite:minecraft:atlas:minecraft:key>",
+      "<sprite:'minecraft:atlas':'minecraft:key'>",
       "<head:123e4567-e89b-42d3-a456-426614174000:true>",
       "<rainbow:!2>彩虹</rainbow>",
       "<br><reset>",
@@ -289,6 +289,93 @@ void describe("MiniMessage 官方检查制品", () => {
         String(diagnostic.ruleId).startsWith("minimessage."),
       ),
       [],
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("官方内容标签的非可译参数变化分别报告", async (t) => {
+    const source = [
+      "<key:key.jump>",
+      "<translate:chat.type.text>",
+      "<insert:land>",
+      "<font:minecraft:default>font</font>",
+      "<selector:@a>",
+      "<score:owner:objective>",
+      "<nbt:storage:lands:data:time>",
+      "<pride:bi>pride</pride>",
+      "<shadow:red:0.5>shadow</shadow>",
+      "<sprite:'minecraft:atlas':'minecraft:key'>",
+      "<head:123e4567-e89b-42d3-a456-426614174000>",
+    ].join(" ");
+    const target = [
+      "<key:key.sneak>",
+      "<translate:lands.message>",
+      "<insert:owner>",
+      "<font:minecraft:alt>字体</font>",
+      "<selector:@p>",
+      "<score:owner:level>",
+      "<nbt:storage:lands:money:time>",
+      "<pride:trans>骄傲</pride>",
+      "<shadow:blue:0.5>阴影</shadow>",
+      "<sprite:'minecraft:atlas':'minecraft:other'>",
+      "<head:123e4567-e89b-42d3-a456-426614174001>",
+    ].join(" ");
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(target)}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const mismatches = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    const changedNames = new Set(
+      mismatches.map((diagnostic) =>
+        String((diagnostic.expected as Record<string, unknown>).tag),
+      ),
+    );
+    assert.deepEqual(
+      [...changedNames].sort(),
+      [
+        "font",
+        "head",
+        "insert",
+        "key",
+        "nbt",
+        "pride",
+        "score",
+        "selector",
+        "shadow",
+        "sprite",
+        "translate",
+      ].sort(),
       checked.stderr || checked.stdout,
     );
   });
