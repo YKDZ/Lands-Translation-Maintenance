@@ -1,6 +1,10 @@
 {
   "name": "@lands-l10n/l10n",
   "private": true,
+  "files": [
+    "dist/**",
+    "target/minimessage/**"
+  ],
   "type": "module",
   "imports": {
     "#/*": {
