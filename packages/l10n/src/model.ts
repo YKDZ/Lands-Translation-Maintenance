@@ -55,7 +55,8 @@ export type TranslationFormat =
   | "label-format"
   | "legacy-variable"
   | "legacy-variable-minimessage"
-  | "legacy-color-variable-minimessage";
+  | "legacy-color-variable-minimessage"
+  | "map-html-minimessage";
 
 export const translationFieldScenes = [
   "gui-general",
@@ -97,6 +98,7 @@ export const translationFormats = [
   "legacy-variable",
   "legacy-variable-minimessage",
   "legacy-color-variable-minimessage",
+  "map-html-minimessage",
 ] as const satisfies readonly TranslationFormat[];
 
 export type MiniMessageSurface = "chat" | "gui" | "dialog" | "bedrock";
@@ -111,6 +113,13 @@ export interface MiniMessageThemeSnapshot {
 export interface MiniMessagePosition {
   readonly start: number;
   readonly end: number;
+}
+
+/** MiniMessage 接收适配后的内容，同时保留到原始 UTF-16 边界的位置映射。 */
+export interface AdaptedMiniMessageInput {
+  readonly input: string;
+  readonly sourceOffsets: readonly number[];
+  readonly exact: boolean;
 }
 
 export interface VariableContextPart {
@@ -134,7 +143,12 @@ export interface VariableCountDifference {
 }
 
 export interface MiniMessageContextFrame {
-  readonly kind: "tag" | "hover-text";
+  readonly kind:
+    | "tag"
+    | "hover-text"
+    | "tag-argument"
+    | "html-element"
+    | "html-attribute";
   readonly name: string;
   readonly position: MiniMessagePosition;
 }
@@ -152,6 +166,7 @@ export interface MiniMessageTagNode {
   readonly name: string;
   readonly parameters: readonly string[];
   readonly parameterPositions: readonly MiniMessagePosition[];
+  readonly parameterSourceOffsets: readonly (readonly number[])[];
   readonly closing: boolean;
   readonly selfClosing: boolean;
   readonly semanticKind:
@@ -168,6 +183,7 @@ export type MiniMessageSourceNode = MiniMessageTextNode | MiniMessageTagNode;
 
 export interface ParsedMiniMessageDocument {
   readonly message: MessageIdentity;
+  readonly documentIndex: number;
   readonly origin: "source" | "target";
   readonly file: string;
   readonly path: readonly (string | number)[];
@@ -179,6 +195,28 @@ export interface ParsedMiniMessageDocument {
   readonly nodes: readonly MiniMessageSourceNode[];
   readonly context: readonly MiniMessageContextFrame[];
   readonly parent?: MiniMessageContextFrame;
+}
+
+export interface TranslatableTextSegment {
+  readonly kind: "text" | "variable" | "command" | "structure" | "boundary";
+  /** 可读正文或受保护对象的身份；命令、结构片段不会作为正文检查。 */
+  readonly value: string;
+  readonly raw: string;
+  readonly position: MiniMessagePosition;
+  readonly context: readonly MiniMessageContextFrame[];
+}
+
+/** 供术语和文风检查只读消费的正文视图；每个嵌套 hover 仍是独立文档。 */
+export interface TranslatableTextDocument {
+  readonly message: MessageIdentity;
+  readonly documentIndex: number;
+  readonly origin: "source" | "target";
+  readonly file: string;
+  readonly path: readonly (string | number)[];
+  readonly surface: MiniMessageSurface;
+  readonly range: MiniMessagePosition;
+  readonly context: readonly MiniMessageContextFrame[];
+  readonly segments: readonly TranslatableTextSegment[];
 }
 
 export interface MiniMessageThemeStyle {
@@ -210,9 +248,12 @@ export interface MiniMessageFinding {
 }
 
 export interface MiniMessageParseProject {
+  readonly sourceVersion: string;
   readonly documents: readonly ParsedMiniMessageDocument[];
+  readonly translatableText: readonly TranslatableTextDocument[];
   readonly themes: readonly MiniMessageThemeEntry[];
   readonly findings: readonly MiniMessageFinding[];
+  readonly mapFindings: readonly MiniMessageFinding[];
   readonly unavailableCapabilities: readonly string[];
 }
 
@@ -272,6 +313,7 @@ export interface ObservedMessage extends MessageIdentity {
 }
 
 export interface ProjectView {
+  readonly sourceVersion?: string;
   readonly sourceLanguage: string;
   readonly targetLanguage: string;
   readonly resources: readonly ResourceInventoryEntry[];

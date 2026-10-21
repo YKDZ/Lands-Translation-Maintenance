@@ -21,6 +21,7 @@ import {
 import { readJarResources } from "#/jar";
 import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
 import { parseMiniMessages } from "#/minimessage";
+import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
 import {
   captureMiniMessageTheme,
   validateMiniMessageThemeYaml,
@@ -28,6 +29,7 @@ import {
 } from "#/minimessage-theme";
 import type {
   CheckCoverage,
+  CheckRule,
   ConsumerConfiguration,
   Diagnostic,
   DiagnosticLocation,
@@ -842,6 +844,7 @@ function projectView(
     baseline.releasedTranslationPaths ?? [],
   );
   return {
+    sourceVersion: baseline.source.version,
     sourceLanguage: baseline.translationScope.sourceLanguage,
     targetLanguage: baseline.translationScope.targetLanguage,
     resources: baseline.resources.map(({ path, purpose }) => ({
@@ -1286,12 +1289,15 @@ function structureFindingIssues(
   return issues;
 }
 
-function coverageUnavailable(view: ProjectView): readonly string[] {
-  const unavailable = [
-    "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
-    "术语、风格和译文一致性检查尚未实现",
-  ];
+function coverageUnavailable(
+  view: ProjectView,
+  configuration: ConsumerConfiguration,
+): readonly string[] {
+  const unavailable = ["术语、风格和译文一致性检查尚未实现"];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
+  if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
+    unavailable.push(...miniMessageTagCoverageUnavailable(view));
+  }
   if (
     view.resources.some((resource) => resource.purpose === "bedrock-excluded")
   ) {
@@ -1303,10 +1309,11 @@ function coverageUnavailable(view: ProjectView): readonly string[] {
 function evaluateProject(
   view: ProjectView,
   configuration: ConsumerConfiguration,
+  registeredRules: readonly CheckRule[],
 ) {
-  return evaluateRules(view, builtInRules, {
+  return evaluateRules(view, registeredRules, {
     configuration: configuration.rules,
-    unavailableCapabilities: coverageUnavailable(view),
+    unavailableCapabilities: coverageUnavailable(view, configuration),
   });
 }
 
@@ -2346,6 +2353,7 @@ interface EvaluatedSavedProject extends LoadedSavedProject {
   readonly view: ProjectView;
   readonly diagnostics: readonly Diagnostic[];
   readonly coverage: CheckCoverage;
+  readonly registeredRules: readonly CheckRule[];
 }
 
 async function loadSavedProject(
@@ -2458,8 +2466,9 @@ async function loadSavedProject(
 function enabledRulesRequireInput(
   configuration: ConsumerConfiguration,
   input: RuleInput,
+  registeredRules: readonly CheckRule[],
 ): boolean {
-  return builtInRules.some(
+  return registeredRules.some(
     (rule) =>
       rule.requiredInputs?.includes(input) === true &&
       configuration.rules?.[rule.id]?.enabled !== false,
@@ -2469,25 +2478,29 @@ function enabledRulesRequireInput(
 async function evaluateSavedProject(
   loaded: LoadedSavedProject,
   operation: "status" | "check",
+  registeredRules: readonly CheckRule[] = builtInRules,
 ): Promise<EvaluatedSavedProject> {
+  const rules = [...registeredRules];
   const view =
     operation === "check" &&
-    enabledRulesRequireInput(loaded.configuration, "minimessage-parse")
+    enabledRulesRequireInput(loaded.configuration, "minimessage-parse", rules)
       ? {
           ...loaded.view,
           miniMessage: await parseMiniMessages(
             loaded.view.messages,
             loaded.view.resources,
             loaded.baseline.miniMessageTheme,
+            loaded.configuration.source.version,
           ),
         }
       : loaded.view;
-  const evaluation = evaluateProject(view, loaded.configuration);
+  const evaluation = evaluateProject(view, loaded.configuration, rules);
   return {
     ...loaded,
     view,
     diagnostics: [...loaded.staticDiagnostics, ...evaluation.diagnostics],
     coverage: evaluation.coverage,
+    registeredRules: rules,
   };
 }
 
@@ -2510,7 +2523,9 @@ function requiredRuleInputUnavailable(
   operation: "status" | "check",
   messageId?: string,
 ): boolean {
-  const rule = builtInRules.find((candidate) => candidate.id === ruleId);
+  const rule = project.registeredRules.find(
+    (candidate) => candidate.id === ruleId,
+  );
   if (rule === undefined) return true;
   return (
     rule.requiredInputs?.some((input) => {
@@ -2531,7 +2546,9 @@ function requiredRuleInputUnavailable(
             project.view.miniMessage.documents.some(
               (document) =>
                 document.message.id === messageId &&
-                document.status === "parser-failed",
+                (document.status === "parser-failed" ||
+                  (ruleId === "minimessage-tags" &&
+                    document.status === "syntax-invalid")),
             )
           );
       }
@@ -2830,10 +2847,12 @@ function applyExceptionRecords(
 async function evaluatedProjectForInspection(
   projectDirectory: string,
   operation: "status" | "check",
+  registeredRules: readonly CheckRule[] = builtInRules,
 ): Promise<EvaluatedSavedProject> {
   return evaluateSavedProject(
     await loadSavedProject(projectDirectory),
     operation,
+    registeredRules,
   );
 }
 
@@ -3044,12 +3063,14 @@ export async function confirmSameText(
 export async function inspectProject(
   projectDirectory: string,
   operation: "status" | "check",
+  registeredRules: readonly CheckRule[] = builtInRules,
 ): Promise<ProjectReport> {
   let evaluated: EvaluatedSavedProject;
   try {
     evaluated = await evaluatedProjectForInspection(
       projectDirectory,
       operation,
+      registeredRules,
     );
   } catch (error) {
     return invalidStateReport(
