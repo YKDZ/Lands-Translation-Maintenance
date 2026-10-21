@@ -4984,7 +4984,10 @@ void describe("CLI 制品", () => {
         ),
       );
       if (command === "status") assert.equal(result.status, 0, result.stderr);
-      else assert.equal(result.status, 1, result.stderr);
+      else {
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(report.state, "ready");
+      }
       assert.deepEqual(await snapshotProjectFiles(project.directory), before);
     }
   });
