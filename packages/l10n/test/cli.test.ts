@@ -1763,6 +1763,119 @@ void describe("CLI 制品", () => {
     );
   });
 
+  void it("递归 GUI selector 的前缀叶变分支时删除旧消息并新增子消息", async (t) => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "lands-l10n-gui-recursive-"),
+    );
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    await mkdir(join(directory, "Locale"), { recursive: true });
+
+    const targetPath = join(directory, "Locale/zh-CN_gui.yml");
+    await writeFile(targetPath, "general:\n  all: 全部\n");
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "review"',
+        "resources:",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "  - path: Locale/en-US_gui.yml",
+        "    purpose: gui-language",
+        "  - path: Locale/definitions_gui.yml",
+        "    purpose: configuration",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: Locale/en-US_gui.yml",
+        "      target: Locale/zh-CN_gui.yml",
+        "      definitionsSource: Locale/definitions_gui.yml",
+        "      fields:",
+        '        - path: [general, all, "**"]',
+        "          category: gui-string",
+        "          scene: gui-general",
+        "",
+      ].join("\n"),
+    );
+
+    const jarFile = join(directory, "Lands.jar");
+    const writeSourceJar = async (source: string): Promise<void> =>
+      writeFile(
+        jarFile,
+        zipSync({
+          "plugin.yml": strToU8("name: Lands\n"),
+          "Locale/en-US_gui.yml": strToU8(source),
+          "Locale/definitions_gui.yml": strToU8("settings:\n  enabled: true\n"),
+        }),
+      );
+    await writeSourceJar("general:\n  all: All\n");
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.match(await readFile(targetPath, "utf8"), /all: 全部/);
+
+    await writeSourceJar("general:\n  all:\n    child: New\n");
+    const beforePreview = await snapshotProjectFiles(directory);
+    const preview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldMessage = messages.find(
+      ({ path }) => JSON.stringify(path) === '["general","all"]',
+    );
+    assert.equal(oldMessage?.action, "delete");
+    assert.equal(oldMessage?.reason, "source-removed");
+    assert.equal(oldMessage?.previousTarget, "全部");
+    const newMessage = messages.find(
+      ({ path }) => JSON.stringify(path) === '["general","all","child"]',
+    );
+    assert.equal(newMessage?.action, "seed");
+    assert.equal(newMessage?.reason, "new-message");
+    assert.equal(newMessage?.target, "New");
+    assert.deepEqual(await snapshotProjectFiles(directory), beforePreview);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedTarget = parseYaml(await readFile(targetPath, "utf8")) as {
+      readonly general: { readonly all: { readonly child: string } };
+      readonly settings: { readonly enabled: boolean };
+    };
+    assert.deepEqual(appliedTarget.general.all, { child: "New" });
+    assert.equal(appliedTarget.settings.enabled, true);
+  });
+
   void it("GUI lore 从含换行标签的串改为列表时仍按严格原文重置", async (t) => {
     const project = await createGuiProject(t);
     const initialized = runCli(
