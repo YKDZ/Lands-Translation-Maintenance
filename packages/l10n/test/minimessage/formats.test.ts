@@ -409,11 +409,28 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     const expected = finding?.expected as
       | { readonly position?: { readonly start: number; readonly end: number } }
       | undefined;
+    const sourceDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.path.join(".").includes("dynmap.land.description") &&
+        entry.documentIndex === 0,
+    );
     const targetDocument = view.miniMessage?.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.path.join(".").includes("dynmap.land.description") &&
         entry.documentIndex === 0,
+    );
+    const sourceBody = sourceDocument?.segments.find(
+      (segment) => segment.kind === "text" && segment.value === "Land",
+    );
+    const sourceTitle = sourceDocument?.segments.find(
+      (segment) =>
+        segment.kind === "text" &&
+        segment.value === "Old\\Path" &&
+        segment.context.some(
+          (frame) => frame.kind === "html-attribute" && frame.name === "title",
+        ),
     );
     const body = targetDocument?.segments.find(
       (segment) => segment.kind === "text" && segment.value === "城镇",
@@ -429,6 +446,9 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     const anchor = body?.context.find(
       (frame) => frame.kind === "html-element" && frame.name === "a",
     );
+    const sourceAnchor = sourceBody?.context.find(
+      (frame) => frame.kind === "html-element" && frame.name === "a",
+    );
 
     assert.equal(checked.status, 1);
     assert.ok(finding, checked.stderr || checked.stdout);
@@ -442,6 +462,21 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       source.slice(expected.position.start, expected.position.end),
       String.raw`href=\"/keep\"`,
     );
+    assert.ok(sourceBody);
+    assert.ok(sourceTitle);
+    assert.ok(sourceAnchor);
+    assert.equal(
+      source.slice(sourceBody.position.start, sourceBody.position.end),
+      "Land",
+    );
+    assert.equal(
+      source.slice(sourceTitle.position.start, sourceTitle.position.end),
+      String.raw`title=\"Old\\Path\"`,
+    );
+    assert.deepEqual(sourceAnchor.position, {
+      start: source.indexOf(String.raw`<a href=\"/keep\"`),
+      end: source.indexOf("</a>") + "</a>".length,
+    });
     assert.ok(body);
     assert.ok(title);
     assert.ok(anchor);
