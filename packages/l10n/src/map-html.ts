@@ -17,7 +17,8 @@ type HtmlText = DefaultTreeAdapterTypes.TextNode;
 
 interface Projection {
   readonly input: string;
-  readonly sourceOffsets: readonly number[];
+  readonly sourceStarts: readonly number[];
+  readonly sourceEnds: readonly number[];
   readonly markers: ReadonlyMap<string, ProjectionMarker>;
   readonly htmlTagRanges: readonly HtmlTagRange[];
   readonly htmlAttributeRanges: readonly {
@@ -25,6 +26,11 @@ interface Projection {
     readonly end: number;
     readonly name: string;
   }[];
+}
+
+interface MutableProjectionOffsets {
+  readonly starts: number[];
+  readonly ends: number[];
 }
 
 interface ProjectionMarker {
@@ -240,12 +246,12 @@ function isWithinHtmlAttribute(
 function appendSourceRange(
   input: string,
   pieces: string[],
-  sourceOffsets: number[],
+  offsets: MutableProjectionOffsets,
   start: number,
   end: number,
 ): void {
   if (start >= end) return;
-  appendProjection(pieces, sourceOffsets, input.slice(start, end), {
+  appendProjection(pieces, offsets, input.slice(start, end), {
     start,
     end,
   });
@@ -253,52 +259,47 @@ function appendSourceRange(
 
 function nodeOutput(
   node: MiniMessageSourceNode,
-  attributes: Projection["htmlAttributeRanges"],
   marker: string | undefined,
+  withinAttribute: boolean,
 ): string | undefined {
-  if (node.kind !== "tag") return node.raw;
-  if (
-    isWithinHtmlAttribute(node.position.start, node.position.end, attributes)
-  ) {
+  if (node.kind !== "tag") return node.visibleText;
+  if (marker !== undefined) return marker;
+  // Lands 8.0.1 keeps map placeholders inside HTML attributes literal; this
+  // versioned behavior is separate from official MiniMessage insertions.
+  if (withinAttribute && node.name === "v") {
     return node.raw;
   }
-  if (marker !== undefined) return marker;
-  if (node.semanticKind === "style") return undefined;
-  if (node.name === "br" || node.name === "newline") return "\n";
-  if (node.semanticKind !== "unknown") return undefined;
-  return node.raw;
+  return node.visibleText === "" ? undefined : node.visibleText;
 }
 
 function appendProjection(
   pieces: string[],
-  sourceOffsets: number[],
+  offsets: MutableProjectionOffsets,
   text: string,
   position: MiniMessagePosition,
 ): void {
   if (text.length === 0) return;
-  const currentBoundary = sourceOffsets.length - 1;
-  const previousSourceOffset = sourceOffsets[currentBoundary];
+  const currentBoundary = offsets.starts.length - 1;
   if (pieces.length === 0) {
-    sourceOffsets[currentBoundary] = position.start;
-  } else if (previousSourceOffset !== position.start) {
-    sourceOffsets[currentBoundary] = -1;
+    offsets.ends[currentBoundary] = position.start;
   }
+  offsets.starts[currentBoundary] = position.start;
   pieces.push(text);
   const exact = text.length === position.end - position.start;
   for (let index = 1; index <= text.length; index += 1) {
-    sourceOffsets.push(
-      exact
-        ? position.start + index
-        : index === text.length
-          ? position.end
-          : position.start,
-    );
+    const sourceOffset = exact
+      ? position.start + index
+      : index === text.length
+        ? position.end
+        : position.start;
+    offsets.starts.push(sourceOffset);
+    offsets.ends.push(sourceOffset);
   }
 }
 
 function appendMappedProjection(
   pieces: string[],
-  sourceOffsets: number[],
+  projectionOffsets: MutableProjectionOffsets,
   text: string,
   offsets: readonly number[],
 ): void {
@@ -306,15 +307,15 @@ function appendMappedProjection(
   if (offsets.length !== text.length + 1) {
     throw new Error("地图 fallback 的来源位置映射长度无效");
   }
-  const currentBoundary = sourceOffsets.length - 1;
+  const currentBoundary = projectionOffsets.starts.length - 1;
   const start = offsets[0] ?? -1;
   if (pieces.length === 0) {
-    sourceOffsets[currentBoundary] = start;
-  } else if (sourceOffsets[currentBoundary] !== start) {
-    sourceOffsets[currentBoundary] = -1;
+    projectionOffsets.ends[currentBoundary] = start;
   }
+  projectionOffsets.starts[currentBoundary] = start;
   pieces.push(text);
-  sourceOffsets.push(...offsets.slice(1));
+  projectionOffsets.starts.push(...offsets.slice(1));
+  projectionOffsets.ends.push(...offsets.slice(1));
 }
 
 function fallbackSourceOffsets(
@@ -342,7 +343,7 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
   const htmlTagRanges = parserTagRanges(document.input, document.nodes);
   const htmlAttributeRanges = attributeRanges(document.input);
   const pieces: string[] = [];
-  const sourceOffsets = [0];
+  const offsets: MutableProjectionOffsets = { starts: [0], ends: [0] };
   const markers = new Map<string, ProjectionMarker>();
   let markerIndex = 0;
   let cursor = 0;
@@ -354,7 +355,7 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
   )) {
     const { start, end } = node.position;
     if (start < cursor || start < 0 || end < start) continue;
-    appendSourceRange(document.input, pieces, sourceOffsets, cursor, start);
+    appendSourceRange(document.input, pieces, offsets, cursor, start);
 
     const fallback =
       node.kind === "tag"
@@ -362,43 +363,44 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
         : undefined;
     if (
       fallback !== undefined &&
+      fallback.value === node.visibleText &&
       !isWithinHtmlAttribute(start, end, htmlAttributeRanges)
     ) {
       const nodeTag = node as Extract<
         MiniMessageSourceNode,
         { readonly kind: "tag" }
       >;
-      const offsets = fallbackSourceOffsets(nodeTag, fallback.value);
-      const fallbackStart = offsets[0] ?? -1;
-      const fallbackEnd = offsets[offsets.length - 1] ?? -1;
+      const fallbackOffsets = fallbackSourceOffsets(nodeTag, fallback.value);
+      const fallbackStart = fallbackOffsets[0] ?? -1;
+      const fallbackEnd = fallbackOffsets[fallbackOffsets.length - 1] ?? -1;
       const structureMarker = projectionMarker(markerIndex, markers, {
         kind: "structure",
         node: nodeTag,
         value: nodeTag.parameters[0] ?? "",
       });
       markerIndex += 1;
-      appendProjection(pieces, sourceOffsets, structureMarker, {
+      appendProjection(pieces, offsets, structureMarker, {
         start,
         end: start,
       });
       // 分隔结构片段和 fallback 片段，避免来源位置跨过整段 MiniMessage 包装。
-      appendProjection(pieces, sourceOffsets, "<!-- -->", { start, end });
+      appendProjection(pieces, offsets, "<!-- -->", { start, end });
       const openMarker = projectionMarker(markerIndex, markers, {
         kind: "fallback-open",
         node: nodeTag,
       });
       markerIndex += 1;
-      appendProjection(pieces, sourceOffsets, openMarker, {
+      appendProjection(pieces, offsets, openMarker, {
         start: fallbackStart,
         end: fallbackStart,
       });
-      appendMappedProjection(pieces, sourceOffsets, fallback.value, offsets);
+      appendMappedProjection(pieces, offsets, fallback.value, fallbackOffsets);
       const closeMarker = projectionMarker(markerIndex, markers, {
         kind: "fallback-close",
         node: nodeTag,
       });
       markerIndex += 1;
-      appendProjection(pieces, sourceOffsets, closeMarker, {
+      appendProjection(pieces, offsets, closeMarker, {
         start: fallbackEnd,
         end: fallbackEnd,
       });
@@ -423,11 +425,13 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
       } else if (node.name === "br" || node.name === "newline") {
         kind = "boundary";
       } else if (
+        node.visibleText === "" &&
         node.semanticKind !== "unknown" &&
         node.semanticKind !== "style"
       ) {
         kind = "structure";
       } else if (
+        node.visibleText === "" &&
         node.semanticKind === "unknown" &&
         !isMapHtmlParserTag(document.input, start, node.raw, htmlTagRanges)
       ) {
@@ -439,25 +443,45 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
         markers.set(marker, { kind, node });
       }
     }
-    const replacement = nodeOutput(node, htmlAttributeRanges, marker);
+    const withinAttribute = isWithinHtmlAttribute(
+      start,
+      end,
+      htmlAttributeRanges,
+    );
+    const replacement = nodeOutput(node, marker, withinAttribute);
     if (replacement !== undefined) {
-      appendProjection(pieces, sourceOffsets, replacement, node.position);
+      if (
+        replacement === node.visibleText &&
+        node.visibleSourceOffsets.length === replacement.length + 1
+      ) {
+        appendMappedProjection(
+          pieces,
+          offsets,
+          replacement,
+          node.visibleSourceOffsets,
+        );
+      } else {
+        appendProjection(pieces, offsets, replacement, node.position);
+      }
     } else if (pieces.length === 0) {
-      sourceOffsets[sourceOffsets.length - 1] = end;
+      const currentBoundary = offsets.starts.length - 1;
+      offsets.starts[currentBoundary] = end;
+      offsets.ends[currentBoundary] = end;
     }
     cursor = end;
   }
   appendSourceRange(
     document.input,
     pieces,
-    sourceOffsets,
+    offsets,
     cursor,
     document.input.length,
   );
 
   return {
     input: pieces.join(""),
-    sourceOffsets,
+    sourceStarts: offsets.starts,
+    sourceEnds: offsets.ends,
     markers,
     htmlTagRanges,
     htmlAttributeRanges,
@@ -465,13 +489,17 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
 }
 
 function mappedPosition(
-  sourceOffsets: readonly number[],
+  offsets: Pick<Projection, "sourceStarts" | "sourceEnds">,
   start: number,
   end: number,
 ): MiniMessagePosition {
+  if (start === end) {
+    const offset = offsets.sourceStarts[start] ?? offsets.sourceEnds[end] ?? -1;
+    return { start: offset, end: offset };
+  }
   return {
-    start: sourceOffsets[start] ?? -1,
-    end: sourceOffsets[end] ?? -1,
+    start: offsets.sourceStarts[start] ?? -1,
+    end: offsets.sourceEnds[end] ?? -1,
   };
 }
 
@@ -528,7 +556,7 @@ function segmentsForTextNode(
     const segment = textSegment(
       value,
       projection.input.slice(textStart, textEnd),
-      mappedPosition(projection.sourceOffsets, textStart, textEnd),
+      mappedPosition(projection, textStart, textEnd),
       currentContext(),
     );
     return segment === undefined ? [] : [segment];
@@ -550,7 +578,7 @@ function segmentsForTextNode(
       const segment = textSegment(
         rest,
         projection.input.slice(sourceOffset, sourceEnd),
-        mappedPosition(projection.sourceOffsets, sourceOffset, sourceEnd),
+        mappedPosition(projection, sourceOffset, sourceEnd),
         currentContext(),
       );
       if (segment !== undefined) segments.push(segment);
@@ -562,7 +590,7 @@ function segmentsForTextNode(
     const prefixSegment = textSegment(
       prefix,
       projection.input.slice(sourceOffset, prefixEnd),
-      mappedPosition(projection.sourceOffsets, sourceOffset, prefixEnd),
+      mappedPosition(projection, sourceOffset, prefixEnd),
       currentContext(),
     );
     if (prefixSegment !== undefined) segments.push(prefixSegment);
@@ -665,7 +693,7 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
       parserErrors.push({
         code: error.code,
         position: mappedPosition(
-          projection.sourceOffsets,
+          projection,
           error.startOffset,
           error.endOffset,
         ),
@@ -718,7 +746,7 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
       const elementPath = [...parentPath, elementIndex];
       elementIndex += 1;
       const elementPosition = mappedPosition(
-        projection.sourceOffsets,
+        projection,
         location.startOffset,
         location.endOffset,
       );
@@ -745,7 +773,7 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
           attributeLocation === undefined
             ? elementPosition
             : mappedPosition(
-                projection.sourceOffsets,
+                projection,
                 attributeLocation.startOffset,
                 attributeLocation.endOffset,
               );
@@ -791,7 +819,7 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
         structuralIssues.push({
           code: "html-element-close-missing",
           position: mappedPosition(
-            projection.sourceOffsets,
+            projection,
             location.startTag?.startOffset ?? location.startOffset,
             location.startTag?.endOffset ?? location.endOffset,
           ),
