@@ -1306,12 +1306,71 @@ function structureFindingIssues(
   return issues;
 }
 
+function translatableTextCoverageUnavailable(
+  view: ProjectView,
+): readonly string[] {
+  const parsed = view.miniMessage;
+  if (parsed === undefined) return [];
+  const sourceKeys = new Set(
+    parsed.translatableText
+      .filter((document) => document.origin === "source")
+      .map((document) =>
+        canonicalJson({
+          messageId: document.message.id,
+          path: document.path,
+          documentIndex: document.documentIndex,
+        }),
+      ),
+  );
+  const targetKeys = new Set(
+    parsed.translatableText
+      .filter((document) => document.origin === "target")
+      .map((document) =>
+        canonicalJson({
+          messageId: document.message.id,
+          path: document.path,
+          documentIndex: document.documentIndex,
+        }),
+      ),
+  );
+  const translatableKeys = new Set(
+    parsed.translatableText.map((document) =>
+      canonicalJson({
+        messageId: document.message.id,
+        path: document.path,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+      }),
+    ),
+  );
+  if (
+    parsed.documents.some((document) => document.status !== "parsed") ||
+    parsed.documents.some(
+      (document) =>
+        !translatableKeys.has(
+          canonicalJson({
+            messageId: document.message.id,
+            path: document.path,
+            documentIndex: document.documentIndex,
+            origin: document.origin,
+          }),
+        ),
+    ) ||
+    [...sourceKeys].some((key) => !targetKeys.has(key)) ||
+    [...targetKeys].some((key) => !sourceKeys.has(key))
+  ) {
+    return ["术语和风格检查所需的可译文本片段不完整"];
+  }
+  return [];
+}
+
 function coverageUnavailable(
   view: ProjectView,
   configuration: ConsumerConfiguration,
 ): readonly string[] {
-  const unavailable = ["术语和风格检查尚未实现"];
+  const unavailable: string[] = [];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
+  unavailable.push(...translatableTextCoverageUnavailable(view));
   if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
     unavailable.push(...miniMessageTagCoverageUnavailable(view));
   }
@@ -2828,6 +2887,7 @@ function ruleUnavailable(
   operation: "status" | "check",
   messageId?: string,
   diagnosticCode?: string,
+  location?: DiagnosticLocation,
   requiredInputDependencies?: readonly RuleInputDependency[],
 ): boolean {
   const incompleteVariableEvaluation =
@@ -2840,6 +2900,59 @@ function ruleUnavailable(
         item.message?.id === messageId &&
         item.code === "minimessage.variable-coverage-unavailable",
     );
+  const incompleteTranslatableText =
+    (ruleId === "terminology" || ruleId === "translation-style") &&
+    messageId !== undefined &&
+    (() => {
+      const message = project.view.messages.find(
+        (candidate) => candidate.id === messageId,
+      );
+      if (message === undefined) return false;
+      if (message.targetStatus !== "present") return true;
+      const parsed = project.view.miniMessage;
+      if (parsed === undefined) return true;
+      const matchesPath = (path: readonly (string | number)[]) =>
+        location === undefined ||
+        canonicalJson(location.path) === canonicalJson(path);
+      const sourceText = parsed.translatableText.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "source" &&
+          document.file === message.sourceFile &&
+          matchesPath(document.path),
+      );
+      const targetText = parsed.translatableText.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "target" &&
+          document.file === message.targetFile &&
+          matchesPath(document.path) &&
+          (location === undefined || location.file === document.file),
+      );
+      const sourceDocuments = parsed.documents.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "source" &&
+          document.file === message.sourceFile &&
+          matchesPath(document.path),
+      );
+      const targetDocuments = parsed.documents.filter(
+        (document) =>
+          document.message.id === messageId &&
+          document.origin === "target" &&
+          document.file === message.targetFile &&
+          matchesPath(document.path) &&
+          (location === undefined || location.file === document.file),
+      );
+      return (
+        sourceText.length === 0 ||
+        targetText.length === 0 ||
+        sourceDocuments.length === 0 ||
+        targetDocuments.length === 0 ||
+        sourceDocuments.some((document) => document.status !== "parsed") ||
+        targetDocuments.some((document) => document.status !== "parsed")
+      );
+    })();
   return (
     !project.coverage.enabledRuleIds.includes(ruleId) ||
     project.coverage.disabledRuleIds.includes(ruleId) ||
@@ -2851,7 +2964,8 @@ function ruleUnavailable(
       messageId,
       requiredInputDependencies,
     ) ||
-    incompleteVariableEvaluation
+    incompleteVariableEvaluation ||
+    incompleteTranslatableText
   );
 }
 
@@ -2944,6 +3058,7 @@ function applyExceptionRecords(
           operation,
           record.message?.id,
           record.code,
+          record.location,
           requiredInputDependencies,
         )
       )
@@ -2968,6 +3083,7 @@ function applyExceptionRecords(
       operation,
       record.message?.id,
       record.code,
+      record.location,
       record.requiredInputDependencies,
     );
     if (unavailable) {
@@ -3119,6 +3235,7 @@ export async function recordDiagnosticExemption(
       "check",
       selected.message?.id,
       selected.code,
+      selected.location,
       requiredInputDependencies,
     )
   ) {
