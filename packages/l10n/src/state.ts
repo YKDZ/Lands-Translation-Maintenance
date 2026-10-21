@@ -13,10 +13,12 @@ import type {
 } from "#/model";
 import { canonicalJson, sha256 } from "#/value";
 
-export const configurationFileName = "lands-l10n.yaml";
-export const stateDirectoryName = ".lands-l10n";
+export const configurationFileName = ".l10n/config.yml";
+export const stateDirectoryName = ".l10n";
+export const baselineDirectoryName = "upstream";
 export const baselineFileName = "source-baseline.json";
-export const lockFileName = "sync-lock.json";
+export const lockFileName = "lock.json";
+export const transactionFileName = "transaction.json";
 
 export interface ResourceSnapshot extends ResourceInventoryEntry {
   readonly sha256: string;
@@ -194,6 +196,7 @@ export async function readState(
   const baselinePath = join(
     projectDirectory,
     stateDirectoryName,
+    baselineDirectoryName,
     baselineFileName,
   );
   const lockPath = join(projectDirectory, stateDirectoryName, lockFileName);

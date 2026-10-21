@@ -163,14 +163,6 @@ export function validateConfiguration(
       });
     }
     targets.add(mapping.target);
-    if (mapping.source === mapping.target) {
-      issues.push({
-        code: "configuration.mapping-path-conflict",
-        path: ["translationScope", "mappings", mappingIndex],
-        reason: "原文文件不能同时作为译文目标",
-        actual: mapping.source,
-      });
-    }
 
     const fieldPaths = new Map<string, readonly string[]>();
     mapping.fields.forEach((field, fieldIndex) => {
@@ -204,32 +196,11 @@ export function validateConfiguration(
     mappingIndex,
     mapping,
   ] of configuration.translationScope.mappings.entries()) {
-    if (sources.has(mapping.target)) {
-      issues.push({
-        code: "configuration.mapping-path-conflict",
-        path: ["translationScope", "mappings", mappingIndex, "target"],
-        reason: "映射目标不能覆盖任何受登记的原文文件",
-        actual: mapping.target,
-      });
-    }
-    if (
-      mapping.target === "lands-l10n.yaml" ||
-      mapping.target.startsWith("lands-l10n.yaml/") ||
-      mapping.target === ".lands-l10n" ||
-      mapping.target.startsWith(".lands-l10n/")
-    ) {
+    if (mapping.target === ".l10n" || mapping.target.startsWith(".l10n/")) {
       issues.push({
         code: "configuration.mapping-target-reserved",
         path: ["translationScope", "mappings", mappingIndex, "target"],
         reason: "映射目标不能覆盖维护清单或工具内部状态",
-        actual: mapping.target,
-      });
-    }
-    if (resources.has(mapping.target)) {
-      issues.push({
-        code: "configuration.mapping-path-conflict",
-        path: ["translationScope", "mappings", mappingIndex, "target"],
-        reason: "映射目标不能与资源文件清单中的文件冲突",
         actual: mapping.target,
       });
     }

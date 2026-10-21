@@ -34,17 +34,20 @@ function messageIdentity(
 ) {
   const identity = {
     sourceFile: mapping.source,
-    targetFile: mapping.target,
     path,
-    category,
   };
-  return { ...identity, id: sha256(canonicalJson(identity)) };
+  return {
+    ...identity,
+    targetFile: mapping.target,
+    category,
+    id: sha256(canonicalJson(identity)),
+  };
 }
 
 function walkStrings(
   value: JsonValue,
   path: readonly string[],
-  output: Map<string, { path: readonly string[]; value: string }>,
+  output: Map<string, { path: readonly string[]; value: JsonValue }>,
   file: string,
   issues: ProjectFileIssue[],
 ): void {
@@ -67,6 +70,7 @@ function walkStrings(
     expected: "字符串或映射",
     actual: value,
   });
+  output.set(pathKey(path), { path, value });
 }
 
 function collectField(
@@ -104,7 +108,7 @@ function collectField(
   if (field.category === "chat-string") {
     const stringValues = new Map<
       string,
-      { path: readonly string[]; value: string }
+      { path: readonly string[]; value: JsonValue }
     >();
     walkStrings(
       selected,
@@ -128,6 +132,10 @@ function collectField(
       path: field.path,
       expected: "字符串列表",
       actual: selected,
+    });
+    values.set(pathKey(field.path), {
+      path: field.path,
+      value: selected,
     });
     return { values, issues };
   }

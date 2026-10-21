@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { watch } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -9,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +32,7 @@ async function createProject(t: TestContext) {
 
   const jarFile = join(directory, "Lands.jar");
   await mkdir(join(directory, "lang"), { recursive: true });
+  await mkdir(join(directory, ".l10n"), { recursive: true });
   await writeFile(
     jarFile,
     zipSync({
@@ -53,7 +55,7 @@ async function createProject(t: TestContext) {
     }),
   );
   await writeFile(
-    join(directory, "lands-l10n.yaml"),
+    join(directory, ".l10n/config.yml"),
     [
       "schemaVersion: 1",
       "source:",
@@ -100,6 +102,106 @@ async function createProject(t: TestContext) {
   return { directory, jarFile };
 }
 
+async function createInterruptedProject(t: TestContext, resourceCount = 150) {
+  const directory = await mkdtemp(join(tmpdir(), "lands-l10n-interrupted-"));
+  t.after(async () => rm(directory, { force: true, recursive: true }));
+  await mkdir(join(directory, "lang"), { recursive: true });
+  await mkdir(join(directory, ".l10n"), { recursive: true });
+
+  const resources: string[] = [];
+  const mappings: string[] = [];
+  const jarEntries: Record<string, Uint8Array> = {};
+  const targetPaths: string[] = [];
+  for (let index = 0; index < resourceCount; index += 1) {
+    const suffix = String(index).padStart(3, "0");
+    const source = `lang/en${suffix}.yml`;
+    const target = `lang/zh${suffix}.yml`;
+    targetPaths.push(target);
+    resources.push(`  - path: ${source}`, "    purpose: chat-language");
+    mappings.push(
+      `    - source: ${source}`,
+      `      target: ${target}`,
+      "      fields:",
+      "        - path: [messages]",
+      "          category: chat-string",
+    );
+    jarEntries[source] = strToU8(`messages:\n  greeting: Hello ${suffix}\n`);
+  }
+
+  const jarFile = join(directory, "Lands.jar");
+  await writeFile(jarFile, zipSync(jarEntries));
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.0.1"',
+      '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+      "resources:",
+      ...resources,
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      ...mappings,
+      "",
+    ].join("\n"),
+  );
+
+  return { directory, jarFile, targetPaths };
+}
+
+function killInitWhenTargetAppears(
+  project: { readonly directory: string; readonly jarFile: string },
+  targetPath: string,
+) {
+  return new Promise<{
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null;
+    readonly killedAtTarget: boolean;
+    readonly stdout: string;
+    readonly stderr: string;
+  }>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [
+        cliFile,
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    let stderr = "";
+    let killedAtTarget = false;
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => (stdout += chunk));
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => (stderr += chunk));
+    const watcher = watch(join(project.directory, "lang"), (_event, name) => {
+      if (name?.toString() === basename(targetPath)) {
+        killedAtTarget = child.kill("SIGKILL");
+      }
+    });
+    const timeout = setTimeout(() => child.kill("SIGTERM"), 20_000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      watcher.close();
+      reject(error);
+    });
+    child.once("exit", (code, signal) => {
+      clearTimeout(timeout);
+      watcher.close();
+      resolve({ code, signal, killedAtTarget, stdout, stderr });
+    });
+  });
+}
+
 function readEnvelope(stdout: string) {
   return JSON.parse(stdout) as {
     readonly kind?: unknown;
@@ -121,6 +223,28 @@ void describe("CLI 制品", () => {
     assert.match(result.stdout, /状态/);
     assert.match(result.stdout, /检查/);
     assert.match(result.stdout, /schema/);
+  });
+
+  void it("在已确认的 .l10n 布局建立配置、锁和原文基线", async (t) => {
+    const project = await createProject(t);
+    const stateDirectory = join(project.directory, ".l10n");
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await readFile(join(stateDirectory, "lock.json"), "utf8");
+    await readFile(
+      join(stateDirectory, "upstream/source-baseline.json"),
+      "utf8",
+    );
   });
 
   void it("输出 CLI 契约生成的结构化 Schema", () => {
@@ -167,14 +291,14 @@ void describe("CLI 制品", () => {
     assert.match(target, /registered: 已注册/);
 
     const savedState = await readFile(
-      join(project.directory, ".lands-l10n/sync-lock.json"),
+      join(project.directory, ".l10n/lock.json"),
       "utf8",
     );
     await rename(project.jarFile, `${project.jarFile}.unavailable`);
     const statusFiles = [
       join(project.directory, "lang/zh.yml"),
-      join(project.directory, ".lands-l10n/source-baseline.json"),
-      join(project.directory, ".lands-l10n/sync-lock.json"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
     ];
     const beforeStatus = await Promise.all(
       statusFiles.map((file) => readFile(file)),
@@ -226,8 +350,8 @@ void describe("CLI 制品", () => {
 
     const files = [
       join(project.directory, "lang/zh.yml"),
-      join(project.directory, ".lands-l10n/source-baseline.json"),
-      join(project.directory, ".lands-l10n/sync-lock.json"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
     ];
     const before = await Promise.all(files.map((file) => readFile(file)));
     const checked = runCli(
@@ -253,9 +377,57 @@ void describe("CLI 制品", () => {
     }
   });
 
+  void it("初始化保留已有的错误类型译文并继续报告结构诊断", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const original = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      original.replace("greeting: 你好", "greeting: [旧中文一, 旧中文二]"),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const preserved = await readFile(targetPath, "utf8");
+    assert.match(preserved, /greeting: \[\s*旧中文一, 旧中文二\s*\]/);
+    const initReport = readReport(initialized.stdout);
+    const initDiagnostics = initReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      initDiagnostics.some(
+        (diagnostic) => diagnostic.code === "message.type-mismatch",
+      ),
+    );
+
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 1);
+    assert.match(status.stdout || status.stderr, /message.type-mismatch/);
+    assert.match(
+      await readFile(targetPath, "utf8"),
+      /greeting: \[\s*旧中文一, 旧中文二\s*\]/,
+    );
+  });
+
   void it("资源清单不匹配时拒绝初始化且不留下目标或锁文件", async (t) => {
     const project = await createProject(t);
-    const configPath = join(project.directory, "lands-l10n.yaml");
+    const configPath = join(project.directory, ".l10n/config.yml");
     const config = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
@@ -279,9 +451,7 @@ void describe("CLI 制品", () => {
     const failure = readEnvelope(result.stdout || result.stderr);
     assert.equal(failure.kind, "failure");
     assert.match(result.stdout || result.stderr, /settings.yml/);
-    await assert.rejects(
-      readFile(join(project.directory, ".lands-l10n/sync-lock.json")),
-    );
+    await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
     const target = await readFile(
       join(project.directory, "lang/zh.yml"),
       "utf8",
@@ -314,8 +484,8 @@ void describe("CLI 制品", () => {
     );
     const files = [
       targetPath,
-      join(project.directory, ".lands-l10n/source-baseline.json"),
-      join(project.directory, ".lands-l10n/sync-lock.json"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
     ];
     const before = await Promise.all(files.map((file) => readFile(file)));
     const result = runCli(
@@ -359,7 +529,7 @@ void describe("CLI 制品", () => {
     );
     assert.equal(initialized.status, 0, initialized.stderr);
 
-    const configPath = join(project.directory, "lands-l10n.yaml");
+    const configPath = join(project.directory, ".l10n/config.yml");
     const config = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
@@ -374,6 +544,185 @@ void describe("CLI 制品", () => {
     );
     assert.equal(stale.status, 1);
     assert.match(stale.stdout || stale.stderr, /需重新初始化/);
+  });
+
+  void it("允许 JAR 原文路径与本地中文目标路径同名", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace("target: lang/zh.yml", "target: lang/en.yml"),
+    );
+    const targetPath = join(project.directory, "lang/en.yml");
+    await writeFile(
+      targetPath,
+      "messages:\n  greeting: 既有中文\n  commands:\n    registered: 已注册\nlist:\n  entries: [甲, 乙]\n",
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const savedTarget = await readFile(targetPath, "utf8");
+    assert.match(savedTarget, /greeting: 既有中文/);
+    assert.match(savedTarget, /welcome: Welcome/);
+    assert.doesNotMatch(savedTarget, /greeting: Hello/);
+  });
+
+  void it("目标路径与字段类别变化时仍使用原文资源和字段身份", async (t) => {
+    const scalarProject = await createProject(t);
+    const scalarConfigPath = join(scalarProject.directory, ".l10n/config.yml");
+    const scalarConfig = await readFile(scalarConfigPath, "utf8");
+    await writeFile(
+      scalarConfigPath,
+      scalarConfig.replace(
+        "        - path: [messages]\n          category: chat-string\n        - path: [list, entries]\n          category: chat-string-list",
+        "        - path: [messages, greeting]\n          category: chat-string",
+      ),
+    );
+    await rm(join(scalarProject.directory, "lang/zh.yml"));
+    const scalarInit = runCli(
+      "init",
+      "--project",
+      scalarProject.directory,
+      "--jar",
+      scalarProject.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(scalarInit.status, 0, scalarInit.stderr);
+
+    const listProject = await createProject(t);
+    const listConfigPath = join(listProject.directory, ".l10n/config.yml");
+    const listConfig = await readFile(listConfigPath, "utf8");
+    await writeFile(
+      listConfigPath,
+      listConfig
+        .replace("target: lang/zh.yml", "target: lang/zh-new.yml")
+        .replace(
+          "        - path: [messages]\n          category: chat-string\n        - path: [list, entries]\n          category: chat-string-list",
+          "        - path: [messages, greeting]\n          category: chat-string-list",
+        ),
+    );
+    await writeFile(
+      listProject.jarFile,
+      zipSync({
+        "lang/en.yml": strToU8("messages:\n  greeting: [Hello]\n"),
+        "plugin.yml": strToU8("name: Lands\n"),
+        "settings.yml": strToU8("enabled: true\n"),
+        "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
+        "me/lands/Plugin.class": strToU8("class bytes"),
+      }),
+    );
+    const listInit = runCli(
+      "init",
+      "--project",
+      listProject.directory,
+      "--jar",
+      listProject.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(listInit.status, 0, listInit.stderr);
+
+    const scalarLock = JSON.parse(
+      await readFile(join(scalarProject.directory, ".l10n/lock.json"), "utf8"),
+    ) as { readonly translationSeeds: readonly { readonly id: string }[] };
+    const listLock = JSON.parse(
+      await readFile(join(listProject.directory, ".l10n/lock.json"), "utf8"),
+    ) as { readonly translationSeeds: readonly { readonly id: string }[] };
+    assert.equal(scalarLock.translationSeeds.length, 1);
+    assert.equal(listLock.translationSeeds.length, 1);
+    assert.equal(
+      scalarLock.translationSeeds[0]?.id,
+      listLock.translationSeeds[0]?.id,
+    );
+  });
+
+  void it("SIGKILL 后重试先回滚残留，再建立完整待翻译状态", async (t) => {
+    const project = await createInterruptedProject(t);
+    const interrupted = await killInitWhenTargetAppears(
+      project,
+      project.targetPaths[0]!,
+    );
+    assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
+    assert.equal(interrupted.killedAtTarget, true);
+
+    const presentTargets = await Promise.all(
+      project.targetPaths.map(async (target) => {
+        try {
+          await readFile(join(project.directory, target));
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    );
+    const partialCount = presentTargets.filter(Boolean).length;
+    assert.ok(partialCount > 0 && partialCount < project.targetPaths.length);
+
+    const retried = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(retried.status, 0, retried.stderr);
+    const summary = readReport(retried.stdout).summary as Record<
+      string,
+      unknown
+    >;
+    assert.equal(summary.messages, project.targetPaths.length);
+    assert.equal(summary.pendingTranslations, project.targetPaths.length);
+    assert.equal(summary.sameTextCandidates, 0);
+    const lock = JSON.parse(
+      await readFile(join(project.directory, ".l10n/lock.json"), "utf8"),
+    ) as {
+      readonly translationSeeds: readonly unknown[];
+      readonly sameTextCandidates: readonly unknown[];
+    };
+    assert.equal(lock.translationSeeds.length, project.targetPaths.length);
+    assert.equal(lock.sameTextCandidates.length, 0);
+  });
+
+  void it("中断后出现并行编辑时拒绝恢复且保留编辑内容", async (t) => {
+    const project = await createInterruptedProject(t);
+    const targetPath = project.targetPaths[0]!;
+    const interrupted = await killInitWhenTargetAppears(project, targetPath);
+    assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
+    assert.equal(interrupted.killedAtTarget, true);
+
+    const targetFile = join(project.directory, targetPath);
+    const parallelEdit = "messages:\n  greeting: 并行编辑\n";
+    await writeFile(targetFile, parallelEdit);
+    const retried = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(retried.status, 1);
+    assert.match(retried.stdout || retried.stderr, /中断|并行编辑/);
+    assert.equal(await readFile(targetFile, "utf8"), parallelEdit);
+    await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
+    await assert.rejects(
+      readFile(join(project.directory, ".l10n/upstream/source-baseline.json")),
+    );
   });
 
   void it("初始化拒绝重复 YAML 键且不留下任何基线文件", async (t) => {
@@ -402,11 +751,9 @@ void describe("CLI 制品", () => {
     assert.equal(result.status, 1);
     assert.match(result.stdout || result.stderr, /重复|duplicate/i);
     await assert.rejects(
-      readFile(join(project.directory, ".lands-l10n/source-baseline.json")),
+      readFile(join(project.directory, ".l10n/upstream/source-baseline.json")),
     );
-    await assert.rejects(
-      readFile(join(project.directory, ".lands-l10n/sync-lock.json")),
-    );
+    await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
   });
 
   void it("初始化提交前发现并行编辑并保留编辑者内容", async (t) => {
@@ -428,11 +775,9 @@ void describe("CLI 制品", () => {
 
     assert.match(await readFile(targetPath, "utf8"), /greeting: 并行编辑/);
     await assert.rejects(
-      readFile(join(project.directory, ".lands-l10n/source-baseline.json")),
+      readFile(join(project.directory, ".l10n/upstream/source-baseline.json")),
     );
-    await assert.rejects(
-      readFile(join(project.directory, ".lands-l10n/sync-lock.json")),
-    );
+    await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
   });
 
   void it("规则策略变更不要求重建基线，但禁用结构规则会显示为不完整", async (t) => {
@@ -448,7 +793,7 @@ void describe("CLI 制品", () => {
     );
     assert.equal(initialized.status, 0, initialized.stderr);
 
-    const configPath = join(project.directory, "lands-l10n.yaml");
+    const configPath = join(project.directory, ".l10n/config.yml");
     const config = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
@@ -491,7 +836,7 @@ void describe("CLI 制品", () => {
     );
     assert.equal(initialized.status, 0, initialized.stderr);
 
-    const lockPath = join(project.directory, ".lands-l10n/sync-lock.json");
+    const lockPath = join(project.directory, ".l10n/lock.json");
     const lock = JSON.parse(await readFile(lockPath, "utf8")) as Record<
       string,
       unknown
