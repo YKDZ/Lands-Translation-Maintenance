@@ -331,6 +331,158 @@ void describe("CLI 制品", () => {
     );
   });
 
+  void it("沿显式场景选择器读取对话框并保留 GUI lore 列表译文", async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "lands-l10n-dialog-"));
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    await mkdir(join(directory, "Locale"), { recursive: true });
+
+    const source = [
+      "dialogs:",
+      "  announcement:",
+      "    title: <t:heading>Notice",
+      "    bodies:",
+      "      icon:",
+      "        item:",
+      "          material: STONE",
+      "          name: '&aBeacon'",
+      "          lore: '&7A useful marker'",
+      "          hide-tooltip: true",
+      "",
+    ].join("\n");
+    const target = [
+      "dialogs:",
+      "  announcement:",
+      "    title: <t:heading>通知",
+      "    bodies:",
+      "      icon:",
+      "        item:",
+      "          material: STONE",
+      "          name: <green>信标",
+      "          lore:",
+      "            - 第一行",
+      "            - 第二行",
+      "          hide-tooltip: true",
+      "",
+    ].join("\n");
+    await writeFile(join(directory, "Locale/zh-CN_dialogs.yml"), target);
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+        "resources:",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "  - path: Locale/en-US_dialogs.yml",
+        "    purpose: dialog-language",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: Locale/en-US_dialogs.yml",
+        "      target: Locale/zh-CN_dialogs.yml",
+        "      definitionsSource: Locale/en-US_dialogs.yml",
+        "      fields:",
+        '        - path: [dialogs, "*", title]',
+        "          category: dialog-string",
+        "          scene: dialog-title",
+        '        - path: [dialogs, "*", bodies, "*", item, name]',
+        "          category: gui-string",
+        "          scene: gui-item-name",
+        '        - path: [dialogs, "*", bodies, "*", item, lore]',
+        "          category: gui-lore",
+        "          scene: gui-item-lore",
+        "",
+      ].join("\n"),
+    );
+    const jarFile = join(directory, "Lands.jar");
+    await writeFile(
+      jarFile,
+      zipSync({
+        "plugin.yml": strToU8("name: Lands\n"),
+        "Locale/en-US_dialogs.yml": strToU8(source),
+      }),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.equal(
+      (readReport(initialized.stdout).summary as Record<string, unknown>)
+        .messages,
+      3,
+    );
+
+    const preview = runCli(
+      "sync",
+      "--dry-run",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const envelope = readEnvelope(preview.stdout);
+    const plan = (envelope.data as Record<string, unknown>).plan as {
+      messages: readonly {
+        action: string;
+        category: string;
+        format?: string;
+        scene?: string;
+      }[];
+    };
+    assert.equal(plan.messages.length, 3);
+    assert.deepEqual(
+      plan.messages
+        .map(({ action, category, format, scene }) => ({
+          action,
+          category,
+          format,
+          scene,
+        }))
+        .sort((left, right) => left.category.localeCompare(right.category)),
+      [
+        {
+          action: "preserve",
+          category: "dialog-string",
+          format: "minimessage",
+          scene: "dialog-title",
+        },
+        {
+          action: "preserve",
+          category: "gui-lore",
+          format: "legacy-color-minimessage",
+          scene: "gui-item-lore",
+        },
+        {
+          action: "preserve",
+          category: "gui-string",
+          format: "legacy-color-minimessage",
+          scene: "gui-item-name",
+        },
+      ],
+    );
+    const targetAfter = await readFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      "utf8",
+    );
+    assert.match(targetAfter, /material: STONE/);
+    assert.match(targetAfter, /hide-tooltip: true/);
+    assert.match(targetAfter, /- 第一行\n            - 第二行/);
+  });
+
   void it("同步应用候选原文并一致更新译文、基线和锁", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(

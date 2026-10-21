@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { parseConfiguration } from "#/configuration";
 import { collectMessages } from "#/messages";
+import { translationFieldCategories, translationFieldScenes } from "#/model";
 import type {
   ConsumerConfiguration,
   JsonValue,
@@ -86,10 +87,12 @@ const mappingSchema = z
   .object({
     source: z.string().min(1),
     target: z.string().min(1),
+    definitionsSource: z.string().min(1).optional(),
     fields: z.array(
       z.object({
         path: z.array(z.string()),
-        category: z.enum(["chat-string", "chat-string-list"]),
+        category: z.enum(translationFieldCategories),
+        scene: z.enum(translationFieldScenes).optional(),
       }),
     ),
   })
@@ -110,6 +113,7 @@ const resourceSchema = z
     purpose: z.enum([
       "chat-language",
       "gui-language",
+      "dialog-language",
       "configuration",
       "metadata",
       "documentation",

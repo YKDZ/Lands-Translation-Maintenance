@@ -20,6 +20,7 @@ import type {
   Diagnostic,
   DiagnosticLocation,
   JsonValue,
+  ObservedMessage,
   ProjectFileIssue,
   ProjectReport,
   ProjectSummary,
@@ -347,14 +348,27 @@ function sourceMessageIssues(
 }
 
 function isValidTargetValue(
-  source: JsonValue,
+  category: ObservedMessage["category"],
   target: JsonValue | undefined,
 ): boolean {
-  if (typeof source === "string") return typeof target === "string";
-  if (Array.isArray(source)) {
+  if (
+    category === "chat-string" ||
+    category === "gui-string" ||
+    category === "dialog-string" ||
+    category === "dialog-label-format" ||
+    category === "configuration-string"
+  ) {
+    return typeof target === "string";
+  }
+  if (category === "gui-lore") {
     return (
-      Array.isArray(target) && target.every((item) => typeof item === "string")
+      typeof target === "string" ||
+      (Array.isArray(target) &&
+        target.every((item) => typeof item === "string"))
     );
+  }
+  if (Array.isArray(target)) {
+    return target.every((item) => typeof item === "string");
   }
   return false;
 }
@@ -758,7 +772,7 @@ export async function initializeProject(
         reason: "missing",
       });
       messagesNeedingSeed.add(message.id);
-    } else if (!isValidTargetValue(message.source, message.target)) {
+    } else if (!isValidTargetValue(message.category, message.target)) {
       continue;
     } else if (sameValue(message.target, message.source)) {
       sameTextCandidates.push({
@@ -1201,6 +1215,8 @@ export async function previewSyncProject(
       targetFile: previous.targetFile,
       path: previous.path,
       category: previous.category,
+      ...(previous.scene === undefined ? {} : { scene: previous.scene }),
+      ...(previous.format === undefined ? {} : { format: previous.format }),
       previousSource: previous.source,
       ...(previous.target === undefined
         ? {}
@@ -1221,6 +1237,8 @@ export async function previewSyncProject(
         targetFile: message.targetFile,
         path: message.path,
         category: message.category,
+        ...(message.scene === undefined ? {} : { scene: message.scene }),
+        ...(message.format === undefined ? {} : { format: message.format }),
         ...(previous === undefined ? {} : { previousSource: previous.source }),
         source: message.source,
       });
@@ -1295,6 +1313,8 @@ export async function previewSyncProject(
       targetFile: message.targetFile,
       path: message.path,
       category: message.category,
+      ...(message.scene === undefined ? {} : { scene: message.scene }),
+      ...(message.format === undefined ? {} : { format: message.format }),
       ...(previous === undefined ? {} : { previousSource: previous.source }),
       source: message.source,
       ...(selectedPreviousTarget === undefined
@@ -1334,7 +1354,7 @@ export async function previewSyncProject(
         (message) =>
           message.targetStatus === "present" &&
           message.target !== undefined &&
-          !isValidTargetValue(message.source, message.target) &&
+          !isValidTargetValue(message.category, message.target) &&
           message.targetFile === targetMessage.targetFile &&
           message.path.length < targetMessage.path.length &&
           message.path.every(
@@ -1359,6 +1379,12 @@ export async function previewSyncProject(
       targetFile: targetMessage.targetFile,
       path: targetMessage.path,
       category: targetMessage.category,
+      ...(targetMessage.scene === undefined
+        ? {}
+        : { scene: targetMessage.scene }),
+      ...(targetMessage.format === undefined
+        ? {}
+        : { format: targetMessage.format }),
       ...(previous === undefined ? {} : { previousSource: previous.source }),
       previousTarget: targetMessage.value,
     });
