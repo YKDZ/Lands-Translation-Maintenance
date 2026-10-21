@@ -1251,6 +1251,7 @@ function unresolvedInteractionLimitations(
 export const miniMessageVariablesRule: CheckRule = {
   id: "minimessage-variables",
   defaultSeverity: "error",
+  requiredInputs: ["minimessage-parse"],
   evaluate(project) {
     const parsed = project.miniMessage;
     if (parsed === undefined) return [];

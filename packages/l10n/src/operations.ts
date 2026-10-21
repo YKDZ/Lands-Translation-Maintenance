@@ -2353,10 +2353,11 @@ export async function inspectProject(
   if (operation === "status") {
     return makeReport(operation, loaded.view, loaded.lock, loaded.diagnostics);
   }
-  const miniMessageChecksEnabled =
-    loaded.configuration.rules?.["minimessage-syntax"]?.enabled !== false ||
-    loaded.configuration.rules?.["minimessage-variables"]?.enabled !== false ||
-    loaded.configuration.rules?.["minimessage-tags"]?.enabled !== false;
+  const miniMessageChecksEnabled = builtInRules.some(
+    (rule) =>
+      rule.requiredInputs?.includes("minimessage-parse") === true &&
+      loaded.configuration.rules?.[rule.id]?.enabled !== false,
+  );
   const view = miniMessageChecksEnabled
     ? {
         ...loaded.view,

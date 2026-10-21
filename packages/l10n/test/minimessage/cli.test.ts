@@ -455,7 +455,9 @@ void describe("MiniMessage 官方检查制品", () => {
       additions.every(
         (diagnostic) =>
           (diagnostic.expected as Record<string, unknown>).expectedCount ===
-            0 && (diagnostic.actual as Record<string, unknown>).actualCount > 0,
+            0 &&
+          Number((diagnostic.actual as Record<string, unknown>).actualCount) >
+            0,
       ),
       added.stderr || added.stdout,
     );

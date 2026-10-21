@@ -1790,6 +1790,7 @@ function nestingFindings(
 export const miniMessageTagsRule: CheckRule = {
   id: "minimessage-tags",
   defaultSeverity: "error",
+  requiredInputs: ["minimessage-parse"],
   evaluate(project) {
     const documents = project.miniMessage?.documents ?? [];
     const findings: RuleFinding[] = [...nestingFindings(documents)];
