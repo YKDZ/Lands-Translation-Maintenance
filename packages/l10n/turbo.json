@@ -13,6 +13,15 @@
       "outputs": ["dist/**"],
       "tags": ["quality:light"]
     },
+    "build:minimessage": {
+      "inputs": [
+        "java/minimessage/**",
+        "scripts/build-minimessage.ts",
+        "minimessage-dependencies.json"
+      ],
+      "outputs": ["target/minimessage/**"],
+      "tags": ["work:preparation"]
+    },
     "format:check": {
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
@@ -41,6 +50,16 @@
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
       "tags": ["quality:light"]
+    },
+    "test:minimessage": {
+      "dependsOn": ["build", "build:minimessage"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "java/minimessage/**",
+        "minimessage-dependencies.json"
+      ],
+      "outputs": [],
+      "tags": ["quality:heavy"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
