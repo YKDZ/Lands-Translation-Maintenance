@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it, type TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { strToU8, unzipSync, zipSync } from "fflate";
 
@@ -14,6 +16,8 @@ import {
   runCliWithoutJava,
   snapshotProjectFiles,
 } from "../cli-fixtures.ts";
+
+const cliFile = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
 
 async function checkGreeting(
   t: TestContext,
@@ -68,6 +72,74 @@ async function checkGreeting(
 }
 
 void describe("MiniMessage 官方检查制品", () => {
+  void it("通过可执行符号链接检查项目并报告 MiniMessage 质量错误", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red>Hello</red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    const matchingTarget = target.replace(
+      "greeting: 你好",
+      'greeting: "<red>你好</red>"',
+    );
+    assert.notEqual(matchingTarget, target);
+    await writeFile(targetPath, matchingTarget);
+
+    const executable = join(project.directory, "lands-l10n");
+    await symlink(cliFile, executable);
+    const argumentsForCheck = [
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    ];
+    const throughLink = spawnSync(executable, argumentsForCheck, {
+      encoding: "utf8",
+    });
+    assert.equal(throughLink.status, 0, throughLink.stderr);
+    assert.ok(throughLink.stdout.length > 0);
+    const direct = runCli(...argumentsForCheck);
+    assert.equal(direct.status, 0, direct.stderr);
+    assert.deepEqual(readReport(throughLink.stdout), readReport(direct.stdout));
+
+    const invalidTarget = matchingTarget.replace(
+      "<red>你好</red>",
+      "<blue>你好</blue>",
+    );
+    assert.notEqual(invalidTarget, matchingTarget);
+    await writeFile(targetPath, invalidTarget);
+
+    const invalid = spawnSync(executable, argumentsForCheck, {
+      encoding: "utf8",
+    });
+    assert.equal(invalid.status, 1, invalid.stderr);
+    const invalidOutput = invalid.stderr || invalid.stdout;
+    assert.ok(invalidOutput.length > 0);
+    const report = readReport(invalidOutput);
+    assert.equal(report.state, "issues");
+    assert.equal((report.coverage as Record<string, unknown>).complete, true);
+    assert.ok(
+      (report.diagnostics as readonly Record<string, unknown>[]).some(
+        ({ code, ruleId, severity }) =>
+          ruleId === "minimessage-tags" &&
+          code === "minimessage.tag-mismatch" &&
+          severity === "error",
+      ),
+    );
+  });
+
   void it("默认检查要求译文保留颜色标签及出现次数", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "<red>Hello</red>",
