@@ -253,20 +253,17 @@ function appendSourceRange(
 
 function nodeOutput(
   node: MiniMessageSourceNode,
-  attributes: Projection["htmlAttributeRanges"],
   marker: string | undefined,
+  withinAttribute: boolean,
 ): string | undefined {
-  if (node.kind !== "tag") return node.raw;
-  if (
-    isWithinHtmlAttribute(node.position.start, node.position.end, attributes)
-  ) {
+  if (node.kind !== "tag") return node.visibleText;
+  if (marker !== undefined) return marker;
+  // Lands 8.0.1 keeps map placeholders inside HTML attributes literal; this
+  // versioned behavior is separate from official MiniMessage insertions.
+  if (withinAttribute && node.name === "v") {
     return node.raw;
   }
-  if (marker !== undefined) return marker;
-  if (node.semanticKind === "style") return undefined;
-  if (node.name === "br" || node.name === "newline") return "\n";
-  if (node.semanticKind !== "unknown") return undefined;
-  return node.raw;
+  return node.visibleText === "" ? undefined : node.visibleText;
 }
 
 function appendProjection(
@@ -362,6 +359,7 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
         : undefined;
     if (
       fallback !== undefined &&
+      fallback.value === node.visibleText &&
       !isWithinHtmlAttribute(start, end, htmlAttributeRanges)
     ) {
       const nodeTag = node as Extract<
@@ -423,11 +421,13 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
       } else if (node.name === "br" || node.name === "newline") {
         kind = "boundary";
       } else if (
+        node.visibleText === "" &&
         node.semanticKind !== "unknown" &&
         node.semanticKind !== "style"
       ) {
         kind = "structure";
       } else if (
+        node.visibleText === "" &&
         node.semanticKind === "unknown" &&
         !isMapHtmlParserTag(document.input, start, node.raw, htmlTagRanges)
       ) {
@@ -439,9 +439,26 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
         markers.set(marker, { kind, node });
       }
     }
-    const replacement = nodeOutput(node, htmlAttributeRanges, marker);
+    const withinAttribute = isWithinHtmlAttribute(
+      start,
+      end,
+      htmlAttributeRanges,
+    );
+    const replacement = nodeOutput(node, marker, withinAttribute);
     if (replacement !== undefined) {
-      appendProjection(pieces, sourceOffsets, replacement, node.position);
+      if (
+        replacement === node.visibleText &&
+        node.visibleSourceOffsets.length === replacement.length + 1
+      ) {
+        appendMappedProjection(
+          pieces,
+          sourceOffsets,
+          replacement,
+          node.visibleSourceOffsets,
+        );
+      } else {
+        appendProjection(pieces, sourceOffsets, replacement, node.position);
+      }
     } else if (pieces.length === 0) {
       sourceOffsets[sourceOffsets.length - 1] = end;
     }
