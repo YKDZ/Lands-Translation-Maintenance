@@ -36,6 +36,8 @@ const messageIdentitySchema = z.object({
 });
 const diagnosticSchema = z.object({
   diagnosticId: z.string(),
+  objectId: z.string(),
+  contentFingerprint: z.string(),
   ruleId: z.string(),
   severity: z.enum(["error", "warning", "info"]),
   code: z.string(),
