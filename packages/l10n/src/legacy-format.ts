@@ -59,6 +59,7 @@ function append(
   sourceStart: number,
   sourceEnd: number,
   exact: boolean,
+  finalBoundary = sourceEnd,
 ): void {
   if (text.length === 0) return;
   output.pieces.push(text);
@@ -68,7 +69,7 @@ function append(
       exact && text.length === sourceEnd - sourceStart
         ? sourceStart + index
         : index === text.length
-          ? sourceEnd
+          ? finalBoundary
           : sourceStart,
     );
   }
@@ -132,7 +133,14 @@ export function adaptLegacyMiniMessageInput(
   const emitClosures = (position: MiniMessagePosition): void => {
     for (const decoration of decorationNames) {
       if (!activeDecorations.delete(decoration)) continue;
-      append(output, `<!${decoration}>`, position.start, position.end, false);
+      append(
+        output,
+        `<!${decoration}>`,
+        position.start,
+        position.end,
+        false,
+        position.start,
+      );
     }
   };
   const emitMarker = (

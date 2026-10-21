@@ -35,11 +35,22 @@ void describe("Lands 旧颜色格式适配", () => {
     assert.equal(adapted?.exact, false);
   });
 
+  void it("让旧格式合成的装饰闭合占零宽范围", () => {
+    const adapted = adaptLegacyMiniMessageInput("&l&a绿色", "8.9.2");
+
+    assert.equal(adapted?.input, "<b><!b><green>绿色");
+    assert.equal(adapted?.sourceOffsets[3], 2);
+    assert.equal(adapted?.sourceOffsets[7], 2);
+    assert.equal(adapted?.sourceOffsets[14], 4);
+  });
+
   void it("不把未知版本、相似普通文本或旧版本不支持的 § 码当作颜色", () => {
     const old = adaptLegacyMiniMessageInput("§a字面 &z普通", "8.0.1");
+    const escaped = adaptLegacyMiniMessageInput("\\&a颜色", "8.9.2");
     const unknown = adaptLegacyMiniMessageInput("&a绿", "8.9.3");
 
     assert.equal(old?.input, "§a字面 &z普通");
+    assert.equal(escaped?.input, "\\<green>颜色");
     assert.equal(unknown, undefined);
   });
 });
