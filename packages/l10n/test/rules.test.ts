@@ -160,6 +160,34 @@ void describe("规则注册契约", () => {
       {},
       "warning",
     );
+    const movedLocation = evaluateRules(
+      sampleProject,
+      [
+        {
+          ...sample,
+          evaluate(project, context) {
+            const result = sample.evaluate(project, context)[0];
+            return result === undefined
+              ? []
+              : [
+                  {
+                    ...result,
+                    location: {
+                      ...result.location,
+                      line: 42,
+                      column: 7,
+                    },
+                  },
+                ];
+          },
+        },
+      ],
+      {
+        configuration: {
+          sample: { parameters: { themeFingerprint: "theme-token-v1" } },
+        },
+      },
+    ).diagnostics[0];
     const unrelatedRule = evaluate(sampleProject, "theme-token-v1", {
       future: { enabled: true },
     });
@@ -178,6 +206,7 @@ void describe("规则注册契约", () => {
     assert.ok(changedTheme);
     assert.ok(changedMessage);
     assert.ok(changedSeverity);
+    assert.ok(movedLocation);
     assert.ok(unrelatedRule);
     assert.ok(unrelatedParameter);
     assert.equal(base?.objectId, changedTheme?.objectId);
@@ -191,6 +220,9 @@ void describe("规则注册契约", () => {
       base?.contentFingerprint,
       changedSeverity?.contentFingerprint,
     );
+    assert.equal(base?.objectId, movedLocation?.objectId);
+    assert.equal(base?.contentFingerprint, movedLocation?.contentFingerprint);
+    assert.equal(base?.diagnosticId, movedLocation?.diagnosticId);
     assert.equal(base?.contentFingerprint, unrelatedRule?.contentFingerprint);
     assert.equal(base?.diagnosticId, unrelatedRule?.diagnosticId);
     assert.equal(

@@ -135,10 +135,6 @@ function diagnosticFromFinding(
       code: finding.code,
       objectId,
       contentFingerprint,
-      origin: finding.origin,
-      location: finding.location,
-      expected: finding.expected,
-      actual: finding.actual,
     }),
   );
   return {

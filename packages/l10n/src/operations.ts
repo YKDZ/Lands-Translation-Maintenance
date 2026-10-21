@@ -7,6 +7,17 @@ import {
   parseConfiguration,
   syncConfigurationFingerprint,
 } from "#/configuration";
+import {
+  emptyExceptionRecords,
+  parseExceptionRecords,
+  sameTextCandidateId,
+  sameTextContentFingerprint,
+  serializeExceptionRecords,
+  type DiagnosticExemptionRecord,
+  type ExceptionRecords,
+  type SameTextPendingReason,
+  type SameTextConfirmationRecord,
+} from "#/exceptions";
 import { readJarResources } from "#/jar";
 import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
 import { parseMiniMessages } from "#/minimessage";
@@ -28,6 +39,7 @@ import type {
   ProjectSummary,
   ProjectStructure,
   ProjectView,
+  RuleInput,
   ResourceInventoryEntry,
   SyncInputSnapshot,
   SyncMessageChange,
@@ -46,7 +58,6 @@ import {
   baselineDirectoryName,
   configurationFileName,
   lockFileName,
-  loadConfiguration,
   readState,
   resourceSetFingerprint,
   syncLockIntegrity,
@@ -61,6 +72,7 @@ import {
   type SourceBaseline,
   type SyncLock,
   type TranslationSeed,
+  exceptionsFileName,
 } from "#/state";
 import {
   assertFileSnapshots,
@@ -97,6 +109,25 @@ export interface InitializationOptions {
 export interface SyncApplyOptions {
   readonly beforeApply?: () => Promise<void>;
 }
+
+export interface ExceptionRecordingOptions {
+  readonly beforeApply?: () => Promise<void>;
+}
+
+export type ConfirmationReceipt =
+  | {
+      readonly kind: "diagnostic-exemption";
+      readonly diagnosticId: string;
+      readonly contentFingerprint: string;
+      readonly reason: string;
+    }
+  | {
+      readonly kind: "same-text";
+      readonly messageId: string;
+      readonly candidateId: string;
+      readonly contentFingerprint: string;
+      readonly reason: string;
+    };
 
 export type SyncApplyResult =
   | {
@@ -527,12 +558,17 @@ async function readTargets(
   return { targets: inputs, snapshots, issues };
 }
 
-function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
+function stateSummary(
+  project: ProjectView,
+  lock: SyncLock,
+  confirmedSameTextIds: ReadonlySet<string> = new Set(),
+): ProjectSummary {
   const messages = new Map(
     project.messages.map((message) => [message.id, message]),
   );
   let pendingTranslations = 0;
   let sameTextCandidates = 0;
+  let confirmedSameText = 0;
   let modifiedTranslations = 0;
   let missingTranslations = 0;
 
@@ -547,8 +583,10 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
       message.target === undefined
     )
       continue;
-    if (sameValue(message.target, message.source)) pendingTranslations += 1;
-    else modifiedTranslations += 1;
+    if (sameValue(message.target, message.source)) {
+      if (confirmedSameTextIds.has(message.id)) confirmedSameText += 1;
+      else pendingTranslations += 1;
+    } else modifiedTranslations += 1;
   }
   for (const candidate of lock.sameTextCandidates) {
     const message = messages.get(candidate.id);
@@ -558,7 +596,8 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
       message.target !== undefined &&
       sameValue(message.target, message.source)
     ) {
-      sameTextCandidates += 1;
+      if (confirmedSameTextIds.has(message.id)) confirmedSameText += 1;
+      else sameTextCandidates += 1;
     }
   }
 
@@ -567,6 +606,7 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
     messages: project.messages.length,
     pendingTranslations,
     sameTextCandidates,
+    confirmedSameText,
     modifiedTranslations,
     missingTranslations,
   };
@@ -592,7 +632,7 @@ function diagnostic(
     canonicalJson({ ruleId, severity, expected, actual }),
   );
   const diagnosticId = sha256(
-    canonicalJson({ ruleId, code, objectId, contentFingerprint, location }),
+    canonicalJson({ ruleId, code, objectId, contentFingerprint }),
   );
   return {
     diagnosticId,
@@ -608,12 +648,48 @@ function diagnostic(
   };
 }
 
+function sameTextMessagesToConfirm(
+  project: ProjectView,
+  lock: SyncLock,
+  confirmedIds: ReadonlySet<string>,
+): ProjectReport["sameTextToConfirm"] {
+  const seededIds = new Set(lock.translationSeeds.map((seed) => seed.id));
+  const candidateIds = new Set(
+    lock.sameTextCandidates.map((candidate) => candidate.id),
+  );
+  return project.messages
+    .filter(
+      (message) =>
+        (seededIds.has(message.id) || candidateIds.has(message.id)) &&
+        !confirmedIds.has(message.id) &&
+        message.targetStatus === "present" &&
+        message.target !== undefined &&
+        sameValue(message.target, message.source),
+    )
+    .map((message) => ({
+      message,
+      source: message.source,
+      target: message.target!,
+      pendingReason: seededIds.has(message.id)
+        ? ("translation-seed" as const)
+        : ("same-text-candidate" as const),
+      candidateId: sameTextCandidateId(
+        message,
+        message.source,
+        message.target!,
+        seededIds.has(message.id) ? "translation-seed" : "same-text-candidate",
+      ),
+    }))
+    .sort((left, right) => compareText(left.message.id, right.message.id));
+}
+
 function makeReport(
   operation: ProjectReport["operation"],
   project: ProjectView,
   lock: SyncLock,
   diagnostics: readonly Diagnostic[],
   coverage?: CheckCoverage,
+  confirmedSameTextIds: ReadonlySet<string> = new Set(),
 ): ProjectReport {
   const state = diagnostics.some((item) => item.severity === "error")
     ? "issues"
@@ -623,9 +699,14 @@ function makeReport(
   return {
     operation,
     state,
-    summary: stateSummary(project, lock),
+    summary: stateSummary(project, lock, confirmedSameTextIds),
     diagnostics: [...diagnostics].sort((left, right) =>
       compareText(canonicalJson(left), canonicalJson(right)),
+    ),
+    sameTextToConfirm: sameTextMessagesToConfirm(
+      project,
+      lock,
+      confirmedSameTextIds,
     ),
     knownOutOfScopeVisibleTexts: project.knownOutOfScopeVisibleTexts,
     ...(coverage === undefined ? {} : { coverage }),
@@ -2248,13 +2329,28 @@ export async function applySyncProject(
   };
 }
 
-async function loadSavedProject(projectDirectory: string): Promise<{
+interface LoadedSavedProject {
+  readonly project: string;
   readonly baseline: SourceBaseline;
   readonly lock: SyncLock;
   readonly configuration: ConsumerConfiguration;
   readonly view: ProjectView;
+  readonly exceptions: ExceptionRecords;
+  readonly exceptionPath: string;
+  readonly exceptionSnapshot: FileSnapshot;
+  readonly inputSnapshots: readonly FileSnapshot[];
+  readonly staticDiagnostics: readonly Diagnostic[];
+}
+
+interface EvaluatedSavedProject extends LoadedSavedProject {
+  readonly view: ProjectView;
   readonly diagnostics: readonly Diagnostic[];
-}> {
+  readonly coverage: CheckCoverage;
+}
+
+async function loadSavedProject(
+  projectDirectory: string,
+): Promise<LoadedSavedProject> {
   const project = await realpath(resolve(projectDirectory));
   await assertNoSymlinkPath(project, configurationFileName);
   await assertNoSymlinkPath(
@@ -2266,6 +2362,8 @@ async function loadSavedProject(projectDirectory: string): Promise<{
     project,
     `${stateDirectoryName}/${transactionFileName}`,
   );
+  const exceptionRelativePath = `${stateDirectoryName}/${exceptionsFileName}`;
+  await assertNoSymlinkPath(project, exceptionRelativePath);
   const state = await readState(project);
   if (!state.ok) {
     throw new ProjectOperationError(
@@ -2279,25 +2377,37 @@ async function loadSavedProject(projectDirectory: string): Promise<{
       },
     );
   }
-  const config = await loadConfiguration(project);
-  if (!config.ok) {
-    throw new ProjectOperationError(config.message, "configuration.invalid", {
-      file: configurationFileName,
-      path: [],
-    });
-  }
+  const configInput = await readBytes(
+    join(project, configurationFileName),
+    "维护清单",
+  );
+  const configuration = requireConfiguration(configInput.text);
   const targetInput = await readTargets(project, state.baseline);
+  const exceptionPath = resolveProjectFile(project, exceptionRelativePath);
+  const exceptionInput = await readOptionalBytes(exceptionPath);
+  let exceptions = emptyExceptionRecords();
+  if (exceptionInput !== undefined) {
+    try {
+      exceptions = parseExceptionRecords(exceptionInput.text);
+    } catch (error) {
+      throw new ProjectOperationError(
+        `例外记录无效：${error instanceof Error ? error.message : String(error)}`,
+        "exceptions.invalid",
+        { file: exceptionRelativePath, path: [] },
+      );
+    }
+  }
   const view = projectView(
     state.baseline,
     targetInput.targets,
     targetInput.issues,
   );
-  const diagnostics: Diagnostic[] = [];
+  const staticDiagnostics: Diagnostic[] = [];
   if (
-    syncConfigurationFingerprint(config.configuration) !==
+    syncConfigurationFingerprint(configuration) !==
     state.lock.syncConfigurationSha256
   ) {
-    diagnostics.push(
+    staticDiagnostics.push(
       diagnostic(
         "structure",
         "sync.configuration-changed",
@@ -2306,23 +2416,628 @@ async function loadSavedProject(projectDirectory: string): Promise<{
         { file: configurationFileName, path: ["translationScope"] },
         { syncConfigurationSha256: state.lock.syncConfigurationSha256 },
         {
-          syncConfigurationSha256: syncConfigurationFingerprint(
-            config.configuration,
-          ),
+          syncConfigurationSha256: syncConfigurationFingerprint(configuration),
         },
       ),
     );
   }
-  const evaluated = evaluateRules(view, builtInRules, {
-    configuration: config.configuration.rules,
-  });
-  diagnostics.push(...evaluated.diagnostics);
+  const baselinePath = join(
+    project,
+    stateDirectoryName,
+    baselineDirectoryName,
+    baselineFileName,
+  );
+  const lockPath = join(project, stateDirectoryName, lockFileName);
+  const exceptionSnapshot: FileSnapshot = {
+    path: exceptionPath,
+    sha256: exceptionInput?.sha256,
+  };
   return {
+    project,
     baseline: state.baseline,
     lock: state.lock,
-    configuration: config.configuration,
+    configuration,
     view,
-    diagnostics,
+    exceptions,
+    exceptionPath,
+    exceptionSnapshot,
+    inputSnapshots: [
+      {
+        path: join(project, configurationFileName),
+        sha256: configInput.sha256,
+      },
+      { path: baselinePath, sha256: sha256(state.baselineText) },
+      { path: lockPath, sha256: sha256(state.lockText) },
+      ...targetInput.snapshots,
+      exceptionSnapshot,
+    ],
+    staticDiagnostics,
+  };
+}
+
+function enabledRulesRequireInput(
+  configuration: ConsumerConfiguration,
+  input: RuleInput,
+): boolean {
+  return builtInRules.some(
+    (rule) =>
+      rule.requiredInputs?.includes(input) === true &&
+      configuration.rules?.[rule.id]?.enabled !== false,
+  );
+}
+
+async function evaluateSavedProject(
+  loaded: LoadedSavedProject,
+  operation: "status" | "check",
+): Promise<EvaluatedSavedProject> {
+  const view =
+    operation === "check" &&
+    enabledRulesRequireInput(loaded.configuration, "minimessage-parse")
+      ? {
+          ...loaded.view,
+          miniMessage: await parseMiniMessages(
+            loaded.view.messages,
+            loaded.view.resources,
+            loaded.baseline.miniMessageTheme,
+          ),
+        }
+      : loaded.view;
+  const evaluation = evaluateProject(view, loaded.configuration);
+  return {
+    ...loaded,
+    view,
+    diagnostics: [...loaded.staticDiagnostics, ...evaluation.diagnostics],
+    coverage: evaluation.coverage,
+  };
+}
+
+function isExecutionPrecondition(code: string): boolean {
+  return (
+    code === "sync.configuration-changed" ||
+    code === "mapping.invalid" ||
+    code === "source.field-missing" ||
+    code === "message.type-mismatch" ||
+    code === "target-missing" ||
+    code === "yaml-invalid" ||
+    code === "yaml-duplicate-key" ||
+    code === "yaml-root-invalid"
+  );
+}
+
+function requiredRuleInputUnavailable(
+  project: EvaluatedSavedProject,
+  ruleId: string,
+  operation: "status" | "check",
+  messageId?: string,
+): boolean {
+  const rule = builtInRules.find((candidate) => candidate.id === ruleId);
+  if (rule === undefined) return true;
+  return (
+    rule.requiredInputs?.some((input) => {
+      switch (input) {
+        case "minimessage-parse":
+          if (operation !== "check" || project.view.miniMessage === undefined)
+            return true;
+          if (messageId === undefined)
+            return project.view.miniMessage.unavailableCapabilities.length > 0;
+          if (
+            !project.view.messages.some((message) => message.id === messageId)
+          )
+            return false;
+          return (
+            project.view.miniMessage.documents.filter(
+              (document) => document.message.id === messageId,
+            ).length === 0 ||
+            project.view.miniMessage.documents.some(
+              (document) =>
+                document.message.id === messageId &&
+                document.status === "parser-failed",
+            )
+          );
+      }
+    }) ?? false
+  );
+}
+
+function ruleUnavailable(
+  project: EvaluatedSavedProject,
+  ruleId: string,
+  operation: "status" | "check",
+  messageId?: string,
+  diagnosticCode?: string,
+): boolean {
+  const incompleteVariableEvaluation =
+    ruleId === "minimessage-variables" &&
+    diagnosticCode !== "minimessage.variable-coverage-unavailable" &&
+    messageId !== undefined &&
+    project.diagnostics.some(
+      (item) =>
+        item.ruleId === ruleId &&
+        item.message?.id === messageId &&
+        item.code === "minimessage.variable-coverage-unavailable",
+    );
+  return (
+    !project.coverage.enabledRuleIds.includes(ruleId) ||
+    project.coverage.disabledRuleIds.includes(ruleId) ||
+    project.coverage.unsupportedRuleIds.includes(ruleId) ||
+    requiredRuleInputUnavailable(project, ruleId, operation, messageId) ||
+    incompleteVariableEvaluation
+  );
+}
+
+function assertConfirmationPreconditions(project: EvaluatedSavedProject): void {
+  const mappingIssue = project.view.fileIssues.find((issue) =>
+    isExecutionPrecondition(issue.code),
+  );
+  if (mappingIssue !== undefined) {
+    throw new ProjectOperationError(
+      `当前项目存在执行前提问题，不能记录确认：${mappingIssue.reason}`,
+      "confirmation.precondition-failed",
+      { file: mappingIssue.file, path: mappingIssue.path },
+    );
+  }
+  const blocker = project.diagnostics.find((item) =>
+    isExecutionPrecondition(item.code),
+  );
+  if (blocker !== undefined) {
+    throw new ProjectOperationError(
+      `当前项目存在执行前提问题，不能记录确认：${blocker.reason}`,
+      "confirmation.precondition-failed",
+      blocker.location,
+    );
+  }
+  const blockedMessage = project.view.messages.find(
+    (message) => message.targetStatus === "blocked",
+  );
+  if (blockedMessage !== undefined) {
+    throw new ProjectOperationError(
+      "受管理消息的目标路径被现有内容阻断，不能记录确认",
+      "confirmation.precondition-failed",
+      { file: blockedMessage.targetFile, path: blockedMessage.path },
+    );
+  }
+}
+
+function sameDiagnosticObject(
+  diagnostic: Diagnostic,
+  record: DiagnosticExemptionRecord,
+): boolean {
+  return diagnostic.objectId === record.objectId;
+}
+
+function exceptionNotice(
+  code: string,
+  reason: string,
+  location: DiagnosticLocation,
+  expected: JsonValue,
+  actual: JsonValue,
+): Diagnostic {
+  return diagnostic(
+    "exceptions",
+    code,
+    "warning",
+    reason,
+    location,
+    expected,
+    actual,
+  );
+}
+
+function applyExceptionRecords(
+  project: EvaluatedSavedProject,
+  operation: "status" | "check",
+): {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly confirmedSameTextIds: ReadonlySet<string>;
+} {
+  const suppressed = new Set<string>();
+  const notices: Diagnostic[] = [];
+  const confirmedSameTextIds = new Set<string>();
+  const messages = new Map(
+    project.view.messages.map((message) => [message.id, message]),
+  );
+
+  for (const record of project.exceptions.diagnosticExemptions) {
+    const original = project.diagnostics.find(
+      (item) =>
+        item.objectId === record.objectId &&
+        item.contentFingerprint === record.contentFingerprint,
+    );
+    if (original !== undefined && !isExecutionPrecondition(original.code)) {
+      if (
+        !ruleUnavailable(
+          project,
+          record.ruleId,
+          operation,
+          record.message?.id,
+          record.code,
+        )
+      )
+        suppressed.add(original.diagnosticId);
+      else {
+        notices.push(
+          exceptionNotice(
+            "exception.unable-to-evaluate",
+            `规则 ${record.ruleId} 已禁用或未完成，无法评估此豁免；原理由：${record.reason}`,
+            original.location,
+            { state: "evaluated diagnostic" },
+            { state: "unable-to-evaluate" },
+          ),
+        );
+      }
+      continue;
+    }
+
+    const unavailable = ruleUnavailable(
+      project,
+      record.ruleId,
+      operation,
+      record.message?.id,
+      record.code,
+    );
+    if (unavailable) {
+      notices.push(
+        exceptionNotice(
+          "exception.unable-to-evaluate",
+          `规则 ${record.ruleId} 已禁用或未完成，无法评估此豁免；原理由：${record.reason}`,
+          record.location,
+          { state: "evaluated diagnostic" },
+          { state: "unable-to-evaluate" },
+        ),
+      );
+      continue;
+    }
+
+    const currentObject = project.diagnostics.find((item) =>
+      sameDiagnosticObject(item, record),
+    );
+    if (currentObject !== undefined) {
+      notices.push(
+        exceptionNotice(
+          "exception.review-required",
+          `诊断内容或相关条件已变化，需要复核；原理由：${record.reason}`,
+          currentObject.location,
+          { contentFingerprint: record.contentFingerprint },
+          { contentFingerprint: currentObject.contentFingerprint },
+        ),
+      );
+      continue;
+    }
+
+    const messageExists =
+      record.message === undefined || messages.has(record.message.id);
+    notices.push(
+      exceptionNotice(
+        "exception.orphaned",
+        `诊断已消失或消息已删除，请清理此记录；原理由：${record.reason}`,
+        record.location,
+        { state: "matching diagnostic" },
+        { state: messageExists ? "diagnostic-missing" : "message-missing" },
+      ),
+    );
+  }
+
+  for (const record of project.exceptions.sameTextConfirmations) {
+    const message = messages.get(record.message.id);
+    if (message === undefined) {
+      notices.push(
+        exceptionNotice(
+          "same-text.orphaned",
+          `同文消息已删除，请清理此记录；原理由：${record.reason}`,
+          { file: record.message.targetFile, path: record.message.path },
+          { state: "same source and target" },
+          { state: "message-missing" },
+        ),
+      );
+      continue;
+    }
+    if (
+      message.targetStatus === "blocked" ||
+      project.view.fileIssues.some(
+        (issue) =>
+          issue.file === message.targetFile &&
+          ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
+            issue.code,
+          ),
+      )
+    ) {
+      notices.push(
+        exceptionNotice(
+          "same-text.unable-to-evaluate",
+          `目标 YAML 或映射无法可靠读取，不能评估此同文确认；原理由：${record.reason}`,
+          { file: message.targetFile, path: message.path },
+          { state: "same source and target" },
+          { state: "unable-to-evaluate" },
+        ),
+      );
+      continue;
+    }
+    const pendingReason: SameTextPendingReason | undefined =
+      project.lock.translationSeeds.some((seed) => seed.id === message.id)
+        ? "translation-seed"
+        : project.lock.sameTextCandidates.some(
+              (candidate) => candidate.id === message.id,
+            )
+          ? "same-text-candidate"
+          : undefined;
+    const hasPendingReason = pendingReason !== undefined;
+    const isSameText =
+      message.targetStatus === "present" &&
+      message.target !== undefined &&
+      sameValue(message.target, message.source);
+    const fingerprint =
+      message.target === undefined
+        ? undefined
+        : sameTextContentFingerprint(message, message.source, message.target);
+    const candidateId =
+      isSameText && pendingReason !== undefined && message.target !== undefined
+        ? sameTextCandidateId(
+            message,
+            message.source,
+            message.target,
+            pendingReason,
+          )
+        : undefined;
+    if (
+      isSameText &&
+      hasPendingReason &&
+      fingerprint === record.contentFingerprint &&
+      candidateId === record.candidateId &&
+      pendingReason === record.pendingReason
+    ) {
+      confirmedSameTextIds.add(message.id);
+      continue;
+    }
+    if (hasPendingReason) {
+      notices.push(
+        exceptionNotice(
+          "same-text.review-required",
+          `原文、译文或消息定位已变化，需要重新确认同文；原理由：${record.reason}`,
+          { file: message.targetFile, path: message.path },
+          { contentFingerprint: record.contentFingerprint },
+          {
+            contentFingerprint: fingerprint ?? null,
+            candidateId: candidateId ?? null,
+            pendingReason,
+            targetStatus: message.targetStatus,
+          },
+        ),
+      );
+      continue;
+    }
+    notices.push(
+      exceptionNotice(
+        "same-text.orphaned",
+        `此消息当前没有待确认的同文原因，请清理记录；原理由：${record.reason}`,
+        { file: message.targetFile, path: message.path },
+        { state: "pending same-text reason" },
+        { state: "no matching reason" },
+      ),
+    );
+  }
+
+  return {
+    diagnostics: [
+      ...project.diagnostics.filter(
+        (item) => !suppressed.has(item.diagnosticId),
+      ),
+      ...notices,
+    ],
+    confirmedSameTextIds,
+  };
+}
+
+async function evaluatedProjectForInspection(
+  projectDirectory: string,
+  operation: "status" | "check",
+): Promise<EvaluatedSavedProject> {
+  return evaluateSavedProject(
+    await loadSavedProject(projectDirectory),
+    operation,
+  );
+}
+
+async function currentDiagnosticProject(
+  projectDirectory: string,
+): Promise<EvaluatedSavedProject> {
+  const evaluated = await evaluatedProjectForInspection(
+    projectDirectory,
+    "check",
+  );
+  assertConfirmationPreconditions(evaluated);
+  return evaluated;
+}
+
+async function persistExceptionRecords(
+  project: EvaluatedSavedProject,
+  records: ExceptionRecords,
+  options: ExceptionRecordingOptions,
+  revalidate: (current: EvaluatedSavedProject) => void,
+): Promise<void> {
+  const content = serializeExceptionRecords(records);
+  try {
+    await writeFilesAtomically(
+      project.project,
+      `${stateDirectoryName}/${transactionFileName}`,
+      [
+        {
+          path: project.exceptionPath,
+          content,
+          expectedSha256: project.exceptionSnapshot.sha256,
+        },
+      ],
+      async () => {
+        await options.beforeApply?.();
+        const current = await currentDiagnosticProject(project.project);
+        revalidate(current);
+        await assertFileSnapshots(project.inputSnapshots);
+      },
+    );
+  } catch (error) {
+    if (error instanceof ConcurrentEditError) {
+      throw new ProjectOperationError(
+        error.message,
+        "confirmation.concurrent-edit",
+        { file: error.file, path: [] },
+      );
+    }
+    throw error;
+  }
+}
+
+export async function recordDiagnosticExemption(
+  projectDirectory: string,
+  diagnosticId: string,
+  reason: string,
+  options: ExceptionRecordingOptions = {},
+): Promise<ConfirmationReceipt> {
+  const normalizedReason = reason.trim();
+  if (normalizedReason.length === 0) {
+    throw new ProjectOperationError(
+      "诊断豁免必须提供理由",
+      "confirmation.reason-required",
+      { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
+    );
+  }
+  const project = await currentDiagnosticProject(projectDirectory);
+  const selected = project.diagnostics.find(
+    (item) => item.diagnosticId === diagnosticId,
+  );
+  if (selected === undefined) {
+    throw new ProjectOperationError(
+      "当前检查中找不到此诊断 ID；诊断对象可能已变化或无法评估",
+      "confirmation.diagnostic-not-current",
+      { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
+    );
+  }
+  if (
+    isExecutionPrecondition(selected.code) ||
+    ruleUnavailable(
+      project,
+      selected.ruleId,
+      "check",
+      selected.message?.id,
+      selected.code,
+    )
+  ) {
+    throw new ProjectOperationError(
+      "相关规则未完成评估，不能确认此诊断",
+      "confirmation.unable-to-evaluate",
+      selected.location,
+    );
+  }
+  const record: DiagnosticExemptionRecord = {
+    diagnosticId: selected.diagnosticId,
+    objectId: selected.objectId,
+    contentFingerprint: selected.contentFingerprint,
+    ruleId: selected.ruleId,
+    code: selected.code,
+    ...(selected.message === undefined ? {} : { message: selected.message }),
+    ...(selected.origin === undefined ? {} : { origin: selected.origin }),
+    location: selected.location,
+    reason: normalizedReason,
+  };
+  const records: ExceptionRecords = {
+    ...project.exceptions,
+    diagnosticExemptions: [
+      ...project.exceptions.diagnosticExemptions.filter(
+        (existing) => existing.objectId !== selected.objectId,
+      ),
+      record,
+    ].sort((left, right) => compareText(left.objectId, right.objectId)),
+  };
+  await persistExceptionRecords(project, records, options, (current) => {
+    const stillCurrent = current.diagnostics.find(
+      (item) =>
+        item.diagnosticId === selected.diagnosticId &&
+        item.objectId === selected.objectId &&
+        item.contentFingerprint === selected.contentFingerprint,
+    );
+    if (stillCurrent === undefined) {
+      throw new ProjectOperationError(
+        "写入前诊断对象已变化，未记录豁免",
+        "confirmation.diagnostic-changed",
+        selected.location,
+      );
+    }
+  });
+  return {
+    kind: "diagnostic-exemption",
+    diagnosticId: selected.diagnosticId,
+    contentFingerprint: selected.contentFingerprint,
+    reason: normalizedReason,
+  };
+}
+
+export async function confirmSameText(
+  projectDirectory: string,
+  candidateId: string,
+  reason: string,
+  options: ExceptionRecordingOptions = {},
+): Promise<ConfirmationReceipt> {
+  const normalizedReason = reason.trim();
+  if (normalizedReason.length === 0) {
+    throw new ProjectOperationError(
+      "合理同文确认必须提供理由",
+      "confirmation.reason-required",
+      { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
+    );
+  }
+  const project = await currentDiagnosticProject(projectDirectory);
+  const selected = sameTextMessagesToConfirm(
+    project.view,
+    project.lock,
+    new Set(),
+  ).find((candidate) => candidate.candidateId === candidateId);
+  if (selected === undefined) {
+    throw new ProjectOperationError(
+      "当前检查中找不到此同文候选 ID；候选内容或待处理原因可能已变化",
+      "confirmation.same-text-not-current",
+      { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
+    );
+  }
+  const message = selected.message;
+  const contentFingerprint = sameTextContentFingerprint(
+    message,
+    selected.source,
+    selected.target,
+  );
+  const record: SameTextConfirmationRecord = {
+    candidateId,
+    pendingReason: selected.pendingReason,
+    message,
+    contentFingerprint,
+    reason: normalizedReason,
+  };
+  const records: ExceptionRecords = {
+    ...project.exceptions,
+    sameTextConfirmations: [
+      ...project.exceptions.sameTextConfirmations.filter(
+        (existing) => existing.message.id !== message.id,
+      ),
+      record,
+    ].sort((left, right) => compareText(left.message.id, right.message.id)),
+  };
+  await persistExceptionRecords(project, records, options, (current) => {
+    const currentCandidate = sameTextMessagesToConfirm(
+      current.view,
+      current.lock,
+      new Set(),
+    ).find((candidate) => candidate.candidateId === candidateId);
+    if (currentCandidate === undefined) {
+      throw new ProjectOperationError(
+        "写入前同文候选已变化，未记录确认",
+        "confirmation.same-text-changed",
+        { file: message.targetFile, path: message.path },
+      );
+    }
+  });
+  return {
+    kind: "same-text",
+    messageId: message.id,
+    candidateId,
+    contentFingerprint,
+    reason: normalizedReason,
   };
 }
 
@@ -2330,9 +3045,12 @@ export async function inspectProject(
   projectDirectory: string,
   operation: "status" | "check",
 ): Promise<ProjectReport> {
-  let loaded;
+  let evaluated: EvaluatedSavedProject;
   try {
-    loaded = await loadSavedProject(projectDirectory);
+    evaluated = await evaluatedProjectForInspection(
+      projectDirectory,
+      operation,
+    );
   } catch (error) {
     return invalidStateReport(
       operation,
@@ -2345,39 +3063,14 @@ export async function inspectProject(
         : { file: stateDirectoryName, path: [] },
     );
   }
-  if (operation === "status") {
-    return makeReport(operation, loaded.view, loaded.lock, loaded.diagnostics);
-  }
-  const miniMessageChecksEnabled =
-    loaded.configuration.rules?.["minimessage-syntax"]?.enabled !== false ||
-    loaded.configuration.rules?.["minimessage-variables"]?.enabled !== false;
-  const view = miniMessageChecksEnabled
-    ? {
-        ...loaded.view,
-        miniMessage: await parseMiniMessages(
-          loaded.view.messages,
-          loaded.view.resources,
-          loaded.baseline.miniMessageTheme,
-          loaded.configuration.source.version,
-        ),
-      }
-    : loaded.view;
-  const evaluation = evaluateProject(view, loaded.configuration);
-  const diagnostics = [
-    ...loaded.diagnostics,
-    ...evaluation.diagnostics.filter(
-      (entry) =>
-        !loaded.diagnostics.some(
-          (existing) => existing.diagnosticId === entry.diagnosticId,
-        ),
-    ),
-  ];
+  const resolved = applyExceptionRecords(evaluated, operation);
   return makeReport(
     operation,
-    view,
-    loaded.lock,
-    diagnostics,
-    evaluation.coverage,
+    evaluated.view,
+    evaluated.lock,
+    resolved.diagnostics,
+    operation === "check" ? evaluated.coverage : undefined,
+    resolved.confirmedSameTextIds,
   );
 }
 

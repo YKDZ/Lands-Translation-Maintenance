@@ -14,10 +14,12 @@ import {
 import type { ProjectReport, SyncPlan, SyncPreviewResult } from "#/model";
 import {
   applySyncProject,
+  confirmSameText,
   initializeProject,
   inspectProject,
   operationExitCode,
   previewSyncProject,
+  recordDiagnosticExemption,
 } from "#/operations";
 
 export interface CliDependencies {
@@ -61,10 +63,20 @@ const reportSchema = z.object({
     messages: z.number().int().nonnegative(),
     pendingTranslations: z.number().int().nonnegative(),
     sameTextCandidates: z.number().int().nonnegative(),
+    confirmedSameText: z.number().int().nonnegative(),
     modifiedTranslations: z.number().int().nonnegative(),
     missingTranslations: z.number().int().nonnegative(),
   }),
   diagnostics: z.array(diagnosticSchema),
+  sameTextToConfirm: z.array(
+    z.object({
+      candidateId: z.string().regex(/^[0-9a-f]{64}$/),
+      message: messageIdentitySchema,
+      source: jsonValueSchema,
+      target: jsonValueSchema,
+      pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
+    }),
+  ),
   knownOutOfScopeVisibleTexts: z.array(
     z.object({
       file: z.string(),
@@ -184,6 +196,21 @@ const syncPreviewSchema = z.union([
     resourceChanges: resourceChangesSchema,
   }),
 ]);
+const confirmationReceiptSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("diagnostic-exemption"),
+    diagnosticId: z.string().regex(/^[0-9a-f]{64}$/),
+    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    reason: z.string(),
+  }),
+  z.object({
+    kind: z.literal("same-text"),
+    messageId: z.string().regex(/^[0-9a-f]{64}$/),
+    candidateId: z.string().regex(/^[0-9a-f]{64}$/),
+    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    reason: z.string(),
+  }),
+]);
 
 function jsonLine(value: unknown): string {
   return JSON.stringify(value);
@@ -215,8 +242,17 @@ function renderReport(report: ReportPayload) {
   } as const;
   const lines = [
     `${report.operation}：${stateNames[report.state]}`,
-    `资源文件 ${report.summary.resourceFiles} 项；消息 ${report.summary.messages} 条；待翻译 ${report.summary.pendingTranslations} 条；历史同文候选 ${report.summary.sameTextCandidates} 条；已修改 ${report.summary.modifiedTranslations} 条；缺失 ${report.summary.missingTranslations} 条。`,
+    `资源文件 ${report.summary.resourceFiles} 项；消息 ${report.summary.messages} 条；待翻译 ${report.summary.pendingTranslations} 条；历史同文候选 ${report.summary.sameTextCandidates} 条；已确认同文 ${report.summary.confirmedSameText} 条；已修改 ${report.summary.modifiedTranslations} 条；缺失 ${report.summary.missingTranslations} 条。`,
   ];
+  const pendingReasonNames = {
+    "translation-seed": "同步填入的原文",
+    "same-text-candidate": "历史同文候选",
+  } as const;
+  for (const candidate of report.sameTextToConfirm) {
+    lines.push(
+      `待确认同文 ${candidate.candidateId}（${pendingReasonNames[candidate.pendingReason]}）：${candidate.message.targetFile}:${candidate.message.path.join(".")}；原文 ${jsonLine(candidate.source)}；译文 ${jsonLine(candidate.target)}。`,
+    );
+  }
   if (report.knownOutOfScopeVisibleTexts.length > 0) {
     lines.push("已知范围外可见文本（仅登记，不纳入翻译维护）：");
     for (const visibleText of report.knownOutOfScopeVisibleTexts) {
@@ -244,7 +280,7 @@ function renderReport(report: ReportPayload) {
     }
   }
   if (report.diagnostics.length === 0) {
-    lines.push("没有结构诊断。");
+    lines.push("没有诊断。");
   } else {
     for (const diagnostic of report.diagnostics) {
       const location = `${diagnostic.location.file}${diagnostic.location.path.length === 0 ? "" : `:${diagnostic.location.path.join(".")}`}`;
@@ -258,7 +294,7 @@ function renderReport(report: ReportPayload) {
           ? ""
           : `（来源：${origins[diagnostic.origin]}）`;
       lines.push(
-        `[${diagnostic.severity}] ${location}${origin} ${diagnostic.code}：${diagnostic.reason}；期望 ${jsonLine(diagnostic.expected)}，实际 ${jsonLine(diagnostic.actual)}。`,
+        `[${diagnostic.severity}] ${location}${origin} ${diagnostic.code}：${diagnostic.reason}；期望 ${jsonLine(diagnostic.expected)}，实际 ${jsonLine(diagnostic.actual)}。（诊断 ID：${diagnostic.diagnosticId}）`,
       );
     }
   }
@@ -563,6 +599,144 @@ const checkCommand = define.command("check")({
   },
 });
 
+const exemptCommand = define.command("exempt")({
+  kind: "command",
+  parent: "lands",
+  name: "exempt",
+  description: "为当前一条具体诊断记录有理由的豁免",
+  fields: {
+    project: {
+      kind: "valueOption",
+      longOption: "--project",
+      description: "消费者项目目录",
+    },
+    diagnostic: {
+      kind: "valueOption",
+      longOption: "--diagnostic",
+      description: "当前 check 输出中的诊断 ID",
+    },
+    reason: {
+      kind: "valueOption",
+      longOption: "--reason",
+      description: "接受此具体差异的理由",
+    },
+  },
+  input: z.object({
+    project: z.string().min(1),
+    diagnostic: z.string().regex(/^[0-9a-f]{64}$/),
+    reason: z.string().trim().min(1),
+  }),
+  success: {
+    kind: "data",
+    variants: {
+      recorded: {
+        description: "诊断豁免已记录",
+        schema: z.object({ confirmation: confirmationReceiptSchema }),
+        exitCode: 0,
+        text: ({ confirmation }) => {
+          if (confirmation.kind !== "diagnostic-exemption") {
+            throw new Error("诊断豁免返回了不匹配的确认类型");
+          }
+          return text.line(
+            `已记录诊断豁免 ${confirmation.diagnosticId}：${confirmation.reason}`,
+          );
+        },
+      },
+    },
+  },
+  failures: {
+    rejected: {
+      description: "当前诊断无法确认",
+      schema: z.object({ message: z.string() }),
+      exitCode: 1,
+      text: ({ message }) => text.line(`诊断豁免失败：${message}`),
+    },
+  },
+  async handler({ input, outcome }) {
+    try {
+      const confirmation = await recordDiagnosticExemption(
+        input.project,
+        input.diagnostic,
+        input.reason,
+      );
+      return outcome.data.recorded({ confirmation });
+    } catch (error) {
+      return outcome.failure.rejected({
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+});
+
+const confirmSameTextCommand = define.command("confirmSameText")({
+  kind: "command",
+  parent: "lands",
+  name: "confirm-same-text",
+  description: "为当前同文消息记录有理由的单独确认",
+  fields: {
+    project: {
+      kind: "valueOption",
+      longOption: "--project",
+      description: "消费者项目目录",
+    },
+    candidate: {
+      kind: "valueOption",
+      longOption: "--candidate",
+      description: "当前 status/check 输出中的同文候选 ID",
+    },
+    reason: {
+      kind: "valueOption",
+      longOption: "--reason",
+      description: "保留原文与译文相同的理由",
+    },
+  },
+  input: z.object({
+    project: z.string().min(1),
+    candidate: z.string().regex(/^[0-9a-f]{64}$/),
+    reason: z.string().trim().min(1),
+  }),
+  success: {
+    kind: "data",
+    variants: {
+      recorded: {
+        description: "合理同文确认已记录",
+        schema: z.object({ confirmation: confirmationReceiptSchema }),
+        exitCode: 0,
+        text: ({ confirmation }) => {
+          if (confirmation.kind !== "same-text") {
+            throw new Error("同文确认返回了不匹配的确认类型");
+          }
+          return text.line(
+            `已确认同文候选 ${confirmation.candidateId}：${confirmation.reason}`,
+          );
+        },
+      },
+    },
+  },
+  failures: {
+    rejected: {
+      description: "当前同文状态无法确认",
+      schema: z.object({ message: z.string() }),
+      exitCode: 1,
+      text: ({ message }) => text.line(`同文确认失败：${message}`),
+    },
+  },
+  async handler({ input, outcome }) {
+    try {
+      const confirmation = await confirmSameText(
+        input.project,
+        input.candidate,
+        input.reason,
+      );
+      return outcome.data.recorded({ confirmation });
+    } catch (error) {
+      return outcome.failure.rejected({
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+});
+
 const schemaCommand = define.command("schema")({
   kind: "command",
   parent: "lands",
@@ -637,6 +811,8 @@ export const cli = define({
     ...syncCommand,
     ...statusCommand,
     ...checkCommand,
+    ...exemptCommand,
+    ...confirmSameTextCommand,
     ...schemaCommand,
   },
 });
