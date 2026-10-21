@@ -68,7 +68,7 @@ gui:
           material: POTION
           slots: 31
         spawn:
-          name: <t:regular_heading>首都传送
+          name: <t:regular_heading>传送点
           lore:
             - <t:decoration>✖ </t><t:regular>Teleport to the capital's spawn.
           material: ENDER_PEARL
