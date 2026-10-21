@@ -1,5 +1,6 @@
 import type {
   CheckRule,
+  MiniMessageContextFrame,
   MiniMessagePosition,
   TranslatableTextDocument,
   TranslatableTextSegment,
@@ -16,6 +17,7 @@ interface TextPart {
 interface TextRun {
   readonly text: string;
   readonly parts: readonly TextPart[];
+  readonly contextKey: string;
 }
 
 interface TermMatch {
@@ -82,21 +84,139 @@ function sourcePositions(run: TextRun, start: number, end: number) {
 function textRuns(
   segments: readonly TranslatableTextSegment[],
 ): readonly TextRun[] {
+  const elementFrames = new Map<
+    string,
+    { readonly frame: MiniMessageContextFrame; parentKey?: string }
+  >();
+  for (const segment of segments) {
+    for (const frame of segment.context) {
+      if (frame.kind !== "html-element") continue;
+      const key = `${frame.position.start}:${frame.position.end}:${frame.name}`;
+      elementFrames.set(key, { frame });
+    }
+  }
+  const orderedElements = [...elementFrames.entries()].sort(
+    ([leftKey, left], [rightKey, right]) =>
+      left.frame.position.start - right.frame.position.start ||
+      right.frame.position.end - left.frame.position.end ||
+      leftKey.localeCompare(rightKey),
+  );
+  for (const [, element] of orderedElements) {
+    const parents = orderedElements.filter(([, candidate]) => {
+      const parent = candidate.frame.position;
+      const child = element.frame.position;
+      return (
+        parent.start <= child.start &&
+        parent.end >= child.end &&
+        (parent.start < child.start || parent.end > child.end)
+      );
+    });
+    const parent = parents.sort(
+      ([leftKey, left], [rightKey, right]) =>
+        left.frame.position.end -
+          left.frame.position.start -
+          (right.frame.position.end - right.frame.position.start) ||
+        leftKey.localeCompare(rightKey),
+    )[0];
+    if (parent !== undefined) element.parentKey = parent[0];
+  }
+
+  const elementIdentities = new Map<string, string>();
+  const siblingOrdinals = new Map<string, number>();
+  for (const [key, element] of orderedElements) {
+    const parentIdentity =
+      element.parentKey === undefined
+        ? "root"
+        : (elementIdentities.get(element.parentKey) ?? "root");
+    const siblingKey = `${parentIdentity}\0${element.frame.name}`;
+    const ordinal = siblingOrdinals.get(siblingKey) ?? 0;
+    siblingOrdinals.set(siblingKey, ordinal + 1);
+    elementIdentities.set(
+      key,
+      `${parentIdentity}/${element.frame.name}[${ordinal}]`,
+    );
+  }
+
+  const clickFrames = new Map<string, MiniMessageContextFrame>();
+  for (const segment of segments) {
+    for (const frame of segment.context) {
+      if (frame.kind !== "tag" || frame.name !== "click") continue;
+      clickFrames.set(
+        `${frame.position.start}:${frame.position.end}:${frame.name}`,
+        frame,
+      );
+    }
+  }
+  const clickIdentities = new Map<string, string>();
+  [...clickFrames.entries()]
+    .sort(
+      ([leftKey, left], [rightKey, right]) =>
+        left.position.start - right.position.start ||
+        left.position.end - right.position.end ||
+        leftKey.localeCompare(rightKey),
+    )
+    .forEach(([key], index) => clickIdentities.set(key, `click[${index}]`));
+
+  const contextKey = (context: readonly MiniMessageContextFrame[]): string => {
+    const frames: string[] = [];
+    for (const [index, frame] of context.entries()) {
+      if (frame.kind === "tag") {
+        if (frame.name === "click") {
+          const key = `${frame.position.start}:${frame.position.end}:${frame.name}`;
+          frames.push(`tag:${clickIdentities.get(key) ?? "click"}`);
+        }
+        continue;
+      }
+      if (frame.kind === "html-element") {
+        const key = `${frame.position.start}:${frame.position.end}:${frame.name}`;
+        frames.push(`html-element:${elementIdentities.get(key) ?? frame.name}`);
+        continue;
+      }
+      if (frame.kind === "html-attribute") {
+        const owner = context
+          .slice(0, index)
+          .findLast((candidate) => candidate.kind === "html-element");
+        const ownerIdentity =
+          owner === undefined
+            ? "root"
+            : (elementIdentities.get(
+                `${owner.position.start}:${owner.position.end}:${owner.name}`,
+              ) ?? owner.name);
+        frames.push(`html-attribute:${ownerIdentity}:${frame.name}`);
+        continue;
+      }
+      frames.push(`${frame.kind}:${frame.name}`);
+    }
+    return canonicalJson(frames);
+  };
+
   const runs: TextRun[] = [];
   let text = "";
   let parts: TextPart[] = [];
+  let currentContextKey: string | undefined;
 
   const flush = () => {
-    if (text !== "") runs.push({ text, parts });
+    if (text !== "" && currentContextKey !== undefined) {
+      runs.push({ text, parts, contextKey: currentContextKey });
+    }
     text = "";
     parts = [];
   };
 
   for (const segment of segments) {
+    const nextContextKey = contextKey(segment.context);
     if (segment.kind !== "text") {
       flush();
+      currentContextKey = nextContextKey;
       continue;
     }
+    if (
+      currentContextKey !== undefined &&
+      currentContextKey !== nextContextKey
+    ) {
+      flush();
+    }
+    currentContextKey = nextContextKey;
     const start = text.length;
     text += segment.value;
     parts.push({
@@ -359,19 +479,26 @@ function termFinding(
   const opposite = oppositeEntry(entry);
   const oppositeTranslations =
     opposite === undefined ? [] : allowedTranslations(opposite, overrides);
-  const found = translationMatches(targetRuns, allowed, oppositeTranslations);
+  const matchingTargetRuns = targetRuns.filter(
+    (targetRun) => targetRun.contextKey === run.contextKey,
+  );
+  const found = translationMatches(
+    matchingTargetRuns,
+    allowed,
+    oppositeTranslations,
+  );
   if (found.length > 0) return undefined;
 
   const wrong =
     opposite === undefined
       ? []
-      : translationMatches(targetRuns, oppositeTranslations, allowed);
+      : translationMatches(matchingTargetRuns, oppositeTranslations, allowed);
   const message = project.messages.find(
     (candidate) => candidate.id === document.message.id,
   );
   if (message === undefined) return undefined;
   const sourceRange = { start: match.start, end: match.end };
-  const targetSegments = targetRuns.map((targetRun) => targetRun.text);
+  const targetSegments = matchingTargetRuns.map((targetRun) => targetRun.text);
   const ruleFingerprint = {
     version: ruleFingerprintVersion,
     sourceVersion: project.miniMessage?.sourceVersion ?? "unknown",

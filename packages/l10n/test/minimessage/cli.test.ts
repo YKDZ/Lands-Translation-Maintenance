@@ -8,6 +8,7 @@ import { strToU8, unzipSync, zipSync } from "fflate";
 import {
   createProject,
   createGuiProject,
+  createFormatProject,
   readReport,
   runCli,
   runCliWithoutJava,
@@ -3197,6 +3198,94 @@ void describe("MiniMessage 官方检查制品", () => {
 });
 
 void describe("术语和风格正式检查", () => {
+  void it("只在对应地图 HTML 可译上下文中检查术语译法", async (t) => {
+    const cases = [
+      {
+        source: "<div title=Nation>Owner</div>",
+        target: "<div title=国家>所有权</div>",
+        expected: ["nation", "owner"],
+      },
+      {
+        source: "<div title='Owner '>Nation</div>",
+        target: "<div title='联邦 '>所有者</div>",
+        expected: ["nation", "owner"],
+      },
+      {
+        source: "<div title=Nation>Owner</div>",
+        target: "<div title=联邦>所有者</div>",
+        expected: [],
+      },
+      {
+        source: "<div>Nation and Owner</div>",
+        target: "<div>所有者与联邦</div>",
+        expected: [],
+      },
+      {
+        source: "<div><span>Nation </span><span>Owner</span></div>",
+        target: "<div><span>所有者 </span><span>联邦</span></div>",
+        expected: ["nation", "owner"],
+      },
+      {
+        source: "<click:run_command:'/x'>Nation</click> Owner",
+        target: "<click:run_command:'/x'>所有者</click> 联邦",
+        expected: ["nation", "owner"],
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const project = await createFormatProject(t, {
+        mapDescription: testCase.source,
+        targetMapDescription: testCase.target,
+      });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(checked.stderr || checked.stdout);
+      const mapFindings = (
+        report.diagnostics as readonly Record<string, unknown>[]
+      ).filter((diagnostic) => {
+        if (diagnostic.ruleId !== "terminology") return false;
+        const location = diagnostic.location as
+          | Record<string, unknown>
+          | undefined;
+        return (
+          JSON.stringify(location?.path) ===
+          JSON.stringify([
+            "general",
+            "integration",
+            "dynmap",
+            "land",
+            "description",
+          ])
+        );
+      });
+      assert.deepEqual(
+        mapFindings
+          .map((diagnostic) =>
+            String((diagnostic.expected as Record<string, unknown>).termId),
+          )
+          .sort(),
+        [...testCase.expected].sort(),
+        checked.stderr || checked.stdout,
+      );
+    }
+  });
+
   void it("保留 claims 名词句中同时出现的占领和领土", async (t) => {
     const result = await checkGreeting(
       t,
