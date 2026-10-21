@@ -440,9 +440,18 @@ public final class MiniMessageBridge {
             detail, raw, currentContext);
       }
 
-      if (name.equals("hover") && !closing && treeTag != null && treeTag.parts().size() >= 3
-          && treeTag.parts().get(1).value().equalsIgnoreCase("show_text")) {
-        TagPart content = treeTag.parts().get(2);
+      int hoverContentIndex = -1;
+      String hoverAction = "";
+      if (name.equals("hover") && !closing && treeTag != null && treeTag.parts().size() >= 2) {
+        hoverAction = treeTag.parts().get(1).value().toLowerCase(Locale.ROOT);
+        if (hoverAction.equals("show_text") && treeTag.parts().size() >= 3) {
+          hoverContentIndex = 2;
+        } else if (hoverAction.equals("show_entity") && treeTag.parts().size() >= 5) {
+          hoverContentIndex = 4;
+        }
+      }
+      if (hoverContentIndex >= 0) {
+        TagPart content = treeTag.parts().get(hoverContentIndex);
         MappedValue decoded = decodePart(input, content.token(), sourceMap);
         String nestedInput = content.value();
         boolean exact = decoded.value().equals(nestedInput);
@@ -458,7 +467,7 @@ public final class MiniMessageBridge {
         SourceMap nestedMap = sourceMap.nested(nestedInput, nestedIndexes, exact, emptyRange);
         Position hoverPosition = sourceMap.range(token.startIndex(), token.endIndex());
         List<Frame> nestedContext = new ArrayList<>(currentContext);
-        nestedContext.add(new Frame("hover-text", "hover:show_text", hoverPosition));
+        nestedContext.add(new Frame("hover-text", "hover:" + hoverAction, hoverPosition));
         int nestedDocumentIndex = nextDocumentIndex[0]++;
         outputDocument(resolver, theme, messageIndex,
             nestedDocumentIndex, documentIndex, nestedInput, nestedMap, nestedContext,
