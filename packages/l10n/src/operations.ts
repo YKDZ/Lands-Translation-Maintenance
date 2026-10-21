@@ -608,8 +608,8 @@ function projectView(
 
 function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable = [
-    "MiniMessage 变量、交互、标签对等及 Lands 控制语义检查尚未实现",
-    "变量、术语、风格和译文一致性检查尚未实现",
+    "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
+    "术语、风格和译文一致性检查尚未实现",
   ];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   if (

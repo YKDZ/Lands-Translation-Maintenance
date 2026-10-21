@@ -33,6 +33,26 @@ export interface MiniMessagePosition {
   readonly end: number;
 }
 
+export interface VariableContextPart {
+  readonly kind: string;
+  readonly identity: JsonValue;
+}
+
+export interface VariableOccurrence {
+  readonly name: string;
+  readonly context: readonly VariableContextPart[];
+  readonly position?: MiniMessagePosition;
+}
+
+export interface VariableCountDifference {
+  readonly name: string;
+  readonly context: readonly VariableContextPart[];
+  readonly expectedCount: number;
+  readonly actualCount: number;
+  readonly expectedPositions: readonly MiniMessagePosition[];
+  readonly actualPositions: readonly MiniMessagePosition[];
+}
+
 export interface MiniMessageContextFrame {
   readonly kind: "tag" | "hover-text";
   readonly name: string;

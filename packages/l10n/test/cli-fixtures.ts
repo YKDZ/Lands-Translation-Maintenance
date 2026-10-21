@@ -55,6 +55,7 @@ export async function createProject(
   t: TestContext,
   options: {
     readonly sourceGreeting?: string;
+    readonly sourceEntries?: readonly string[];
     readonly theme?: string;
     readonly bedrockTheme?: string;
   } = {},
@@ -76,7 +77,9 @@ export async function createProject(
           "  commands:",
           "    registered: Run",
           "list:",
-          "  entries: [first, second]",
+          `  entries: [${(options.sourceEntries ?? ["first", "second"])
+            .map((entry) => JSON.stringify(entry))
+            .join(", ")}]`,
           "",
         ].join("\n"),
       ),
