@@ -1521,6 +1521,8 @@ function tagOccurrences(
       return {
         kind: "tag",
         raw: "\n",
+        visibleText: "\n",
+        visibleSourceOffsets: [position.start, position.end],
         name: "newline",
         parameters: [],
         parameterPositions: [],
@@ -1828,8 +1830,8 @@ function nestingFindings(
           break;
         }
       }
-      if (matchedIndex >= 0 && matchedIndex === localContext.length - 1)
-        continue;
+      // 官方默认宽松模式允许结束标签匹配已打开祖先，并隐式关闭中间标签。
+      if (matchedIndex >= 0) continue;
       const current = canonicalTagName(node);
       const expectedOpen =
         matchedIndex >= 0
@@ -1851,7 +1853,7 @@ function nestingFindings(
         location: { file: document.file, path: document.path },
         reason: `MiniMessage 结束标签 </${current}> 与当前嵌套结构不匹配`,
         expected: {
-          state: "matching top-level open tag",
+          state: "matching open tag in active context",
           ...(expectedOpen === undefined ? {} : { openTag: expectedOpen }),
         },
         actual: {
