@@ -37,6 +37,10 @@ export interface SourceBaseline {
   readonly jarSha256: string;
   readonly resources: readonly ResourceSnapshot[];
   readonly mappings: readonly MappingSnapshot[];
+  readonly miniMessageTheme?: {
+    readonly file: string;
+    readonly source: string;
+  };
 }
 
 export interface TranslationSeed {
@@ -134,6 +138,10 @@ const baselineSchema = z
         })
         .strict(),
     ),
+    miniMessageTheme: z
+      .object({ file: z.string().min(1), source: z.string() })
+      .strict()
+      .optional(),
   })
   .strict();
 const lockSchema = z
