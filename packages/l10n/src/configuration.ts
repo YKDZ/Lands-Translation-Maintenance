@@ -422,7 +422,8 @@ export function validateConfiguration(
       const supportsPathPattern =
         field.category === "chat-string-list" ||
         field.category.startsWith("gui-") ||
-        field.category.startsWith("dialog-");
+        field.category.startsWith("dialog-") ||
+        field.category.startsWith("configuration-");
       if (
         (wildcards.length > 0 && !supportsPathPattern) ||
         (field.path.includes("**") &&
@@ -440,7 +441,7 @@ export function validateConfiguration(
             "path",
           ],
           reason:
-            "路径通配符只用于明确的聊天列表、GUI 或对话框字段；** 仅限通用 GUI 文本或聊天列表字段的末尾",
+            "路径通配符只用于明确的聊天列表、GUI、对话框或配置字段；** 仅限通用 GUI 文本或聊天列表字段的末尾",
           actual: field.path.join("."),
         });
       }
