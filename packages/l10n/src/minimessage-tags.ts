@@ -641,7 +641,7 @@ function controlNodeKey(
 
 function landsContextKey(
   document: ParsedMiniMessageDocument,
-  node: MiniMessageTagNode,
+  node: { readonly position: MiniMessageTagNode["position"] },
 ): string {
   return `${document.documentIndex}:${nodePositionKey(node.position)}`;
 }
@@ -649,7 +649,7 @@ function landsContextKey(
 function addControlContext(
   contexts: Map<string, JsonValue[]>,
   document: ParsedMiniMessageDocument,
-  node: MiniMessageTagNode,
+  node: { readonly position: MiniMessageTagNode["position"] },
   context: JsonValue,
 ): void {
   const key = landsContextKey(document, node);
@@ -672,11 +672,7 @@ function addContextToRange(
   for (const document of documents) {
     if (document.status !== "parsed") continue;
     for (const node of document.nodes) {
-      if (
-        node.kind === "tag" &&
-        node.position.start >= start &&
-        node.position.end <= end
-      ) {
+      if (node.position.start >= start && node.position.end <= end) {
         addControlContext(contexts, document, node, context);
       }
     }
@@ -1147,7 +1143,9 @@ function guiLoreControlScopes(
     const openRaw = `<action:${actionMatch[1]}>`;
     const openStart = actionMatch.index;
     const openEnd = openStart + openRaw.length;
-    const closeStart = openStart + actionMatch[0].indexOf("</action>");
+    const closeOffset = actionMatch[0].search(/<\/action>/iu);
+    if (closeOffset < 0) continue;
+    const closeStart = openStart + closeOffset;
     const closeEnd = closeStart + "</action>".length;
     const context = { kind: "lands-action", action, occurrence };
     const openFound = addConsumedControl(
@@ -1497,41 +1495,73 @@ function tagOccurrences(
   landsContextByPosition: ReadonlyMap<string, readonly JsonValue[]> = new Map(),
 ): readonly TagOccurrence[] {
   const occurrences: TagOccurrence[] = [];
+  const semanticNodes = (
+    node: ParsedMiniMessageDocument["nodes"][number],
+  ): readonly MiniMessageTagNode[] => {
+    if (node.kind === "tag") return [node];
+    return [...node.raw.matchAll(/\n/gu)].map((match) => {
+      const offset = match.index!;
+      const position =
+        node.position.start < 0 ||
+        node.position.end - node.position.start !== node.raw.length
+          ? { start: -1, end: -1 }
+          : {
+              start: node.position.start + offset,
+              end: node.position.start + offset + 1,
+            };
+      return {
+        kind: "tag",
+        raw: "\n",
+        name: "newline",
+        parameters: [],
+        parameterPositions: [],
+        closing: false,
+        selfClosing: false,
+        semanticKind: "content",
+        position,
+        context: node.context,
+      };
+    });
+  };
   const nodesByPosition = new Map<string, MiniMessageTagNode>();
   for (const document of documents) {
     if (document.status !== "parsed") continue;
-    for (const node of document.nodes) {
-      if (node.kind !== "tag" || node.raw === "") continue;
-      const key = nodePositionKey(node.position);
-      const current = nodesByPosition.get(key);
-      if (current === undefined || (current.closing && !node.closing)) {
-        nodesByPosition.set(key, node);
+    for (const sourceNode of document.nodes) {
+      for (const node of semanticNodes(sourceNode)) {
+        if (node.kind !== "tag" || node.raw === "") continue;
+        const key = nodePositionKey(node.position);
+        const current = nodesByPosition.get(key);
+        if (current === undefined || (current.closing && !node.closing)) {
+          nodesByPosition.set(key, node);
+        }
       }
     }
   }
   const semantic = { project, nodesByPosition, landsContextByPosition };
   for (const document of documents) {
     if (document.status !== "parsed") continue;
-    for (const node of document.nodes) {
-      if (node.kind !== "tag" || node.raw === "") continue;
-      const signature: TagSignature = {
-        name: canonicalTagName(node),
-        parameters: canonicalParameters(node, project, document.surface),
-        closing: node.closing,
-        selfClosing: node.selfClosing,
-        context: tagContext(
-          node,
+    for (const sourceNode of document.nodes) {
+      for (const node of semanticNodes(sourceNode)) {
+        if (node.kind !== "tag" || node.raw === "") continue;
+        const signature: TagSignature = {
+          name: canonicalTagName(node),
+          parameters: canonicalParameters(node, project, document.surface),
+          closing: node.closing,
+          selfClosing: node.selfClosing,
+          context: tagContext(
+            node,
+            document,
+            semantic,
+            landsContextByPosition.get(landsContextKey(document, node)) ?? [],
+          ),
+        };
+        occurrences.push({
           document,
-          semantic,
-          landsContextByPosition.get(landsContextKey(document, node)) ?? [],
-        ),
-      };
-      occurrences.push({
-        document,
-        node,
-        signature,
-        key: canonicalJson(signature),
-      });
+          node,
+          signature,
+          key: canonicalJson(signature),
+        });
+      }
     }
   }
   return occurrences;
@@ -1675,7 +1705,13 @@ function mismatchFinding(
       documentIndex:
         (target?.occurrences[0] ?? source?.occurrences[0])?.document
           .documentIndex ?? 0,
-      tag: signature.name,
+      signature: {
+        tag: signature.name,
+        parameters: signature.parameters,
+        closing: signature.closing,
+        selfClosing: signature.selfClosing,
+        context: contextArray(signature.context),
+      },
       occurrence,
     },
     fingerprint: {
@@ -1700,14 +1736,11 @@ function closeMatches(
   open: MiniMessageTagNode,
   close: MiniMessageTagNode,
 ): boolean {
-  if (canonicalTagName(open) !== canonicalTagName(close)) return false;
+  if (open.name.toLowerCase() !== close.name.toLowerCase()) return false;
   if (close.parameters.length > open.parameters.length) return false;
-  return close.parameters.every((parameter, index) => {
-    const openParameter = open.parameters[index];
-    return index === 0
-      ? openParameter?.toLowerCase() === parameter.toLowerCase()
-      : openParameter === parameter;
-  });
+  return close.parameters.every(
+    (parameter, index) => open.parameters[index] === parameter,
+  );
 }
 
 function nestingFindings(

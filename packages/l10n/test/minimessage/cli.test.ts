@@ -70,6 +70,190 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.match(JSON.stringify(addedBlue?.actual), /actualCount/u);
   });
 
+  void it("缺红与加蓝标签的独立对象都能分别精确豁免", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red>Hello",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const initialTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      initialTarget.replace("greeting: 你好", 'greeting: "<blue>你好"'),
+    );
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const initialDiagnostics = readReport(before.stderr || before.stdout)
+      .diagnostics as readonly Record<string, unknown>[];
+    const tagMismatches = initialDiagnostics.filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    const missingRed = tagMismatches.find((diagnostic) =>
+      JSON.stringify(diagnostic.expected).includes("#ff5555"),
+    );
+    const addedBlue = tagMismatches.find((diagnostic) =>
+      JSON.stringify(diagnostic.expected).includes("#5555ff"),
+    );
+    assert.ok(missingRed, before.stderr || before.stdout);
+    assert.ok(addedBlue, before.stderr || before.stdout);
+    assert.notEqual(
+      missingRed?.objectId,
+      addedBlue?.objectId,
+      before.stderr || before.stdout,
+    );
+
+    for (const diagnostic of [missingRed, addedBlue]) {
+      assert.ok(diagnostic);
+      const exempted = runCli(
+        "exempt",
+        "--project",
+        project.directory,
+        "--diagnostic",
+        String(diagnostic.diagnosticId),
+        "--reason",
+        "分别覆盖两个标签差异",
+        "--output-format",
+        "structured",
+      );
+      assert.equal(exempted.status, 0, exempted.stderr);
+    }
+
+    const after = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const remaining = readReport(after.stderr || after.stdout)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.deepEqual(
+      remaining.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      [],
+      after.stderr || after.stdout,
+    );
+  });
+
+  void it("结束标签必须按官方原始名称与参数逐项配对", async (t) => {
+    const cases = [
+      {
+        source: "<red>Hello</red>",
+        target: "<red>你好</color>",
+      },
+      {
+        source: "<bold>Hello</bold>",
+        target: "<bold>你好</b>",
+      },
+      {
+        source: "<color:red>Hello</color:red>",
+        target: "<color:red>你好</color:RED>",
+      },
+    ];
+    for (const { source, target } of cases) {
+      const project = await createProject(t, { sourceGreeting: source });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+
+      const targetPath = join(project.directory, "lang/zh.yml");
+      const initialTarget = await readFile(targetPath, "utf8");
+      await writeFile(
+        targetPath,
+        initialTarget.replace(
+          "greeting: 你好",
+          `greeting: ${JSON.stringify(target)}`,
+        ),
+      );
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const diagnostics = readReport(checked.stderr || checked.stdout)
+        .diagnostics as readonly Record<string, unknown>[];
+      assert.ok(
+        diagnostics.some(
+          (diagnostic) =>
+            diagnostic.ruleId === "minimessage-tags" &&
+            diagnostic.code === "minimessage.tag-nesting-invalid",
+        ),
+        checked.stderr || checked.stdout,
+      );
+    }
+
+    const project = await createProject(t, {
+      sourceGreeting: "<red>Hello</red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const initialTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      initialTarget.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("<c:#f55>你好</c>")}`,
+      ),
+    );
+    const equivalent = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const equivalentDiagnostics = readReport(
+      equivalent.stderr || equivalent.stdout,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.deepEqual(
+      equivalentDiagnostics.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-nesting-invalid",
+      ),
+      [],
+      equivalent.stderr || equivalent.stdout,
+    );
+  });
+
   void it("把 lang_or 后备文本作为字面字符串，只递归检查官方组件参数", async (t) => {
     const source =
       "<lang_or:lands.key:'<v:owner> <red>fallback</red>':'<bold>argument</bold>'>";
@@ -621,7 +805,7 @@ void describe("MiniMessage 官方检查制品", () => {
     >[];
     assert.deepEqual(
       diagnostics.filter((diagnostic) =>
-        String(diagnostic.ruleId).startsWith("minimessage."),
+        String(diagnostic.ruleId).startsWith("minimessage-"),
       ),
       [],
       checked.stderr || checked.stdout,
@@ -769,7 +953,7 @@ void describe("MiniMessage 官方检查制品", () => {
     >[];
     assert.deepEqual(
       preservedDiagnostics.filter((diagnostic) =>
-        String(diagnostic.ruleId).startsWith("minimessage."),
+        String(diagnostic.ruleId).startsWith("minimessage-"),
       ),
       [],
       preserved.stderr || preserved.stdout,
@@ -925,7 +1109,7 @@ void describe("MiniMessage 官方检查制品", () => {
     >[];
     assert.deepEqual(
       diagnostics.filter((diagnostic) =>
-        String(diagnostic.ruleId).startsWith("minimessage."),
+        String(diagnostic.ruleId).startsWith("minimessage-"),
       ),
       [],
       checked.stderr || checked.stdout,
@@ -1036,7 +1220,7 @@ void describe("MiniMessage 官方检查制品", () => {
     >[];
     assert.deepEqual(
       diagnostics.filter((diagnostic) =>
-        String(diagnostic.ruleId).startsWith("minimessage."),
+        String(diagnostic.ruleId).startsWith("minimessage-"),
       ),
       [],
       checked.stderr || checked.stdout,
@@ -1074,8 +1258,8 @@ void describe("MiniMessage 官方检查制品", () => {
         target: "<actionbar><c:#f55>操作</c>",
       },
       {
-        source: "<noprefix><bossbar:blue:segmented_10:12>Welcome",
-        target: "<noprefix><bossbar:blue:segmented_10:12>欢迎",
+        source: "<noprefix><bossbar:blue:solid:12>Welcome",
+        target: "<noprefix><bossbar:blue:solid:12>欢迎",
       },
     ];
     for (const { source, target } of cases) {
@@ -1111,7 +1295,7 @@ void describe("MiniMessage 官方检查制品", () => {
       assert.deepEqual(
         (report.diagnostics as readonly Record<string, unknown>[]).filter(
           (diagnostic) =>
-            String(diagnostic.ruleId).startsWith("minimessage.") &&
+            String(diagnostic.ruleId).startsWith("minimessage-") &&
             diagnostic.ruleId !== "minimessage-syntax",
         ),
         [],
@@ -1120,7 +1304,7 @@ void describe("MiniMessage 官方检查制品", () => {
     }
 
     const project = await createProject(t, {
-      sourceGreeting: "<noprefix><bossbar:blue:segmented_10:12>Welcome",
+      sourceGreeting: "<noprefix><bossbar:blue:solid:12>Welcome",
     });
     const initialized = runCli(
       "init",
@@ -1138,7 +1322,7 @@ void describe("MiniMessage 官方检查制品", () => {
       targetPath,
       targetYaml.replace(
         "greeting: 你好",
-        `greeting: ${JSON.stringify("欢迎<noprefix><bossbar:purple:segmented_10:12>")}`,
+        `greeting: ${JSON.stringify("欢迎<noprefix><bossbar:purple:solid:12>")}`,
       ),
     );
     const changed = runCli(
@@ -1222,7 +1406,7 @@ void describe("MiniMessage 官方检查制品", () => {
     >[];
     assert.deepEqual(
       diagnostics.filter((diagnostic) =>
-        String(diagnostic.ruleId).startsWith("minimessage."),
+        String(diagnostic.ruleId).startsWith("minimessage-"),
       ),
       [],
       checked.stderr || checked.stdout,
@@ -1263,6 +1447,73 @@ void describe("MiniMessage 官方检查制品", () => {
       moved.stderr || moved.stdout,
     );
   });
+
+  void it("GUI lore action 的大小写不敏感闭合位置可靠对齐", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "Selection",
+      lore: ["<action:left><label>Source</label></action>"],
+    });
+    const configPath = join(project.directory, ".l10n/config.yml");
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace(
+        'version: "8.0.1"',
+        'version: "8.9.2"',
+      ),
+    );
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    const writeTarget = async (lore: string) => {
+      await writeFile(
+        targetPath,
+        [
+          "physical:",
+          "  selection:",
+          '    name: "选择"',
+          "    lore:",
+          `      - ${JSON.stringify(lore)}`,
+          "",
+        ].join("\n"),
+      );
+    };
+
+    for (const target of [
+      "<action:left><label>译文</label></ACTION>",
+      "<ACTION:left><LABEL>译文</LABEL></ACTION>",
+    ]) {
+      await writeTarget(target);
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const diagnostics = readReport(checked.stderr || checked.stdout)
+        .diagnostics as readonly Record<string, unknown>[];
+      assert.deepEqual(
+        diagnostics.filter(
+          (diagnostic) =>
+            diagnostic.ruleId === "minimessage-tags" &&
+            (diagnostic.code === "minimessage.lands-control-invalid" ||
+              diagnostic.code === "minimessage.tag-mismatch"),
+        ),
+        [],
+        checked.stderr || checked.stdout,
+      );
+    }
+  });
+
   void it("GUI lore 的空行和重复行保留整体拼接的 newline 次数", async (t) => {
     const project = await createGuiProject(t, {
       name: "Selection",
@@ -1310,6 +1561,82 @@ void describe("MiniMessage 官方检查制品", () => {
       checked.stderr || checked.stdout,
     );
   });
+
+  void it("GUI lore 的真实 LF 与 newline 标签按同一换行计数", async (t) => {
+    const cases = [
+      {
+        source: "Hello\nworld",
+        target: "你好世界",
+        expectedCount: 1,
+        actualCount: 0,
+      },
+      {
+        source: "Hello<newline>world",
+        target: "你好\n世界",
+        expectedCount: 1,
+        actualCount: 1,
+      },
+    ];
+    for (const { source, target, expectedCount, actualCount } of cases) {
+      const project = await createGuiProject(t, {
+        name: "Selection",
+        lore: [source],
+      });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+      await writeFile(
+        join(project.directory, "Locale/zh-CN_gui.yml"),
+        [
+          "physical:",
+          "  selection:",
+          '    name: "选择"',
+          `    lore: ${JSON.stringify(target)}`,
+          "",
+        ].join("\n"),
+      );
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const diagnostics = readReport(checked.stderr || checked.stdout)
+        .diagnostics as readonly Record<string, unknown>[];
+      const newlineMismatch = diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch" &&
+          JSON.stringify(diagnostic.expected).includes('"tag":"newline"'),
+      );
+      if (expectedCount === actualCount) {
+        assert.deepEqual(newlineMismatch, [], checked.stderr || checked.stdout);
+      } else {
+        assert.equal(
+          newlineMismatch.length,
+          1,
+          checked.stderr || checked.stdout,
+        );
+        assert.match(
+          JSON.stringify(newlineMismatch[0]?.expected),
+          new RegExp(`"expectedCount":${expectedCount}`, "u"),
+        );
+        assert.match(
+          JSON.stringify(newlineMismatch[0]?.actual),
+          new RegExp(`"actualCount":${actualCount}`, "u"),
+        );
+      }
+    }
+  });
+
   void it("Lands 8.0.1 GUI lore desc 语义明确报告覆盖限制", async (t) => {
     const project = await createGuiProject(t, {
       name: "Selection",
