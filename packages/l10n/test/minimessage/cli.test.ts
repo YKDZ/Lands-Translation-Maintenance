@@ -3222,11 +3222,18 @@ void describe("术语和风格正式检查", () => {
     assert.ok(issue, result.checked.stderr || result.checked.stdout);
     if (issue === undefined) throw new Error("缺少 Claim 词义诊断");
     assert.equal(issue.ruleId, "terminology");
+    assert.equal(issue.severity, "error");
     assert.equal(issue.origin, "target");
+    assert.equal(result.checked.status, 1);
+    assert.deepEqual(issue.location, {
+      file: "lang/zh.yml",
+      path: ["messages", "greeting"],
+    });
     assert.equal(
-      (issue.location as Record<string, unknown>).path instanceof Array,
-      true,
+      typeof (issue.message as Record<string, unknown>).id,
+      "string",
     );
+    assert.match(String(issue.reason), /Claim/u);
     assert.match(JSON.stringify(issue.expected), /占领/u);
     assert.match(JSON.stringify(issue.actual), /领土/u);
   });
@@ -3423,6 +3430,15 @@ void describe("术语和风格正式检查", () => {
       ),
     );
     assert.ok(style.every((diagnostic) => diagnostic.origin === "target"));
+    for (const diagnostic of style) {
+      assert.deepEqual(diagnostic.location, {
+        file: "lang/zh.yml",
+        path: ["messages", "greeting"],
+      });
+      assert.equal(typeof diagnostic.reason, "string");
+      assert.notEqual(diagnostic.expected, undefined);
+      assert.notEqual(diagnostic.actual, undefined);
+    }
   });
 
   void it("允许配置单项规范译法和规则严重级别", async (t) => {
@@ -3445,6 +3461,13 @@ void describe("术语和风格正式检查", () => {
     );
     assert.ok(issue, result.checked.stderr || result.checked.stdout);
     assert.equal(issue?.severity, "warning");
+    assert.equal(result.checked.status, 1);
+    assert.equal(result.report.state, "incomplete");
+    assert.equal(
+      result.diagnostics.some((diagnostic) => diagnostic.severity === "error"),
+      false,
+      result.checked.stderr || result.checked.stdout,
+    );
     assert.match(JSON.stringify(issue?.expected), /国家/u);
     assert.doesNotMatch(JSON.stringify(issue?.expected), /联邦/u);
     const defaultIssue = defaultResult.diagnostics.find(
