@@ -1,0 +1,302 @@
+# Here you can edit all GUI menus.
+#
+# If you encounter any issues or have questions:
+# Discord: https://discord.incredibleplugins.com
+#
+# Wiki: https://wiki.incredibleplugins.com/general/menus/gui-menus
+
+general:
+  inbox-filter:
+    war: <t:negative>战争 ⚔</t>
+  war:
+    defenders: <t:positive>守方</t>
+    attackers: <t:negative>攻方</t>
+
+physical:
+  capture_flag:
+    name: <t:regular_heading>战旗
+    lore:
+      - <t:regular>Place this flag on the enemy land
+      - during war in order to capture it.
+    material: BEACON
+
+gui:
+  war:
+    title: <t:menu_title>战争
+    items:
+      default:
+        war_attackers:
+          name: <t:negative_heading>攻方 <v:object>
+          lore:
+            - <t:decoration>✖ </t><t:regular>View all attacking lands.
+            - "   <t:regular>Players:<t:regular_value> <v:players></t>"
+            - "   <t:regular>Score: <v:score>"
+          material: IRON_SWORD
+          slots: 11
+        war_defenders:
+          name: <t:positive_heading>守方 <v:object>
+          lore:
+            - <t:decoration>✖ </t><t:regular>View all defending lands.
+            - "   <t:regular>Players:<t:regular_value> <v:players></t>"
+            - "   <t:regular>Score: <v:score>"
+          material: SHIELD
+          slots: 12
+        war_points: {}
+        war_points_declaration: {}
+        child_failure_permission:
+          name: <t:error_heading>无权操作
+          lore:
+            - <t:error>You're not allowed to do
+            - this for <t:decoration>(</t><t:error_value><v:object></t>)<t:error>.
+            - " <t:decoration>• </t><t:regular>The owner can give you"
+            - "   permission to do so."
+            - "   Flag: <t:regular_value><v:flag></t>"
+        child_failure_surrender: {}
+        tribute_attacker_mutual: {}
+        recipe:
+          name: <t:regular_heading>战旗配方
+          lore:
+            - <t:decoration>✖</t> <t:regular>Click here to see the recipe
+            - "   of the capture flag item."
+          material: BEACON
+          slots: 16
+        tribute_defender: {}
+        child_failure_none:
+          name: <t:error_heading>暂无领土
+          lore:
+            - <t:error>The enemy <t:error_value><v:enemy></t> has no claims
+            - to teleport to.
+        child_failure_attacker: {}
+        flags:
+          name: <t:regular_heading>生效设置
+          lore:
+            - <t:regular>Involved players can do the following
+            - "things in affected lands:"
+            - <v:settings>
+          material: IRON_PICKAXE
+          slots: 15
+        child_failure_cost: {}
+        spawn:
+          name: <t:regular_heading>传送点
+          lore:
+            - <t:regular>Teleport to the enemy's border.
+          material: ENDER_PEARL
+          slots: 9
+        declaration_start:
+          name: <t:regular_heading>开始
+          lore:
+            - <t:regular>The war will start in<t:time> <v:time></t>.
+            - Until then each team has time to prepare.
+          material: CLOCK
+          slots: 15
+        tribute_attacker:
+          bedrock:
+            detail: true
+        goal:
+          material: WRITABLE_BOOK
+          slots: 14
+          lore:
+            - "<t:decoration>• </t><t:regular>If the attacker wins:"
+            - "  <v:outcome_attacker>"
+            - ""
+            - "<t:decoration>• </t><t:regular>If the attacker loses:"
+            - "  <v:outcome_defender>"
+          name: "<t:regular_heading>Goal: <v:goal>"
+        mode:
+          material: DIAMOND_SWORD
+          slots: 13
+          name: "<t:regular_heading>Mode: <v:mode>"
+          lore:
+            - <v:description>
+        mode_declaration:
+          material: DIAMOND_SWORD
+          slots: 13
+          name: "<t:regular_heading>Mode: <v:mode>"
+          lore:
+            - <v:description>
+        surrender:
+          material: WHITE_BANNER
+          slots: 29
+          bedrock:
+            detail: true
+          name: <t:error_heading>Surrender
+          lore:
+            - <action:primary><label>Surrender the war.</label><desc><v:outcome></desc></action>
+        war_attackers_declaration:
+          material: IRON_SWORD
+          slots: 11
+          name: <t:negative_heading>Attacker <v:object>
+          lore:
+            - <t:decoration>✖ </t><t:regular>View all attacking lands.
+            - "   <t:regular>Players:<t:regular_value> <v:players></t>"
+        war_defenders_declaration:
+          material: SHIELD
+          slots: 12
+          name: <t:positive_heading>Defender <v:object>
+          lore:
+            - <t:decoration>✖ </t><t:regular>View all defending lands.
+            - "   <t:regular>Players:<t:regular_value> <v:players></t>"
+  list_wars:
+    title: <t:menu_title>正在进行的战争
+    items:
+      default:
+        entry_object:
+          name: <t:regular_heading><v:attacker> vs. <v:defender>
+          lore:
+            - " <t:decoration>• </t><t:regular>Progress:<t:regular_value> <v:points></t> <t:decoration>/</t><t:regular_value> <v:points_towin></t> <t:regular>points"
+            - "   <t:regular_value><v:points_bar></t>"
+            - ""
+            - " <t:decoration>• </t><t:regular>Timeout: <t:time><v:timeout></t>"
+            - " <t:decoration>• </t><t:regular>Attacker: <v:attacker>"
+            - " <t:decoration>• </t><t:regular>Defender: <v:defender>"
+          material: IRON_SWORD
+  list_war_lands:
+    title: <t:menu_title><v:team>
+    items:
+      default:
+        entry_object:
+          name: <t:entry_heading><v:land>
+          lore:
+            - <t:user_content><v:title></t>
+            - <t:decoration>✖ </t><t:regular>View information about this land.
+          material: INHERIT
+        entry_object_ally:
+          name: <t:entry_heading>盟友 <v:land>
+          lore:
+            - <t:user_content><v:title></t>
+            - <t:decoration>✖ </t><t:regular>View information about this land.
+          material: INHERIT
+  war-declaration_tribute:
+    items:
+      default:
+        cancel-declaration: {}
+        send-declaration: {}
+        refresh_minus-1: {}
+        refresh_minus-2: {}
+        refresh_minus-3: {}
+        child_max-tribute: {}
+        refresh_plus-3: {}
+        refresh_plus-1: {}
+        refresh_plus-2: {}
+        tribute: {}
+  war_capture_recipe:
+    title: <t:menu_title>战旗配方
+  war_info:
+    title: <t:menu_title>战争信息
+    items:
+      default:
+        war_attackers:
+          material: IRON_SWORD
+          slots: 21
+        war_defenders:
+          material: SHIELD
+          slots: 23
+        war_points:
+          material: IRON_INGOT
+          slots: 25
+        goal:
+          material: WRITABLE_BOOK
+          slots: 32
+        mode:
+          material: DIAMOND_SWORD
+          slots: 30
+  list_server_koth_arenas:
+    items:
+      default:
+        entry_object:
+          material: INHERIT
+          lore:
+            - <t:decoration>✖ </t><t:regular>KotH arena in land<t:entity_land> <v:land></t>.
+            - "   <t:decoration>• </t><t:regular>Status:<t:regular_value> <v:status></t>"
+          name: <t:entry_heading><v:area>
+    title: <t:menu_title>KotH Arenas
+  list_war-declaration_goal:
+    items:
+      default:
+        entry_object:
+          material: PAPER
+          lore:
+            - "<t:decoration>• </t><t:regular>If the attacker wins:"
+            - "  <v:outcome_attacker>"
+            - ""
+            - "<t:decoration>• </t>If the attacker loses:"
+            - "  <v:outcome_defender>"
+          name: <t:entry_heading><v:name>
+        entry_object_selected:
+          material: ENCHANTED_BOOK
+          lore:
+            - "<t:decoration>• </t><t:regular>If the attacker wins:"
+            - "  <v:outcome_attacker>"
+            - ""
+            - "<t:decoration>• </t>If the attacker loses:"
+            - "  <v:outcome_defender>"
+          name: <t:positive_heading>✔ <v:name>
+        child_failure_not_applicable:
+          lore:
+            - <t:error>This goal can't be used
+            - for this war.
+          name: <t:error_heading>Not available
+    title: <t:menu_title>Choose War Goal
+  list_war-declaration_mode:
+    items:
+      default:
+        entry_object:
+          material: PAPER
+          lore:
+            - <v:description>
+          name: <t:entry_heading><v:name>
+        entry_object_selected:
+          material: ENCHANTED_BOOK
+          lore:
+            - <v:description>
+          name: <t:positive_heading>✔ <v:name>
+        child_failure_not_applicable:
+          lore:
+            - <t:error>This mode can't be used
+            - for this war.
+          name: <t:error_heading>Not available
+        child_failure_koth_no_arena:
+          name: <t:error_heading>No arena set up
+          lore:
+            - <t:error>This King of the Hill mode needs a
+            - set-up arena. <t:regular>An admin must create
+            - one with<t:cmd> /<v:cmd_create><t:regular> first.
+    title: <t:menu_title>Choose War Mode
+  war-declaration_confirm:
+    items:
+      default:
+        cancel-declaration:
+          material: skin:548d7d1e03e1af145b0125ab841285672b421265da2ab915015f9058438ba2d8
+          slots: 37
+          lore:
+            - <t:decoration>✖ </t><t:regular>Discard this declaration
+            - "   before it's sent to the enemy."
+          name: <t:error_heading>Cancel War Declaration
+        goal:
+          material: WRITABLE_BOOK
+          slots: 25
+          lore:
+            - <t:decoration>✖ </t><t:regular>Change the war goal.
+            - ""
+            - "<t:decoration>• </t>If the attacker wins:"
+            - "  <v:outcome_attacker>"
+            - ""
+            - "<t:decoration>• </t>If the attacker loses:"
+            - "  <v:outcome_defender>"
+          name: "<t:regular_heading>Goal: <v:goal>"
+        mode:
+          material: DIAMOND_SWORD
+          slots: 21
+          lore:
+            - <t:decoration>✖ </t><t:regular>Change the war mode.
+            - ""
+            - <v:description>
+          name: "<t:regular_heading>Mode: <v:mode>"
+        send-declaration:
+          material: skin:ffec3d25ae0d147c342c45370e0e43300a4e48a5b43f9bb858babff756144dac
+          slots: 45
+          name: <t:positive_heading>Send War Declaration
+          lore:
+            - <t:decoration>✖ </t><t:regular>Send this war declaration
+            - "   to the enemy."
+    title: <t:menu_title>Declare War
