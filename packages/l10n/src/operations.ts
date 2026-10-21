@@ -1195,8 +1195,8 @@ function structureFindingIssues(
 
 function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable = [
-    "MiniMessage 变量、交互、标签对等及 Lands 控制语义检查尚未实现",
-    "变量、术语、风格和译文一致性检查尚未实现",
+    "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
+    "术语、风格和译文一致性检查尚未实现",
   ];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   if (
@@ -2336,17 +2336,19 @@ export async function inspectProject(
   if (operation === "status") {
     return makeReport(operation, loaded.view, loaded.lock, loaded.diagnostics);
   }
-  const view =
-    loaded.configuration.rules?.["minimessage-syntax"]?.enabled === false
-      ? loaded.view
-      : {
-          ...loaded.view,
-          miniMessage: await parseMiniMessages(
-            loaded.view.messages,
-            loaded.view.resources,
-            loaded.baseline.miniMessageTheme,
-          ),
-        };
+  const miniMessageChecksEnabled =
+    loaded.configuration.rules?.["minimessage-syntax"]?.enabled !== false ||
+    loaded.configuration.rules?.["minimessage-variables"]?.enabled !== false;
+  const view = miniMessageChecksEnabled
+    ? {
+        ...loaded.view,
+        miniMessage: await parseMiniMessages(
+          loaded.view.messages,
+          loaded.view.resources,
+          loaded.baseline.miniMessageTheme,
+        ),
+      }
+    : loaded.view;
   const evaluation = evaluateProject(view, loaded.configuration);
   const diagnostics = [
     ...loaded.diagnostics,
