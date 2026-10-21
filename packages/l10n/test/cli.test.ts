@@ -21,6 +21,7 @@ import {
   applySyncProject,
   confirmSameText,
   initializeProject,
+  recordDiagnosticExemption,
 } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -6622,5 +6623,62 @@ void describe("CLI 制品", () => {
       readFile(join(project.directory, ".l10n/exceptions.yml")),
       { code: "ENOENT" },
     );
+  });
+
+  void it("写入前诊断对象变化时拒绝记录豁免", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const originalTarget = await readFile(targetPath, "utf8");
+    const missingTarget = originalTarget.replace("  welcome: Welcome\n", "");
+    await writeFile(targetPath, missingTarget);
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const diagnostics = readReport(checked.stdout || checked.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const missing = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === "message.missing" &&
+        JSON.stringify(
+          (diagnostic.message as Record<string, unknown> | undefined)?.path,
+        ) === '["messages","welcome"]',
+    );
+    assert.ok(missing);
+    if (missing === undefined) throw new Error("缺少待豁免的消息诊断");
+
+    await assert.rejects(
+      recordDiagnosticExemption(
+        project.directory,
+        String(missing.diagnosticId),
+        "写入前对象发生变化",
+        {
+          beforeApply: async () => {
+            await writeFile(targetPath, originalTarget);
+          },
+        },
+      ),
+      (error: unknown) =>
+        error instanceof Error && /写入前诊断对象已变化/u.test(error.message),
+    );
+    await assert.rejects(
+      readFile(join(project.directory, ".l10n/exceptions.yml")),
+      { code: "ENOENT" },
+    );
+    assert.equal(await readFile(targetPath, "utf8"), originalTarget);
   });
 });
