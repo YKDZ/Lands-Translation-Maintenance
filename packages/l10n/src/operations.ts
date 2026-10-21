@@ -1290,7 +1290,7 @@ function structureFindingIssues(
 function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable = [
     "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
-    "术语、风格和译文一致性检查尚未实现",
+    "术语和风格检查尚未实现",
   ];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   if (

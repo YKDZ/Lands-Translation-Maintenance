@@ -16,6 +16,7 @@ import type {
   RuleContext,
   Severity,
 } from "#/model";
+import { translationConsistencyRule } from "#/translation-consistency";
 import { canonicalJson, compareText, deepFreeze, sha256 } from "#/value";
 
 const structureRule: CheckRule = {
@@ -78,6 +79,7 @@ export const builtInRules: readonly CheckRule[] = [
   legacyVariableRule,
   mapHtmlRule,
   mapHtmlSourceLimitRule,
+  translationConsistencyRule,
 ];
 
 export interface RuleEvaluationOptions {
@@ -94,7 +96,6 @@ function ruleSettings(
 
 function diagnosticFromFinding(
   rule: CheckRule,
-  context: RuleContext,
   severity: Severity,
   finding: RuleFinding,
   project: ProjectView,
@@ -120,7 +121,7 @@ function diagnosticFromFinding(
   const contentFingerprint = sha256(
     canonicalJson({
       ruleId: rule.id,
-      severity: context.severity,
+      severity,
       message:
         observed === undefined
           ? null
@@ -204,15 +205,16 @@ export function evaluateRules(
     try {
       const findings = rule.evaluate(ruleInput, context);
       for (const finding of findings) {
+        const findingSeverity =
+          settings.severity ?? finding.severity ?? severity;
         diagnostics.push(
-          diagnosticFromFinding(rule, context, severity, finding, project),
+          diagnosticFromFinding(rule, findingSeverity, finding, project),
         );
       }
     } catch (error) {
       diagnostics.push(
         diagnosticFromFinding(
           rule,
-          context,
           severity,
           {
             code: "rule.execution-failed",

@@ -379,6 +379,8 @@ export interface Diagnostic {
 
 export interface RuleFinding {
   readonly code: string;
+  /** 单条诊断的默认严重级别；规则配置中的严重级别仍可统一覆盖。 */
+  readonly severity?: Severity;
   /** 用于区分同一规则、消息和路径下的不同问题对象；不要包含可变内容。 */
   readonly identity?: JsonValue;
   /** 此诊断实际依赖的规则配置或外部内容。 */
