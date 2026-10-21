@@ -8,7 +8,7 @@ import {
   syncConfigurationFingerprint,
 } from "#/configuration";
 import { readJarResources } from "#/jar";
-import { collectMessages } from "#/messages";
+import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
 import {
   captureMiniMessageTheme,
   validateMiniMessageThemeYaml,
@@ -629,9 +629,6 @@ function coverageUnavailable(view: ProjectView): readonly string[] {
   ) {
     unavailable.push("Bedrock JSON 已登记但本票不解析");
   }
-  if (view.resources.some((resource) => resource.purpose === "gui-language")) {
-    unavailable.push("GUI 语言资源已登记但本票不解析");
-  }
   return unavailable;
 }
 
@@ -1116,7 +1113,7 @@ export async function previewSyncProject(
         ({ mapping }) =>
           mapping.target === previous.targetFile &&
           mapping.fields.some((field) =>
-            pathStartsWith(previous.path, field.path),
+            fieldSelectorMatchesPath(previous.path, field),
           ),
       ),
   );

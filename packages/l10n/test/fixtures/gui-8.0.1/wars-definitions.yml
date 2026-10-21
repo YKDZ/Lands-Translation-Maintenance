@@ -1,0 +1,7 @@
+gui:
+  war:
+    items:
+      default:
+        war_attackers:
+          material: IRON_SWORD
+          slots: 11
