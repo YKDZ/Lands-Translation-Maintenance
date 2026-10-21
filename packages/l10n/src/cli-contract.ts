@@ -77,6 +77,13 @@ const reportSchema = z.object({
       pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
     }),
   ),
+  knownOutOfScopeVisibleTexts: z.array(
+    z.object({
+      file: z.string(),
+      path: z.array(z.string()),
+      value: z.string(),
+    }),
+  ),
   coverage: z
     .object({
       complete: z.boolean(),
@@ -245,6 +252,14 @@ function renderReport(report: ReportPayload) {
     lines.push(
       `待确认同文 ${candidate.candidateId}（${pendingReasonNames[candidate.pendingReason]}）：${candidate.message.targetFile}:${candidate.message.path.join(".")}；原文 ${jsonLine(candidate.source)}；译文 ${jsonLine(candidate.target)}。`,
     );
+  }
+  if (report.knownOutOfScopeVisibleTexts.length > 0) {
+    lines.push("已知范围外可见文本（仅登记，不纳入翻译维护）：");
+    for (const visibleText of report.knownOutOfScopeVisibleTexts) {
+      lines.push(
+        `  ${visibleText.file}:${visibleText.path.join(".")} = ${JSON.stringify(visibleText.value)}`,
+      );
+    }
   }
   if (report.coverage !== undefined) {
     lines.push(

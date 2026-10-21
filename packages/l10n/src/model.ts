@@ -113,6 +113,26 @@ export interface MiniMessagePosition {
   readonly end: number;
 }
 
+export interface VariableContextPart {
+  readonly kind: string;
+  readonly identity: JsonValue;
+}
+
+export interface VariableOccurrence {
+  readonly name: string;
+  readonly context: readonly VariableContextPart[];
+  readonly position?: MiniMessagePosition;
+}
+
+export interface VariableCountDifference {
+  readonly name: string;
+  readonly context: readonly VariableContextPart[];
+  readonly expectedCount: number;
+  readonly actualCount: number;
+  readonly expectedPositions: readonly MiniMessagePosition[];
+  readonly actualPositions: readonly MiniMessagePosition[];
+}
+
 export interface MiniMessageContextFrame {
   readonly kind: "tag" | "hover-text";
   readonly name: string;
@@ -258,8 +278,15 @@ export interface ProjectView {
   readonly messages: readonly ObservedMessage[];
   readonly targetMessages: readonly TargetMessage[];
   readonly structures: readonly ProjectStructure[];
+  readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly fileIssues: readonly ProjectFileIssue[];
   readonly miniMessage?: MiniMessageParseProject;
+}
+
+export interface KnownOutOfScopeVisibleText {
+  readonly file: string;
+  readonly path: readonly string[];
+  readonly value: string;
 }
 
 export interface ProjectStructure {
@@ -367,6 +394,7 @@ export interface ProjectReport {
     readonly target: JsonValue;
     readonly pendingReason: "translation-seed" | "same-text-candidate";
   }[];
+  readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly coverage?: CheckCoverage;
 }
 

@@ -1,3 +1,4 @@
+import { miniMessageVariablesRule } from "#/minimessage-variables";
 import type {
   CheckCoverage,
   CheckRule,
@@ -68,6 +69,7 @@ const miniMessageSyntaxRule: CheckRule = {
 export const builtInRules: readonly CheckRule[] = [
   structureRule,
   miniMessageSyntaxRule,
+  miniMessageVariablesRule,
 ];
 
 export interface RuleEvaluationOptions {

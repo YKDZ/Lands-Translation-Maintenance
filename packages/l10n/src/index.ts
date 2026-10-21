@@ -24,6 +24,7 @@ export type {
   ConsumerConfiguration,
   Diagnostic,
   JsonValue,
+  KnownOutOfScopeVisibleText,
   MessageIdentity,
   ProjectReport,
   ProjectStructure,

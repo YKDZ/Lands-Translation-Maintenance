@@ -190,12 +190,23 @@ function fieldTypeReason(category: TranslationFieldCategory): string {
   return "GUI 名称、标题和通用文本必须是字符串";
 }
 
+interface SelectedEntry {
+  readonly path: readonly string[];
+  readonly value: JsonValue;
+}
+
+interface MatchingEntries {
+  readonly entries: readonly SelectedEntry[];
+  readonly blockedAncestors: readonly SelectedEntry[];
+}
+
 function matchingEntries(
   root: JsonValue | undefined,
   pattern: readonly string[],
-): readonly { readonly path: readonly string[]; readonly value: JsonValue }[] {
-  if (root === undefined) return [];
-  const entries: { path: readonly string[]; value: JsonValue }[] = [];
+): MatchingEntries {
+  if (root === undefined) return { entries: [], blockedAncestors: [] };
+  const entries: SelectedEntry[] = [];
+  const blockedAncestors: SelectedEntry[] = [];
   function visit(
     value: JsonValue,
     path: readonly string[],
@@ -219,7 +230,10 @@ function matchingEntries(
       collectLeaves(value, path);
       return;
     }
-    if (!isRecord(value)) return;
+    if (!isRecord(value)) {
+      blockedAncestors.push({ path, value });
+      return;
+    }
     if (segment === "*") {
       for (const key of Object.keys(value).sort()) {
         visit(value[key]!, [...path, key], index + 1);
@@ -231,7 +245,7 @@ function matchingEntries(
     }
   }
   visit(root, [], 0);
-  return entries;
+  return { entries, blockedAncestors };
 }
 
 export function fieldSelectorMatchesPath(
@@ -307,9 +321,22 @@ function collectField(
     return { values, issues };
   }
 
-  const selectedEntries = matchingEntries(root, field.path);
+  const selected = matchingEntries(root, field.path);
+  if (strictSource) {
+    for (const blocked of selected.blockedAncestors) {
+      issues.push({
+        file,
+        code: "source.field-parent-not-map",
+        reason: "已存在的声明字段祖先必须是映射",
+        path: blocked.path,
+        expected: "映射",
+        actual: blocked.value,
+      });
+    }
+  }
   if (
-    selectedEntries.length === 0 &&
+    selected.entries.length === 0 &&
+    selected.blockedAncestors.length === 0 &&
     strictSource &&
     !field.path.some((part) => part === "*" || part === "**")
   ) {
@@ -322,7 +349,7 @@ function collectField(
       actual: { state: "missing" },
     });
   }
-  for (const entry of selectedEntries) {
+  for (const entry of selected.entries) {
     if (!isValidMessageValue(field.category, entry.value)) {
       issues.push({
         file,

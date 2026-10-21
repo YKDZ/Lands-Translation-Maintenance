@@ -447,12 +447,12 @@ void describe("CLI 制品", () => {
     assert.match(result.stdout, /检查/);
     assert.match(result.stdout, /exempt/);
     assert.match(result.stdout, /confirm-same-text/);
-    assert.match(result.stdout, /sync/);
-    assert.match(result.stdout, /schema/);
     const confirmHelp = runCli("confirm-same-text", "--help");
     assert.equal(confirmHelp.status, 0, confirmHelp.stderr);
     assert.match(confirmHelp.stdout, /--candidate/);
     assert.match(confirmHelp.stdout, /--reason/);
+    assert.match(result.stdout, /sync/);
+    assert.match(result.stdout, /schema/);
   });
 
   void it("在已确认的 .l10n 布局建立配置、锁和原文基线", async (t) => {
@@ -2548,6 +2548,7 @@ void describe("CLI 制品", () => {
     assert.match(result.stdout, /status/);
     assert.match(result.stdout, /confirm-same-text/);
     assert.match(result.stdout, /--candidate/);
+    assert.match(result.stdout, /knownOutOfScopeVisibleTexts/);
   });
 
   void it("sync --dry-run 返回可应用的结构化计划且不写入项目", async (t) => {
@@ -5677,6 +5678,342 @@ void describe("CLI 制品", () => {
     assert.equal(statusSummary.sameTextCandidates, 1);
   });
 
+  void it("已存在的对话与分类字段祖先形状错误会阻断初始化和同步", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config
+        .replace(
+          "  - path: settings.yml",
+          [
+            "  - path: dialogs/en.yml",
+            "    purpose: dialog-language",
+            "  - path: land/categories.yml",
+            "    purpose: configuration",
+            "  - path: settings.yml",
+          ].join("\n"),
+        )
+        .replace(
+          "  mappings:\n    - source: lang/en.yml",
+          [
+            "  mappings:",
+            "    - source: dialogs/en.yml",
+            "      target: dialogs/zh.yml",
+            "      definitionsSource: dialogs/en.yml",
+            "      fields:",
+            '        - path: [dialogs, "*", title]',
+            "          category: dialog-string",
+            "          scene: dialog-title",
+            "    - source: land/categories.yml",
+            "      target: land/zh-categories.yml",
+            "      definitionsSource: land/categories.yml",
+            "      fields:",
+            '        - path: [land, categories, "*", name]',
+            "          category: configuration-string",
+            "          scene: category-name",
+            "    - source: lang/en.yml",
+          ].join("\n"),
+        ),
+    );
+
+    const dialog = "dialogs: Broken layout\n";
+    const categories = "land:\n  categories:\n    - Broken layout\n";
+    await writeJar(project.jarFile, {
+      extra: {
+        "dialogs/en.yml": dialog,
+        "land/categories.yml": categories,
+      },
+    });
+    const beforeInvalidInit = await snapshotProjectFiles(project.directory);
+    const invalidInit = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(invalidInit.status, 1);
+    assert.match(invalidInit.stdout || invalidInit.stderr, /dialogs\/en\.yml/);
+    assert.match(
+      invalidInit.stdout || invalidInit.stderr,
+      /land\/categories\.yml/,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforeInvalidInit,
+    );
+
+    await writeJar(project.jarFile, {
+      extra: {
+        "dialogs/en.yml": "dialogs: {}\n",
+        "land/categories.yml":
+          "land:\n  categories:\n    dormant:\n      description: []\n",
+      },
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stdout || initialized.stderr,
+    );
+
+    await writeJar(project.jarFile, {
+      extra: {
+        "dialogs/en.yml": dialog,
+        "land/categories.yml": categories,
+      },
+    });
+    const beforeInvalidSync = await snapshotProjectFiles(project.directory);
+    for (const args of [["sync", "--dry-run"], ["sync"]]) {
+      const result = runCli(
+        ...args,
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stdout || result.stderr);
+      assert.match(result.stdout || result.stderr, /dialogs\/en\.yml/);
+      assert.match(result.stdout || result.stderr, /land\/categories\.yml/);
+      assert.deepEqual(
+        await snapshotProjectFiles(project.directory),
+        beforeInvalidSync,
+      );
+    }
+  });
+
+  void it("GUI 已选字段的非映射祖先会阻断同步并保留中文", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stdout || initialized.stderr,
+    );
+
+    const brokenGui = "physical: Broken layout\n";
+    await writeGuiJar(project.jarFile, {
+      "Locale/en-US_gui.yml": brokenGui,
+    });
+    const beforeSync = await snapshotProjectFiles(project.directory);
+    for (const args of [["sync", "--dry-run"], ["sync"]]) {
+      const result = runCli(
+        ...args,
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stdout || result.stderr);
+      assert.match(result.stdout || result.stderr, /Locale\/en-US_gui\.yml/);
+      assert.deepEqual(
+        await snapshotProjectFiles(project.directory),
+        beforeSync,
+      );
+    }
+    assert.match(
+      await readFile(join(project.directory, "Locale/zh-CN_gui.yml"), "utf8"),
+      /选区工具/,
+    );
+  });
+
+  void it("离线状态与检查报告列出已知范围外可见文本", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "  - path: settings.yml",
+        [
+          "  - path: config.yml",
+          "    purpose: configuration",
+          "  - path: web.yml",
+          "    purpose: configuration",
+          "  - path: settings.yml",
+        ].join("\n"),
+      ),
+    );
+    await writeJar(project.jarFile, {
+      extra: {
+        "config.yml": 'camp:\n  default-name: "{player}\'s Camp"\n',
+        "web.yml": "map:\n  general:\n    layer: Lands\n",
+      },
+    });
+
+    const initialized = runCliWithoutPath(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stdout || initialized.stderr,
+    );
+    const expected = [
+      {
+        file: "config.yml",
+        path: ["camp", "default-name"],
+        value: "{player}'s Camp",
+      },
+      {
+        file: "web.yml",
+        path: ["map", "general", "layer"],
+        value: "Lands",
+      },
+    ];
+    assert.deepEqual(
+      readReport(initialized.stdout).knownOutOfScopeVisibleTexts,
+      expected,
+    );
+
+    const status = runCliWithoutPath(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stdout || status.stderr);
+    assert.deepEqual(
+      readReport(status.stdout).knownOutOfScopeVisibleTexts,
+      expected,
+    );
+
+    const statusText = runCliWithoutPath(
+      "status",
+      "--project",
+      project.directory,
+    );
+    assert.equal(statusText.status, 0, statusText.stderr);
+    for (const text of [
+      "config.yml:camp.default-name",
+      "{player}'s Camp",
+      "web.yml:map.general.layer",
+      "Lands",
+    ]) {
+      assert.ok(statusText.stdout.includes(text), text);
+    }
+    assert.match(statusText.stdout, /范围外.*仅登记/);
+
+    const check = runCliWithoutPath(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(check.status, 1);
+    const checkReport = readReport(check.stdout || check.stderr);
+    assert.deepEqual(checkReport.knownOutOfScopeVisibleTexts, expected);
+    const coverage = checkReport.coverage as Record<string, unknown>;
+    assert.equal(coverage.complete, false);
+    assert.ok(
+      !(coverage.unavailableCapabilities as string[]).some((capability) =>
+        /web\.yml|config\.yml/.test(capability),
+      ),
+    );
+
+    const checkText = runCliWithoutPath(
+      "check",
+      "--project",
+      project.directory,
+    );
+    assert.equal(checkText.status, 1);
+    const checkTextOutput = checkText.stdout || checkText.stderr;
+    assert.match(checkTextOutput, /检查覆盖不完整/);
+    assert.match(checkTextOutput, /范围外.*仅登记/);
+    for (const text of [
+      "config.yml:camp.default-name",
+      "web.yml:map.general.layer",
+      "Lands",
+    ]) {
+      assert.ok(checkTextOutput.includes(text), text);
+    }
+
+    await writeJar(project.jarFile, {
+      extra: {
+        "config.yml": 'camp:\n  default-name: "{player}\'s Settlement"\n',
+        "web.yml": "map:\n  general:\n    layer: Lands Map\n",
+      },
+    });
+    const beforePreview = await snapshotProjectFiles(project.directory);
+    const preview = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stdout || preview.stderr);
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforePreview,
+    );
+
+    const applied = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stdout || applied.stderr);
+    const afterSync = runCliWithoutPath(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(afterSync.status, 0, afterSync.stdout || afterSync.stderr);
+    assert.deepEqual(readReport(afterSync.stdout).knownOutOfScopeVisibleTexts, [
+      {
+        file: "config.yml",
+        path: ["camp", "default-name"],
+        value: "{player}'s Settlement",
+      },
+      {
+        file: "web.yml",
+        path: ["map", "general", "layer"],
+        value: "Lands Map",
+      },
+    ]);
+  });
   void it("按当前诊断 ID 记录精确豁免，邻近诊断仍然报告", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(

@@ -26,6 +26,7 @@ const sampleProject: ProjectView = {
   ],
   targetMessages: [],
   structures: [],
+  knownOutOfScopeVisibleTexts: [],
   fileIssues: [],
 };
 

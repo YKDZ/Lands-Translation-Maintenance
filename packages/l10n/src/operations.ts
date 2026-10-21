@@ -32,6 +32,7 @@ import type {
   Diagnostic,
   DiagnosticLocation,
   JsonValue,
+  KnownOutOfScopeVisibleText,
   ObservedMessage,
   ProjectFileIssue,
   ProjectReport,
@@ -331,6 +332,39 @@ function readYaml(bytes: Uint8Array, file: string) {
     throw new ProjectOperationError(`${file} 无法无歧义解析：${detail}`);
   }
   return parsed.parsed;
+}
+
+function knownOutOfScopeVisibleTexts(
+  resources: readonly ResourceInventoryEntry[],
+  jarByPath: ReadonlyMap<string, Uint8Array>,
+): KnownOutOfScopeVisibleText[] {
+  const fields = [
+    { file: "config.yml", path: ["camp", "default-name"] },
+    { file: "web.yml", path: ["map", "general", "layer"] },
+  ] as const;
+  const declaredConfiguration = new Set(
+    resources
+      .filter((resource) => resource.purpose === "configuration")
+      .map((resource) => resource.path),
+  );
+  const visibleTexts: KnownOutOfScopeVisibleText[] = [];
+  for (const field of fields) {
+    if (!declaredConfiguration.has(field.file)) continue;
+    const bytes = jarByPath.get(field.file);
+    if (bytes === undefined) continue;
+    let source: string;
+    try {
+      source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      continue;
+    }
+    const parsed = parseYaml(source, field.file);
+    if (!parsed.ok) continue;
+    const value = valueAtPath(parsed.parsed.value, field.path);
+    if (typeof value !== "string") continue;
+    visibleTexts.push({ ...field, value });
+  }
+  return visibleTexts;
 }
 
 function readMappingSnapshot(
@@ -674,6 +708,7 @@ function makeReport(
       lock,
       confirmedSameTextIds,
     ),
+    knownOutOfScopeVisibleTexts: project.knownOutOfScopeVisibleTexts,
     ...(coverage === undefined ? {} : { coverage }),
   };
 }
@@ -686,6 +721,7 @@ function emptyView(): ProjectView {
     messages: [],
     targetMessages: [],
     structures: [],
+    knownOutOfScopeVisibleTexts: [],
     fileIssues: [],
   };
 }
@@ -815,6 +851,7 @@ function projectView(
     messages: collected.messages,
     targetMessages: collected.targetMessages,
     structures,
+    knownOutOfScopeVisibleTexts: baseline.knownOutOfScopeVisibleTexts ?? [],
     fileIssues: [
       ...extraIssues,
       ...collected.issues,
@@ -1251,8 +1288,8 @@ function structureFindingIssues(
 
 function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable = [
-    "MiniMessage 变量、交互、标签对等及 Lands 控制语义检查尚未实现",
-    "变量、术语、风格和译文一致性检查尚未实现",
+    "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
+    "术语、风格和译文一致性检查尚未实现",
   ];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   if (
@@ -1451,6 +1488,10 @@ export async function initializeProject(
     jarSha256: jarInput.sha256,
     resources,
     mappings,
+    knownOutOfScopeVisibleTexts: knownOutOfScopeVisibleTexts(
+      configuration.resources,
+      jarByPath,
+    ),
     ...(miniMessageTheme === undefined ? {} : { miniMessageTheme }),
   };
   const baselineText = serializeBaseline(baseline);
@@ -1685,9 +1726,7 @@ export async function previewSyncProject(
     const detail = invalidSourceIssues
       .map((issue) => `${issue.file} ${issue.path.join(".")}: ${issue.reason}`)
       .join("；");
-    throw new ProjectOperationError(
-      `原文不符合已声明的聊天字段分类：${detail}`,
-    );
+    throw new ProjectOperationError(`原文不符合已声明的字段类型：${detail}`);
   }
 
   const combinedBaseline: SourceBaseline = {
@@ -2096,6 +2135,10 @@ export async function previewSyncProject(
     jarSha256: jarInput.sha256,
     resources,
     mappings,
+    knownOutOfScopeVisibleTexts: knownOutOfScopeVisibleTexts(
+      configuration.resources,
+      jarByPath,
+    ),
     ...(releasedTranslationPaths.length === 0
       ? {}
       : { releasedTranslationPaths }),
