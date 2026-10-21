@@ -63,6 +63,13 @@ const reportSchema = z.object({
     missingTranslations: z.number().int().nonnegative(),
   }),
   diagnostics: z.array(diagnosticSchema),
+  knownOutOfScopeVisibleTexts: z.array(
+    z.object({
+      file: z.string(),
+      path: z.array(z.string()),
+      value: z.string(),
+    }),
+  ),
   coverage: z
     .object({
       complete: z.boolean(),
@@ -208,6 +215,14 @@ function renderReport(report: ReportPayload) {
     `${report.operation}：${stateNames[report.state]}`,
     `资源文件 ${report.summary.resourceFiles} 项；消息 ${report.summary.messages} 条；待翻译 ${report.summary.pendingTranslations} 条；历史同文候选 ${report.summary.sameTextCandidates} 条；已修改 ${report.summary.modifiedTranslations} 条；缺失 ${report.summary.missingTranslations} 条。`,
   ];
+  if (report.knownOutOfScopeVisibleTexts.length > 0) {
+    lines.push("已知范围外可见文本（仅登记，不纳入翻译维护）：");
+    for (const visibleText of report.knownOutOfScopeVisibleTexts) {
+      lines.push(
+        `  ${visibleText.file}:${visibleText.path.join(".")} = ${JSON.stringify(visibleText.value)}`,
+      );
+    }
+  }
   if (report.coverage !== undefined) {
     lines.push(
       report.coverage.complete

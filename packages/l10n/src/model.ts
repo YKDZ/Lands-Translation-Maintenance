@@ -274,8 +274,15 @@ export interface ProjectView {
   readonly messages: readonly ObservedMessage[];
   readonly targetMessages: readonly TargetMessage[];
   readonly structures: readonly ProjectStructure[];
+  readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly fileIssues: readonly ProjectFileIssue[];
   readonly miniMessage?: MiniMessageParseProject;
+}
+
+export interface KnownOutOfScopeVisibleText {
+  readonly file: string;
+  readonly path: readonly string[];
+  readonly value: string;
 }
 
 export interface ProjectStructure {
@@ -366,6 +373,7 @@ export interface ProjectReport {
   readonly state: "ready" | "issues" | "incomplete";
   readonly summary: ProjectSummary;
   readonly diagnostics: readonly Diagnostic[];
+  readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly coverage?: CheckCoverage;
 }
 

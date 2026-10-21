@@ -9,6 +9,7 @@ import { translationFieldCategories, translationFieldScenes } from "#/model";
 import type {
   ConsumerConfiguration,
   JsonValue,
+  KnownOutOfScopeVisibleText,
   ResourceInventoryEntry,
   TranslationMapping,
 } from "#/model";
@@ -48,6 +49,7 @@ export interface SourceBaseline {
   readonly resources: readonly ResourceSnapshot[];
   readonly mappings: readonly MappingSnapshot[];
   readonly releasedTranslationPaths?: readonly ReleasedTranslationPath[];
+  readonly knownOutOfScopeVisibleTexts?: readonly KnownOutOfScopeVisibleText[];
   readonly miniMessageTheme?: {
     readonly file: string;
     readonly source: string;
@@ -168,6 +170,17 @@ const baselineSchema = z
             sourceFile: z.string().min(1),
             targetFile: z.string().min(1),
             path: z.array(z.string()),
+          })
+          .strict(),
+      )
+      .optional(),
+    knownOutOfScopeVisibleTexts: z
+      .array(
+        z
+          .object({
+            file: z.string().min(1),
+            path: z.array(z.string()),
+            value: z.string(),
           })
           .strict(),
       )
