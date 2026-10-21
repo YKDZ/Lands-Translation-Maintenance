@@ -268,7 +268,8 @@ void describe("无 JAR 保存项目检查旅程", () => {
       targetPath,
       initialTarget
         .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
-        .replace("draft: Review this policy", "draft: 请审阅此政策"),
+        .replace("draft: Review this policy", "draft: 请审阅此政策")
+        .replace('duplicate_b: "启用国家"', 'duplicate_b: "关闭国家"'),
     );
     const editedFiles = await snapshotProjectFiles(projectDirectory);
 
@@ -310,6 +311,22 @@ void describe("无 JAR 保存项目检查旅程", () => {
         diagnostic.code === "minimessage.tag-mismatch",
     );
     assert.equal(tagDiagnostics.length, 2);
+    const consistencyDiagnostics = (
+      editedReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "translation-consistency" &&
+        diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.equal(consistencyDiagnostics.length, 1);
+    assert.match(
+      JSON.stringify(consistencyDiagnostics[0]?.actual),
+      /duplicate_a/u,
+    );
+    assert.match(
+      JSON.stringify(consistencyDiagnostics[0]?.actual),
+      /duplicate_b/u,
+    );
 
     const exemptedDiagnosticId = String(tagDiagnostics[0]?.diagnosticId);
     const exempted = runArtifactCli(
