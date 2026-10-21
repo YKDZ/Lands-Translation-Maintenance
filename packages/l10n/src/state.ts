@@ -30,6 +30,8 @@ export interface MappingSnapshot {
   readonly mapping: TranslationMapping;
   readonly sourceValue: JsonValue;
   readonly sourceSha256: string;
+  readonly definitionsValue?: JsonValue;
+  readonly definitionsSha256?: string;
 }
 
 export interface SourceBaseline {
@@ -144,6 +146,11 @@ const baselineSchema = z
           mapping: mappingSchema,
           sourceValue: jsonValueSchema,
           sourceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+          definitionsValue: jsonValueSchema.optional(),
+          definitionsSha256: z
+            .string()
+            .regex(/^[0-9a-f]{64}$/)
+            .optional(),
         })
         .strict(),
     ),
@@ -327,6 +334,26 @@ export async function readState(
       return {
         ok: false,
         message: `原文基线摘要不一致：${entry.mapping.source}`,
+      };
+    }
+    if (
+      entry.definitionsValue !== undefined &&
+      (entry.definitionsSha256 === undefined ||
+        sha256(canonicalJson(entry.definitionsValue)) !==
+          entry.definitionsSha256)
+    ) {
+      return {
+        ok: false,
+        message: `结构基线摘要不一致：${entry.mapping.definitionsSource ?? entry.mapping.source}`,
+      };
+    }
+    if (
+      entry.definitionsSha256 !== undefined &&
+      entry.definitionsValue === undefined
+    ) {
+      return {
+        ok: false,
+        message: `结构基线缺少定义值：${entry.mapping.definitionsSource ?? entry.mapping.source}`,
       };
     }
   }

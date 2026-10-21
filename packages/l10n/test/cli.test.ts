@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import { applySyncProject, initializeProject } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
@@ -458,6 +458,710 @@ void describe("CLI 制品", () => {
     await readFile(
       join(stateDirectory, "upstream/source-baseline.json"),
       "utf8",
+    );
+  });
+
+  void it("初始化对话框和混合配置时只收录声明字段并保留已有中文", async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "lands-l10n-dialogs-"));
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    await mkdir(join(directory, "Locale"), { recursive: true });
+    await mkdir(join(directory, "Locale/Nations"), { recursive: true });
+    await mkdir(join(directory, "zh"), { recursive: true });
+
+    const dialogSource = [
+      "dialogs:",
+      "  confirm:",
+      "    title: '<t:positive>Confirm <v:name>'",
+      "    buttons:",
+      "      confirm:",
+      "        label: '<t:positive>Go'",
+      "        tooltip: 'Go now'",
+      "        action: confirm",
+      "    inputs:",
+      "      count:",
+      "        type: number-range",
+      "        label: Count",
+      "        label-format: '<v:label>: <v:value>'",
+      "        start: 0",
+      "        end: 10",
+      "        step: 1",
+      "        initial: 2",
+      "    bodies:",
+      "      text:",
+      "        text: '<t:regular>Hello <v:name>'",
+      "      item:",
+      "        item:",
+      "          material: NAME_TAG",
+      "          name: '&bToken'",
+      "          lore: ['&7One', '&fTwo']",
+      "          hide-tooltip: true",
+      "  single_item:",
+      "    bodies:",
+      "      item:",
+      "        item:",
+      "          material: PAPER",
+      "          lore: '&7Single line'",
+      "",
+    ].join("\n");
+    const nationDialogSource = [
+      "dialogs:",
+      "  welcome:",
+      "    title: '<t:regular>Nation overview'",
+      "",
+    ].join("\n");
+    const categoriesSource = [
+      "land:",
+      "  enabled: true",
+      "  categories:",
+      "    shop:",
+      "      enabled: true",
+      "      default: false",
+      "      allow-auto-accept: true",
+      "      name: '&cShop'",
+      "      description: ['&7Market', '&fStalls']",
+      "",
+    ].join("\n");
+    const levelsSource = [
+      "land:",
+      "  enabled: true",
+      "  levels:",
+      "    '1':",
+      "      title: Settlement",
+      "      attributes:",
+      "        chunks:",
+      "          description: '&7{value} claims'",
+      "          value: 0",
+      "      requirements:",
+      "        members:",
+      "          required: 4",
+      "          title: 'Trust {req} Players'",
+      "          description: ['&7Trust {req} players', '&e/lands trust']",
+      "      commands:",
+      "        reached: ['say reached']",
+      "        down: []",
+      "",
+    ].join("\n");
+    const rolesSource = [
+      "land:",
+      "  roles:",
+      "    owner:",
+      "      name: '&4&lOwner'",
+      "      icon: 'skin:abc123'",
+      "      default: ALL",
+      "",
+    ].join("\n");
+    const jarFile = join(directory, "Lands.jar");
+    await writeFile(
+      jarFile,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(dialogSource),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(categoriesSource),
+        "levels.yml": strToU8(levelsSource),
+        "roles.yml": strToU8(rolesSource),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+        "resources:",
+        "  - path: Locale/en-US_dialogs.yml",
+        "    purpose: dialog-language",
+        "  - path: Locale/Nations/en-US_dialogs.yml",
+        "    purpose: dialog-language",
+        "  - path: categories.yml",
+        "    purpose: configuration",
+        "  - path: levels.yml",
+        "    purpose: configuration",
+        "  - path: roles.yml",
+        "    purpose: configuration",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: Locale/en-US_dialogs.yml",
+        "      target: Locale/zh-CN_dialogs.yml",
+        "      definitionsSource: Locale/en-US_dialogs.yml",
+        "      fields:",
+        '        - path: [dialogs, "*", title]',
+        "          category: dialog-string",
+        "          scene: dialog-title",
+        '        - path: [dialogs, "*", buttons, "*", label]',
+        "          category: dialog-string",
+        "          scene: dialog-button-label",
+        '        - path: [dialogs, "*", buttons, "*", tooltip]',
+        "          category: dialog-string",
+        "          scene: dialog-button-tooltip",
+        '        - path: [dialogs, "*", inputs, "*", label]',
+        "          category: dialog-string",
+        "          scene: dialog-input-label",
+        '        - path: [dialogs, "*", inputs, "*", label-format]',
+        "          category: dialog-label-format",
+        "          scene: dialog-label-format",
+        '        - path: [dialogs, "*", bodies, "*", text]',
+        "          category: dialog-string",
+        "          scene: dialog-body-text",
+        '        - path: [dialogs, "*", bodies, "*", item, name]',
+        "          category: gui-string",
+        "          scene: gui-item-name",
+        '        - path: [dialogs, "*", bodies, "*", item, lore]',
+        "          category: gui-lore",
+        "          scene: gui-item-lore",
+        "    - source: Locale/Nations/en-US_dialogs.yml",
+        "      target: Locale/Nations/zh-CN_dialogs.yml",
+        "      definitionsSource: Locale/Nations/en-US_dialogs.yml",
+        "      fields:",
+        '        - path: [dialogs, "*", title]',
+        "          category: dialog-string",
+        "          scene: dialog-title",
+        "    - source: categories.yml",
+        "      target: zh/categories.yml",
+        "      definitionsSource: categories.yml",
+        "      fields:",
+        '        - path: [land, categories, "*", name]',
+        "          category: configuration-string",
+        "          scene: category-name",
+        '        - path: [land, categories, "*", description]',
+        "          category: configuration-string-list",
+        "          scene: category-description",
+        "    - source: levels.yml",
+        "      target: zh/levels.yml",
+        "      definitionsSource: levels.yml",
+        "      fields:",
+        '        - path: [land, levels, "*", title]',
+        "          category: configuration-string",
+        "          scene: level-title",
+        '        - path: [land, levels, "*", attributes, "*", description]',
+        "          category: configuration-string",
+        "          scene: level-attribute-description",
+        '        - path: [land, levels, "*", requirements, "*", title]',
+        "          category: configuration-string",
+        "          scene: level-requirement-title",
+        '        - path: [land, levels, "*", requirements, "*", description]',
+        "          category: configuration-string-list",
+        "          scene: level-requirement-description",
+        "    - source: roles.yml",
+        "      target: zh/roles.yml",
+        "      definitionsSource: roles.yml",
+        "      fields:",
+        '        - path: [land, roles, "*", name]',
+        "          category: configuration-string",
+        "          scene: role-name",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      "dialogs:\n  confirm:\n    title: 确认\n",
+    );
+    await writeFile(
+      join(directory, "Locale/Nations/zh-CN_dialogs.yml"),
+      "dialogs:\n  welcome:\n    title: 国家概览\n",
+    );
+    await writeFile(
+      join(directory, "zh/categories.yml"),
+      "land:\n  categories:\n    shop:\n      name: 商店\n      description: [市场, 摊位]\n",
+    );
+    await writeFile(
+      join(directory, "zh/levels.yml"),
+      "land:\n  levels:\n    '1':\n      title: 聚落\n",
+    );
+    await writeFile(
+      join(directory, "zh/roles.yml"),
+      "land:\n  roles:\n    owner:\n      name: 主人\n",
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal((report.summary as Record<string, unknown>).messages, 17);
+    assert.match(
+      await readFile(join(directory, "Locale/zh-CN_dialogs.yml"), "utf8"),
+      /title: 确认/,
+    );
+    assert.match(
+      await readFile(
+        join(directory, "Locale/Nations/zh-CN_dialogs.yml"),
+        "utf8",
+      ),
+      /title: 国家概览/,
+    );
+    assert.match(
+      await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      /name: 商店/,
+    );
+    assert.match(
+      await readFile(join(directory, "zh/levels.yml"), "utf8"),
+      /title: 聚落/,
+    );
+    assert.match(
+      await readFile(join(directory, "zh/roles.yml"), "utf8"),
+      /name: 主人/,
+    );
+    const seededDialog = parseYaml(
+      await readFile(join(directory, "Locale/zh-CN_dialogs.yml"), "utf8"),
+    ) as {
+      readonly dialogs: {
+        readonly confirm: {
+          readonly buttons: { readonly confirm: { readonly action: string } };
+          readonly inputs: { readonly count: { readonly start: number } };
+          readonly bodies: {
+            readonly item: { readonly item: { readonly material: string } };
+          };
+        };
+      };
+    };
+    assert.equal(
+      seededDialog.dialogs.confirm.buttons.confirm.action,
+      "confirm",
+    );
+    assert.equal(seededDialog.dialogs.confirm.inputs.count.start, 0);
+    assert.equal(
+      seededDialog.dialogs.confirm.bodies.item.item.material,
+      "NAME_TAG",
+    );
+
+    const status = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    assert.equal(
+      (readReport(status.stdout).summary as Record<string, unknown>)
+        .pendingTranslations,
+      11,
+    );
+
+    const beforePreview = await snapshotProjectFiles(directory);
+    const preview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const plannedMessages = plan.messages as readonly Record<string, unknown>[];
+    const inputFormat = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","confirm","inputs","count","label-format"]',
+    );
+    assert.equal(inputFormat?.category, "dialog-label-format");
+    assert.equal(inputFormat?.scene, "dialog-label-format");
+    assert.equal(inputFormat?.format, "label-format");
+    const dialogTitle = plannedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["dialogs","confirm","title"]',
+    );
+    assert.equal(dialogTitle?.category, "dialog-string");
+    assert.equal(dialogTitle?.format, "minimessage");
+    const lore = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","confirm","bodies","item","item","lore"]',
+    );
+    assert.equal(lore?.category, "gui-lore");
+    assert.equal(lore?.scene, "gui-item-lore");
+    assert.equal(lore?.format, "legacy-color-minimessage");
+    const scalarLore = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","single_item","bodies","item","item","lore"]',
+    );
+    assert.equal(scalarLore?.category, "gui-lore");
+    assert.equal(scalarLore?.source, "&7Single line");
+    const categoryDescription = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","categories","shop","description"]',
+    );
+    assert.equal(categoryDescription?.category, "configuration-string-list");
+    assert.equal(categoryDescription?.scene, "category-description");
+    assert.equal(categoryDescription?.format, "legacy-color-minimessage");
+    const requirementTitle = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","levels","1","requirements","members","title"]',
+    );
+    assert.equal(requirementTitle?.format, "legacy-variable-minimessage");
+    const roleName = plannedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["land","roles","owner","name"]',
+    );
+    assert.equal(roleName?.scene, "role-name");
+    assert.equal(roleName?.format, "legacy-color-minimessage");
+    const requirementDescription = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","levels","1","requirements","members","description"]',
+    );
+    assert.equal(requirementDescription?.category, "configuration-string-list");
+    assert.equal(
+      requirementDescription?.format,
+      "legacy-color-variable-minimessage",
+    );
+    assert.deepEqual(await snapshotProjectFiles(directory), beforePreview);
+
+    const candidateJar = join(directory, "Lands-8.9.2.jar");
+    await writeFile(
+      candidateJar,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(
+          dialogSource
+            .replace("Confirm <v:name>", "Confirmed <v:name>")
+            .replace("action: confirm", "action: cancel")
+            .replace("start: 0", "start: 1")
+            .replace("material: NAME_TAG", "material: PAPER"),
+        ),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(
+          categoriesSource
+            .replace("default: false", "default: true")
+            .replace("allow-auto-accept: true", "allow-auto-accept: false")
+            .replace("&7Market", "&7Markets today"),
+        ),
+        "levels.yml": strToU8(
+          levelsSource
+            .replace("value: 0", "value: 5")
+            .replace("say reached", "say updated"),
+        ),
+        "roles.yml": strToU8(rolesSource.replace("skin:abc123", "DIAMOND")),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    const beforeChangedPreview = await snapshotProjectFiles(directory);
+    const changedPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(changedPreview.status, 0, changedPreview.stderr);
+    const changedPlan = readEnvelope(changedPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    const changedStructures = changedPlan.structures as readonly Record<
+      string,
+      unknown
+    >[];
+    const actionStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","confirm","buttons","confirm","action"]',
+    );
+    assert.equal(actionStructure?.action, "update");
+    assert.equal(actionStructure?.previous, "confirm");
+    assert.equal(actionStructure?.expected, "cancel");
+    assert.equal(
+      changedStructures.some(
+        ({ path }) => JSON.stringify(path) === '["dialogs","confirm","title"]',
+      ),
+      false,
+    );
+    const changedMessages = changedPlan.messages as readonly Record<
+      string,
+      unknown
+    >[];
+    const resetDescription = changedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","categories","shop","description"]',
+    );
+    assert.equal(resetDescription?.action, "reset");
+    assert.deepEqual(resetDescription?.previousTarget, ["市场", "摊位"]);
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeChangedPreview,
+    );
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const updatedDialog = parseYaml(
+      await readFile(join(directory, "Locale/zh-CN_dialogs.yml"), "utf8"),
+    ) as {
+      readonly dialogs: {
+        readonly confirm: {
+          readonly title: string;
+          readonly buttons: { readonly confirm: { readonly action: string } };
+          readonly inputs: { readonly count: { readonly start: number } };
+          readonly bodies: {
+            readonly item: { readonly item: { readonly material: string } };
+          };
+        };
+      };
+    };
+    assert.equal(
+      updatedDialog.dialogs.confirm.title,
+      "<t:positive>Confirmed <v:name>",
+    );
+    assert.equal(
+      updatedDialog.dialogs.confirm.buttons.confirm.action,
+      "cancel",
+    );
+    assert.equal(updatedDialog.dialogs.confirm.inputs.count.start, 1);
+    assert.equal(
+      updatedDialog.dialogs.confirm.bodies.item.item.material,
+      "PAPER",
+    );
+    const updatedCategories = parseYaml(
+      await readFile(join(directory, "zh/categories.yml"), "utf8"),
+    ) as {
+      readonly land: {
+        readonly categories: {
+          readonly shop: {
+            readonly name: string;
+            readonly default: boolean;
+            readonly allowAutoAccept?: boolean;
+            readonly description: readonly string[];
+          };
+        };
+      };
+    };
+    assert.equal(updatedCategories.land.categories.shop.name, "商店");
+    assert.equal(updatedCategories.land.categories.shop.default, true);
+    assert.deepEqual(updatedCategories.land.categories.shop.description, [
+      "&7Markets today",
+      "&fStalls",
+    ]);
+    const updatedLevels = parseYaml(
+      await readFile(join(directory, "zh/levels.yml"), "utf8"),
+    ) as {
+      readonly land: {
+        readonly levels: {
+          readonly "1": {
+            readonly attributes: {
+              readonly chunks: { readonly value: number };
+            };
+            readonly commands: { readonly reached: readonly string[] };
+          };
+        };
+      };
+    };
+    assert.equal(updatedLevels.land.levels["1"].attributes.chunks.value, 5);
+    assert.deepEqual(updatedLevels.land.levels["1"].commands.reached, [
+      "say updated",
+    ]);
+    const updatedRoles = parseYaml(
+      await readFile(join(directory, "zh/roles.yml"), "utf8"),
+    ) as {
+      readonly land: {
+        readonly roles: {
+          readonly owner: { readonly name: string; readonly icon: string };
+        };
+      };
+    };
+    assert.equal(updatedRoles.land.roles.owner.name, "主人");
+    assert.equal(updatedRoles.land.roles.owner.icon, "DIAMOND");
+
+    const afterApply = await snapshotProjectFiles(directory);
+    const repeated = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    assert.deepEqual(await snapshotProjectFiles(directory), afterApply);
+
+    const rolesPath = join(directory, "zh/roles.yml");
+    const malformedRoles = parseYaml(await readFile(rolesPath, "utf8")) as {
+      land: { roles: { owner: { icon: unknown } } };
+    };
+    malformedRoles.land.roles.owner.icon = { material: "DIAMOND" };
+    await writeFile(rolesPath, stringifyYaml(malformedRoles));
+    const beforeMalformedStructurePreview =
+      await snapshotProjectFiles(directory);
+    const malformedStructurePreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(malformedStructurePreview.status, 1);
+    const malformedStructureEnvelope = readEnvelope(
+      malformedStructurePreview.stdout || malformedStructurePreview.stderr,
+    );
+    assert.equal(malformedStructureEnvelope.kind, "failure");
+    const malformedStructureResult = malformedStructureEnvelope.data
+      ?.preview as Record<string, unknown>;
+    assert.equal(malformedStructureResult.ready, false);
+    assert.equal(
+      (
+        malformedStructureResult.blockers as readonly Record<string, unknown>[]
+      )[0]?.code,
+      "sync.structure-target-path-type",
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeMalformedStructurePreview,
+    );
+    malformedRoles.land.roles.owner.icon = "DIAMOND";
+    await writeFile(rolesPath, stringifyYaml(malformedRoles));
+
+    const badJar = join(directory, "Lands-invalid-description.jar");
+    await writeFile(
+      badJar,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(
+          dialogSource
+            .replace("Confirm <v:name>", "Confirmed <v:name>")
+            .replace("action: confirm", "action: cancel")
+            .replace("start: 0", "start: 1")
+            .replace("material: NAME_TAG", "material: PAPER"),
+        ),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(
+          categoriesSource
+            .replace("default: false", "default: true")
+            .replace("allow-auto-accept: true", "allow-auto-accept: false")
+            .replace(
+              "description: ['&7Market', '&fStalls']",
+              "description: '&7Market'",
+            ),
+        ),
+        "levels.yml": strToU8(
+          levelsSource
+            .replace("value: 0", "value: 5")
+            .replace("say reached", "say updated"),
+        ),
+        "roles.yml": strToU8(rolesSource.replace("skin:abc123", "DIAMOND")),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    const beforeInvalidPreview = await snapshotProjectFiles(directory);
+    const invalidPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      badJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.notEqual(invalidPreview.status, 0);
+    assert.match(invalidPreview.stdout + invalidPreview.stderr, /type|类型/i);
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeInvalidPreview,
+    );
+
+    const configPath = join(directory, ".l10n/config.yml");
+    const configWithDescription = await readFile(configPath, "utf8");
+    const releasedDescriptionField = [
+      '        - path: [land, categories, "*", description]',
+      "          category: configuration-string-list",
+      "          scene: category-description",
+      "",
+    ].join("\n");
+    assert.ok(configWithDescription.includes(releasedDescriptionField));
+    await writeFile(
+      configPath,
+      configWithDescription.replace(releasedDescriptionField, ""),
+    );
+    const descriptionBeforeScopeRelease = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly shop: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.shop.description;
+    const beforeScopeReleasePreview = await snapshotProjectFiles(directory);
+    const scopeReleasePreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(scopeReleasePreview.status, 0, scopeReleasePreview.stderr);
+    const scopeReleasePlan = readEnvelope(scopeReleasePreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    assert.equal(
+      (scopeReleasePlan.messages as readonly Record<string, unknown>[]).some(
+        ({ path, action }) =>
+          JSON.stringify(path) ===
+            '["land","categories","shop","description"]' && action === "delete",
+      ),
+      false,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeScopeReleasePreview,
+    );
+    const scopeReleaseApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(scopeReleaseApplied.status, 0, scopeReleaseApplied.stderr);
+    const descriptionAfterScopeRelease = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly shop: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.shop.description;
+    assert.deepEqual(
+      descriptionAfterScopeRelease,
+      descriptionBeforeScopeRelease,
     );
   });
 
