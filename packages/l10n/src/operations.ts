@@ -42,6 +42,7 @@ import type {
   ProjectStructure,
   ProjectView,
   RuleInput,
+  RuleInputDependency,
   ResourceInventoryEntry,
   SyncInputSnapshot,
   SyncMessageChange,
@@ -54,7 +55,11 @@ import type {
   SyncWrite,
   Severity,
 } from "#/model";
-import { builtInRules, evaluateRules } from "#/rules";
+import {
+  builtInRules,
+  evaluateRules,
+  inputDependenciesForDiagnostic,
+} from "#/rules";
 import {
   baselineFileName,
   baselineDirectoryName,
@@ -2522,6 +2527,7 @@ function requiredRuleInputUnavailable(
   ruleId: string,
   operation: "status" | "check",
   messageId?: string,
+  requiredInputDependencies?: readonly RuleInputDependency[],
 ): boolean {
   const rule = project.registeredRules.find(
     (candidate) => candidate.id === ruleId,
@@ -2533,6 +2539,24 @@ function requiredRuleInputUnavailable(
         case "minimessage-parse":
           if (operation !== "check" || project.view.miniMessage === undefined)
             return true;
+          if (requiredInputDependencies !== undefined) {
+            return requiredInputDependencies
+              .filter((dependency) => dependency.input === input)
+              .some((dependency) => {
+                const documents = project.view.miniMessage!.documents.filter(
+                  (document) =>
+                    document.message.id === dependency.messageId &&
+                    document.origin === dependency.origin &&
+                    document.documentIndex === dependency.documentIndex &&
+                    canonicalJson(document.path) ===
+                      canonicalJson(dependency.path),
+                );
+                return (
+                  documents.length === 0 ||
+                  documents.some((document) => document.status !== "parsed")
+                );
+              });
+          }
           if (messageId === undefined)
             return project.view.miniMessage.unavailableCapabilities.length > 0;
           if (
@@ -2562,6 +2586,7 @@ function ruleUnavailable(
   operation: "status" | "check",
   messageId?: string,
   diagnosticCode?: string,
+  requiredInputDependencies?: readonly RuleInputDependency[],
 ): boolean {
   const incompleteVariableEvaluation =
     ruleId === "minimessage-variables" &&
@@ -2577,7 +2602,13 @@ function ruleUnavailable(
     !project.coverage.enabledRuleIds.includes(ruleId) ||
     project.coverage.disabledRuleIds.includes(ruleId) ||
     project.coverage.unsupportedRuleIds.includes(ruleId) ||
-    requiredRuleInputUnavailable(project, ruleId, operation, messageId) ||
+    requiredRuleInputUnavailable(
+      project,
+      ruleId,
+      operation,
+      messageId,
+      requiredInputDependencies,
+    ) ||
     incompleteVariableEvaluation
   );
 }
@@ -2661,6 +2692,9 @@ function applyExceptionRecords(
         item.contentFingerprint === record.contentFingerprint,
     );
     if (original !== undefined && !isExecutionPrecondition(original.code)) {
+      const requiredInputDependencies =
+        record.requiredInputDependencies ??
+        inputDependenciesForDiagnostic(original);
       if (
         !ruleUnavailable(
           project,
@@ -2668,6 +2702,7 @@ function applyExceptionRecords(
           operation,
           record.message?.id,
           record.code,
+          requiredInputDependencies,
         )
       )
         suppressed.add(original.diagnosticId);
@@ -2691,6 +2726,7 @@ function applyExceptionRecords(
       operation,
       record.message?.id,
       record.code,
+      record.requiredInputDependencies,
     );
     if (unavailable) {
       notices.push(
@@ -2929,6 +2965,7 @@ export async function recordDiagnosticExemption(
       { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
     );
   }
+  const requiredInputDependencies = inputDependenciesForDiagnostic(selected);
   if (
     isExecutionPrecondition(selected.code) ||
     ruleUnavailable(
@@ -2937,6 +2974,7 @@ export async function recordDiagnosticExemption(
       "check",
       selected.message?.id,
       selected.code,
+      requiredInputDependencies,
     )
   ) {
     throw new ProjectOperationError(
@@ -2953,6 +2991,9 @@ export async function recordDiagnosticExemption(
     code: selected.code,
     ...(selected.message === undefined ? {} : { message: selected.message }),
     ...(selected.origin === undefined ? {} : { origin: selected.origin }),
+    ...(requiredInputDependencies === undefined
+      ? {}
+      : { requiredInputDependencies }),
     location: selected.location,
     reason: normalizedReason,
   };

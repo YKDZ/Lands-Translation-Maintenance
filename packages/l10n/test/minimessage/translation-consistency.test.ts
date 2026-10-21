@@ -8,6 +8,7 @@ import { builtInRules, inspectProject } from "@lands-l10n/l10n";
 import {
   createFormatProject,
   createGuiProject,
+  createProject,
   readReport,
   runCli,
   runCliWithoutJava,
@@ -203,6 +204,263 @@ void describe("跨消息翻译一致性", () => {
     assert.deepEqual(consistencyDiagnostics(consistentReport), []);
   });
 
+  void it("按列表项路径配对聊天列表文档", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "first",
+      sourceEntries: ["first", "second"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        /^  greeting:.*$/mu,
+        `  greeting: ${JSON.stringify("第一项")}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+
+    assert.deepEqual(consistencyDiagnostics(report), []);
+
+    const partiallyTranslated = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      partiallyTranslated
+        .replace(/^  greeting:.*$/mu, `  greeting: ${JSON.stringify("你好")}`)
+        .replace(/^    - 第一项$/mu, "    - first")
+        .replace(
+          /^  welcome:.*$/mu,
+          `  welcome: ${JSON.stringify("§c未完成")}`,
+        ),
+    );
+    const partialCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const partialReport = readReport(
+      partialCheck.stdout || partialCheck.stderr,
+    );
+    assert.deepEqual(consistencyDiagnostics(partialReport), []);
+    assert.ok(
+      (partialReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+      ),
+      partialCheck.stderr || partialCheck.stdout,
+    );
+  });
+
+  void it("豁免按同组全部必要输入等待，且忽略无关消息", async (t) => {
+    const project = await createProject(t, { sourceGreeting: "Welcome" });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const setTarget = async (name: string, value: string) => {
+      const target = await readFile(targetPath, "utf8");
+      const field = new RegExp(`^(  ${name}: ).*$`, "mu");
+      if (field.test(target)) {
+        await writeFile(
+          targetPath,
+          target.replace(field, `$1${JSON.stringify(value)}`),
+        );
+      } else {
+        await writeFile(
+          targetPath,
+          target.replace(
+            /^(  greeting: .*\n)/mu,
+            `$1  ${name}: ${JSON.stringify(value)}\n`,
+          ),
+        );
+      }
+    };
+    await setTarget("greeting", "你好");
+    await setTarget("welcome", "欢迎");
+
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const group = consistencyDiagnostics(beforeReport).find(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.ok(group, before.stderr || before.stdout);
+
+    const exempted = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(group.diagnosticId),
+      "--reason",
+      "临时复核具体同源译文组",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr || exempted.stdout);
+
+    const setRegistered = async (value: string) => {
+      const target = await readFile(targetPath, "utf8");
+      await writeFile(
+        targetPath,
+        target.replace(
+          /^(    registered: ).*$/mu,
+          `$1${JSON.stringify(value)}`,
+        ),
+      );
+    };
+    await setRegistered("§c无关消息");
+    const unrelatedUnavailable = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const unrelatedReport = readReport(
+      unrelatedUnavailable.stdout || unrelatedUnavailable.stderr,
+    );
+    const unrelatedExceptions = (
+      unrelatedReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "exceptions");
+    assert.equal(
+      unrelatedExceptions.some((diagnostic) =>
+        ["exception.unable-to-evaluate", "exception.orphaned"].includes(
+          String(diagnostic.code),
+        ),
+      ),
+      false,
+      unrelatedUnavailable.stderr || unrelatedUnavailable.stdout,
+    );
+
+    await setRegistered("已注册");
+    await setTarget("welcome", "§c未完成");
+    const unavailable = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const unavailableReport = readReport(
+      unavailable.stdout || unavailable.stderr,
+    );
+    const unavailableExceptions = (
+      unavailableReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "exceptions");
+    assert.ok(
+      unavailableExceptions.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      unavailable.stderr || unavailable.stdout,
+    );
+    assert.equal(
+      unavailableExceptions.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      false,
+      unavailable.stderr || unavailable.stdout,
+    );
+
+    await setTarget("welcome", "欢迎");
+    const recovered = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const recoveredReport = readReport(recovered.stdout || recovered.stderr);
+    assert.equal(
+      (recoveredReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.code === "exception.unable-to-evaluate" ||
+          diagnostic.code === "exception.orphaned",
+      ),
+      false,
+      recovered.stderr || recovered.stdout,
+    );
+
+    await setTarget("welcome", "你好");
+    const disappeared = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const disappearedReport = readReport(
+      disappeared.stdout || disappeared.stderr,
+    );
+    assert.ok(
+      (
+        disappearedReport.diagnostics as readonly Record<string, unknown>[]
+      ).some((diagnostic) => diagnostic.code === "exception.orphaned"),
+      disappeared.stderr || disappeared.stdout,
+    );
+
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${config}\nrules:\n  translation-consistency:\n    enabled: false\n`,
+    );
+    const disabled = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const disabledReport = readReport(disabled.stdout || disabled.stderr);
+    assert.ok(
+      (disabledReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      disabled.stderr || disabled.stdout,
+    );
+  });
+
   void it("相似原文仅发复核警告，并保留否定、数字、变量和实体差别", async (t) => {
     const project = await createMessageProject(
       t,
@@ -396,6 +654,102 @@ void describe("跨消息翻译一致性", () => {
     assert.deepEqual(consistencyDiagnostics(report), []);
   });
 
+  void it("分开相邻 HTML 属性表面，同时合并正文中的纯样式短语", async (t) => {
+    const project = await createFormatProject(t, {
+      mapDescription:
+        '<div><span title="First"></span><span title="Second"></span><red>First</red>Second</div>',
+      targetMapDescription:
+        '<div><span title="第一项"></span><span title="第二项"></span><red>一</red>二</div>',
+      mapSpawn:
+        '<div><span title="FirstSecond"></span><red>First</red>Second</div>',
+      targetMapSpawn:
+        '<div><span title="复合标题"></span><red>合</red>并</div>',
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const sameSource = consistencyDiagnostics(report).filter(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+
+    assert.equal(sameSource.length, 1, checked.stderr || checked.stdout);
+    const bodyFinding = sameSource[0];
+    assert.ok(bodyFinding);
+    assert.equal(
+      (bodyFinding.expected as { readonly sourceText?: string }).sourceText,
+      "FirstSecond",
+    );
+    const participants = JSON.stringify(bodyFinding.actual);
+    assert.match(participants, /"role":"body"/u);
+    assert.doesNotMatch(participants, /HTML 属性/u);
+    assert.match(participants, /description/u);
+    assert.match(participants, /spawn/u);
+
+    const differentOrdinal = await createFormatProject(t, {
+      mapDescription:
+        '<div><span title="Second"></span><span title="First"></span></div>',
+      targetMapDescription:
+        '<div><span title="第二项"></span><span title="第一项"></span></div>',
+      mapSpawn: '<div><span title="First"></span></div>',
+      targetMapSpawn: '<div><span title="首项"></span></div>',
+    });
+    const secondInitialized = runCli(
+      "init",
+      "--project",
+      differentOrdinal.directory,
+      "--jar",
+      differentOrdinal.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      secondInitialized.status,
+      0,
+      secondInitialized.stderr || secondInitialized.stdout,
+    );
+    const secondCheck = runCli(
+      "check",
+      "--project",
+      differentOrdinal.directory,
+      "--output-format",
+      "structured",
+    );
+    const secondReport = readReport(secondCheck.stdout || secondCheck.stderr);
+    const secondSameSource = consistencyDiagnostics(secondReport).filter(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.equal(
+      secondSameSource.length,
+      1,
+      secondCheck.stderr || secondCheck.stdout,
+    );
+    const ordinalFinding = secondSameSource[0];
+    assert.ok(ordinalFinding);
+    assert.equal(
+      (ordinalFinding.expected as { readonly sourceText?: string }).sourceText,
+      "First",
+    );
+  });
+
   void it("分开比较正文与悬浮文本", async (t) => {
     const project = await createMessageProject(
       t,
@@ -490,7 +844,7 @@ void describe("跨消息翻译一致性", () => {
     const configuration = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
+      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  minimessage-tags:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
     );
     const disabledCheck = runCliWithoutJava(
       "check",

@@ -16,9 +16,21 @@ import type {
   RuleConfiguration,
   RuleContext,
   Severity,
+  RuleInputDependency,
 } from "#/model";
 import { translationConsistencyRule } from "#/translation-consistency";
 import { canonicalJson, compareText, deepFreeze, sha256 } from "#/value";
+
+const diagnosticInputDependencies = new WeakMap<
+  Diagnostic,
+  readonly RuleInputDependency[]
+>();
+
+export function inputDependenciesForDiagnostic(
+  diagnostic: Diagnostic,
+): readonly RuleInputDependency[] | undefined {
+  return diagnosticInputDependencies.get(diagnostic);
+}
 
 const structureRule: CheckRule = {
   id: "structure",
@@ -136,6 +148,7 @@ function diagnosticFromFinding(
               targetStatus: observed.targetStatus,
             },
       dependencies: finding.fingerprint ?? null,
+      requiredInputDependencies: finding.requiredInputDependencies ?? null,
       expected: finding.expected,
       actual: finding.actual,
     }),
@@ -148,7 +161,7 @@ function diagnosticFromFinding(
       contentFingerprint,
     }),
   );
-  return {
+  const diagnostic: Diagnostic = {
     diagnosticId,
     objectId,
     contentFingerprint,
@@ -162,6 +175,13 @@ function diagnosticFromFinding(
     expected: finding.expected,
     actual: finding.actual,
   };
+  if (finding.requiredInputDependencies !== undefined) {
+    diagnosticInputDependencies.set(
+      diagnostic,
+      finding.requiredInputDependencies,
+    );
+  }
+  return diagnostic;
 }
 
 function compareDiagnostics(left: Diagnostic, right: Diagnostic): number {

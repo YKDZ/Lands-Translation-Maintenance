@@ -6,6 +6,7 @@ import type {
   MiniMessagePosition,
   ProjectView,
   RuleFinding,
+  RuleInputDependency,
   TranslatableTextDocument,
   TranslatableTextSegment,
 } from "#/model";
@@ -14,6 +15,7 @@ import { canonicalJson, compareText, toJsonValue } from "#/value";
 interface TextRegion {
   readonly role: string;
   readonly roleLabel: string;
+  readonly surfaceIdentity: JsonValue;
   readonly segments: readonly TranslatableTextSegment[];
 }
 
@@ -37,6 +39,7 @@ interface ComparisonRecord {
   readonly message: MessageIdentity;
   readonly role: string;
   readonly roleLabel: string;
+  readonly surfaceIdentity: JsonValue;
   readonly sourceDocument: TranslatableTextDocument;
   readonly targetDocument: TranslatableTextDocument;
   readonly source: RegionContent;
@@ -51,6 +54,7 @@ interface ComparisonRecord {
 interface RegionBuilder {
   readonly role: string;
   readonly roleLabel: string;
+  readonly surfaceIdentity: JsonValue;
   readonly segments: TranslatableTextSegment[];
 }
 
@@ -136,24 +140,88 @@ function regionsForDocument(
   document: TranslatableTextDocument,
 ): ReadonlyMap<string, TextRegion> {
   const regions = new Map<string, RegionBuilder>();
+  const elementSurfacesByPosition = new Map<
+    string,
+    readonly { readonly name: string; readonly occurrence: number }[]
+  >();
+  const nextOccurrenceByParentAndName = new Map<string, number>();
 
   for (const segment of document.segments) {
     const { key: role, label: roleLabel } = roleForSegment(document, segment);
+    const context = segmentContext(document, segment);
+    const hasHtmlAttribute = context.some(
+      (frame) => frame.kind === "html-attribute",
+    );
+    let surface: readonly {
+      readonly name: string;
+      readonly occurrence: number;
+    }[] = [];
+    if (hasHtmlAttribute) {
+      for (const frame of context) {
+        if (frame.kind !== "html-element") continue;
+        const positionIdentity =
+          frame.position.start < 0 || frame.position.end < frame.position.start
+            ? null
+            : [frame.position.start, frame.position.end];
+        const elementIdentity = canonicalJson([
+          surface,
+          frame.name,
+          positionIdentity,
+        ]);
+        const existingSurface = elementSurfacesByPosition.get(elementIdentity);
+        if (existingSurface !== undefined) {
+          surface = existingSurface;
+          continue;
+        }
+        const siblingIdentity = canonicalJson([surface, frame.name]);
+        const occurrence =
+          nextOccurrenceByParentAndName.get(siblingIdentity) ?? 0;
+        nextOccurrenceByParentAndName.set(siblingIdentity, occurrence + 1);
+        surface = [...surface, { name: frame.name, occurrence }];
+        elementSurfacesByPosition.set(elementIdentity, surface);
+      }
+    }
+    const surfaceIdentity: JsonValue = hasHtmlAttribute ? surface : [];
+    const regionIdentity = canonicalJson([role, surfaceIdentity]);
 
-    let region = regions.get(role);
+    let region = regions.get(regionIdentity);
     if (region === undefined) {
-      region = { role, roleLabel, segments: [] };
-      regions.set(role, region);
+      region = { role, roleLabel, surfaceIdentity, segments: [] };
+      regions.set(regionIdentity, region);
     }
     region.segments.push(segment);
   }
 
-  return new Map(
-    [...regions].map(([key, region]) => [
-      key,
-      { ...region, segments: region.segments },
-    ]),
-  );
+  return new Map([...regions].map(([key, region]) => [key, { ...region }]));
+}
+
+function logicalDocumentIdentity(record: ComparisonRecord): string {
+  return canonicalJson([
+    record.message.id,
+    record.sourceDocument.documentIndex,
+    record.sourceDocument.path,
+  ]);
+}
+
+function inputDependencies(
+  records: readonly ComparisonRecord[],
+): readonly RuleInputDependency[] {
+  const dependencies = new Map<string, RuleInputDependency>();
+  for (const record of records) {
+    for (const document of [record.sourceDocument, record.targetDocument]) {
+      const dependency: RuleInputDependency = {
+        input: "minimessage-parse",
+        messageId: document.message.id,
+        origin: document.origin,
+        documentIndex: document.documentIndex,
+        path: document.path,
+      };
+      dependencies.set(canonicalJson(dependency), dependency);
+    }
+  }
+  return [...dependencies]
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([, dependency]) => dependency);
 }
 
 function variableContext(
@@ -280,13 +348,42 @@ function hasTranslatableContent(content: RegionContent): boolean {
 
 function messageIsPendingSeed(
   project: ProjectView,
-  messageId: string,
+  sourceDocument: TranslatableTextDocument,
+  targetDocument: TranslatableTextDocument,
 ): boolean {
-  const message = project.messages.find((item) => item.id === messageId);
+  const message = project.messages.find(
+    (item) => item.id === sourceDocument.message.id,
+  );
+  const valueAtPath = (
+    value: JsonValue | undefined,
+    path: readonly (string | number)[],
+  ): JsonValue | undefined => {
+    let current = value;
+    for (const part of path) {
+      if (typeof part === "number") {
+        if (!Array.isArray(current)) return undefined;
+        current = current[part];
+      } else {
+        if (
+          current === null ||
+          typeof current !== "object" ||
+          Array.isArray(current) ||
+          !Object.hasOwn(current, part)
+        ) {
+          return undefined;
+        }
+        current = (current as { readonly [key: string]: JsonValue })[part];
+      }
+    }
+    return current;
+  };
+  const sourcePath = sourceDocument.path.slice(message?.path.length ?? 0);
+  const targetPath = targetDocument.path.slice(message?.path.length ?? 0);
   return (
     message?.targetStatus !== "present" ||
     message.target === undefined ||
-    canonicalJson(message.source) === canonicalJson(message.target)
+    canonicalJson(valueAtPath(message.source, sourcePath)) ===
+      canonicalJson(valueAtPath(message.target, targetPath))
   );
 }
 
@@ -299,6 +396,7 @@ function comparisonRecords(project: ProjectView): ComparisonRecord[] {
         document.message.id,
         document.documentIndex,
         document.origin,
+        document.path,
       ]),
       document,
     );
@@ -306,27 +404,24 @@ function comparisonRecords(project: ProjectView): ComparisonRecord[] {
 
   const records: ComparisonRecord[] = [];
   for (const sourceDocument of textDocuments) {
-    if (
-      sourceDocument.origin !== "source" ||
-      messageIsPendingSeed(project, sourceDocument.message.id)
-    ) {
-      continue;
-    }
+    if (sourceDocument.origin !== "source") continue;
     const targetDocument = documentsByIdentity.get(
       canonicalJson([
         sourceDocument.message.id,
         sourceDocument.documentIndex,
         "target",
+        sourceDocument.path,
       ]),
     );
     if (targetDocument === undefined) continue;
+    if (messageIsPendingSeed(project, sourceDocument, targetDocument)) continue;
 
     const targetRegions = regionsForDocument(targetDocument);
     const sourceRegions = regionsForDocument(sourceDocument);
     const sourceTechnical = technicalSegments(sourceDocument);
     const targetTechnical = technicalSegments(targetDocument);
-    for (const [role, sourceRegion] of sourceRegions) {
-      const targetRegion = targetRegions.get(role);
+    for (const [regionIdentity, sourceRegion] of sourceRegions) {
+      const targetRegion = targetRegions.get(regionIdentity);
       if (targetRegion === undefined) continue;
       const source = contentOf(sourceRegion);
       const target = contentOf(targetRegion);
@@ -335,8 +430,9 @@ function comparisonRecords(project: ProjectView): ComparisonRecord[] {
       }
       records.push({
         message: sourceDocument.message,
-        role,
+        role: sourceRegion.role,
         roleLabel: sourceRegion.roleLabel,
+        surfaceIdentity: sourceRegion.surfaceIdentity,
         sourceDocument,
         targetDocument,
         source,
@@ -351,8 +447,18 @@ function comparisonRecords(project: ProjectView): ComparisonRecord[] {
   }
   return records.sort((left, right) =>
     compareText(
-      canonicalJson([left.message.id, left.role]),
-      canonicalJson([right.message.id, right.role]),
+      canonicalJson([
+        left.message.id,
+        left.sourceDocument.path,
+        left.role,
+        left.surfaceIdentity,
+      ]),
+      canonicalJson([
+        right.message.id,
+        right.sourceDocument.path,
+        right.role,
+        right.surfaceIdentity,
+      ]),
     ),
   );
 }
@@ -513,8 +619,10 @@ function stableIdentity(records: readonly ComparisonRecord[]): JsonValue {
     participants: records
       .map((record) => [
         record.message.id,
+        record.sourceDocument.path,
         record.sourceDocument.documentIndex,
         record.role,
+        record.surfaceIdentity,
       ])
       .sort((left, right) =>
         compareText(canonicalJson(left), canonicalJson(right)),
@@ -544,13 +652,24 @@ function sameSourceFindings(
   const findings: RuleFinding[] = [];
   for (const group of groups.values()) {
     if (
-      new Set(group.map((record) => record.message.id)).size < 2 ||
+      new Set(group.map(logicalDocumentIdentity)).size < 2 ||
       new Set(group.map((record) => record.target.signature)).size < 2
     ) {
       continue;
     }
     const ordered = [...group].sort((left, right) =>
-      compareText(left.message.id, right.message.id),
+      compareText(
+        canonicalJson([
+          logicalDocumentIdentity(left),
+          left.role,
+          left.surfaceIdentity,
+        ]),
+        canonicalJson([
+          logicalDocumentIdentity(right),
+          right.role,
+          right.surfaceIdentity,
+        ]),
+      ),
     );
     const first = ordered[0]!;
     const variants = new Map<string, ComparisonRecord[]>();
@@ -588,6 +707,7 @@ function sameSourceFindings(
         mode: "same-source",
         format: "translation-consistency-v1",
       },
+      requiredInputDependencies: inputDependencies(ordered),
     });
   }
   return findings;
@@ -634,15 +754,23 @@ function candidatePairs(
       compareText(
         canonicalJson([
           leftA.message.id,
+          leftA.sourceDocument.path,
           leftA.role,
+          leftA.surfaceIdentity,
           rightA.message.id,
+          rightA.sourceDocument.path,
           rightA.role,
+          rightA.surfaceIdentity,
         ]),
         canonicalJson([
           leftB.message.id,
+          leftB.sourceDocument.path,
           leftB.role,
+          leftB.surfaceIdentity,
           rightB.message.id,
+          rightB.sourceDocument.path,
           rightB.role,
+          rightB.surfaceIdentity,
         ]),
       ),
     );
@@ -682,7 +810,8 @@ function similarSourceFindings(
   const findings: RuleFinding[] = [];
   for (const [initialLeft, initialRight] of candidatePairs(records)) {
     if (
-      initialLeft.message.id === initialRight.message.id ||
+      logicalDocumentIdentity(initialLeft) ===
+        logicalDocumentIdentity(initialRight) ||
       initialLeft.role !== initialRight.role ||
       initialLeft.sourceTechnicalSignature !==
         initialRight.sourceTechnicalSignature ||
@@ -692,8 +821,18 @@ function similarSourceFindings(
     }
     const [left, right] =
       compareText(
-        canonicalJson([initialLeft.message.id, initialLeft.role]),
-        canonicalJson([initialRight.message.id, initialRight.role]),
+        canonicalJson([
+          initialLeft.message.id,
+          initialLeft.sourceDocument.path,
+          initialLeft.role,
+          initialLeft.surfaceIdentity,
+        ]),
+        canonicalJson([
+          initialRight.message.id,
+          initialRight.sourceDocument.path,
+          initialRight.role,
+          initialRight.surfaceIdentity,
+        ]),
       ) <= 0
         ? [initialLeft, initialRight]
         : [initialRight, initialLeft];
@@ -730,6 +869,7 @@ function similarSourceFindings(
         minimumSimilarity: relatedConfiguration(minimumSimilarity),
         format: "translation-consistency-v1",
       },
+      requiredInputDependencies: inputDependencies(participants),
     });
   }
   return findings;

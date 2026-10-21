@@ -394,6 +394,8 @@ export interface RuleFinding {
   readonly identity?: JsonValue;
   /** 此诊断实际依赖的规则配置或外部内容。 */
   readonly fingerprint?: JsonValue;
+  /** 此诊断评估所需的局部输入文档，用于例外判断输入是否仍可用。 */
+  readonly requiredInputDependencies?: readonly RuleInputDependency[];
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;
   readonly location: DiagnosticLocation;
@@ -408,6 +410,14 @@ export interface RuleContext {
 }
 
 export type RuleInput = "minimessage-parse";
+
+export interface RuleInputDependency {
+  readonly input: RuleInput;
+  readonly messageId: string;
+  readonly origin: MiniMessageOrigin;
+  readonly documentIndex: number;
+  readonly path: readonly (string | number)[];
+}
 
 export interface CheckRule {
   readonly id: string;
