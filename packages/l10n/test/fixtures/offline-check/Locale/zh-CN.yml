@@ -1,8 +1,8 @@
 messages:
-  greeting: "<green>欢迎，%player%</green>"
-  same_brand: "Lands"
-  duplicate_a: "启用国家"
-  duplicate_b: "启用国家"
+  greeting: "<green>欢迎,%player%</green>"
+  same_brand: "Lands plugin"
+  duplicate_a: "启用联邦"
+  duplicate_b: "启用联邦"
   interaction: "<click:run_command:/lands claim><green>占领<v:land></green></click>"
   draft: Review this policy
 general:
@@ -13,4 +13,4 @@ general:
   integration:
     dynmap:
       land:
-        description: '<div class="land" title="领地"><v:land></div>'
+        description: '<div class="land" title="城镇"><v:land></div>'

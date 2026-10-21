@@ -3052,8 +3052,13 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    assert.equal(checked.status, 1, checked.stderr);
+    assert.equal(checked.status, 1, checked.stderr || checked.stdout);
     const report = readReport(checked.stderr || checked.stdout);
+    assert.equal(report.state, "issues");
+    assert.equal(
+      (report.coverage as { readonly complete: boolean }).complete,
+      false,
+    );
     const diagnostics = report.diagnostics as readonly Record<
       string,
       unknown
@@ -3179,8 +3184,13 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    assert.equal(checked.status, 1, checked.stderr);
+    assert.equal(checked.status, 1, checked.stderr || checked.stdout);
     const report = readReport(checked.stderr || checked.stdout);
+    assert.equal(report.state, "issues");
+    assert.equal(
+      (report.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
     const diagnostics = report.diagnostics as readonly Record<
       string,
       unknown
@@ -3337,8 +3347,13 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    assert.equal(checked.status, 1, checked.stderr);
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
     const report = readReport(checked.stderr || checked.stdout);
+    assert.equal(report.state, "ready");
+    assert.equal(
+      (report.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
     const diagnostics = report.diagnostics as readonly Record<
       string,
       unknown
@@ -3939,8 +3954,13 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    assert.equal(checked.status, 1, checked.stderr);
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
     const report = readReport(checked.stderr || checked.stdout);
+    assert.equal(report.state, "ready");
+    assert.equal(
+      (report.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
     const diagnostics = report.diagnostics as readonly Record<
       string,
       unknown
@@ -5354,8 +5374,12 @@ void describe("术语和风格正式检查", () => {
       false,
       result.checked.stderr || result.checked.stdout,
     );
-    assert.equal(result.checked.status, 1);
-    assert.equal(result.report.state, "incomplete");
+    assert.equal(result.checked.status, 0);
+    assert.equal(result.report.state, "ready");
+    assert.equal(
+      (result.report.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
   });
 
   void it("把 Claim 动词误作领土时报告词义偏差", async (t) => {
@@ -5786,8 +5810,12 @@ void describe("术语和风格正式检查", () => {
     );
     assert.ok(issue, result.checked.stderr || result.checked.stdout);
     assert.equal(issue?.severity, "warning");
-    assert.equal(result.checked.status, 1);
-    assert.equal(result.report.state, "incomplete");
+    assert.equal(result.checked.status, 0);
+    assert.equal(result.report.state, "ready");
+    assert.equal(
+      (result.report.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
     assert.equal(
       result.diagnostics.some((diagnostic) => diagnostic.severity === "error"),
       false,
@@ -6014,8 +6042,12 @@ void describe("术语和风格正式检查", () => {
       false,
       checked.stderr || checked.stdout,
     );
-    assert.equal(checked.status, 1);
-    assert.equal(report.state, "incomplete");
+    assert.equal(checked.status, 0);
+    assert.equal(report.state, "ready");
+    assert.equal(
+      (report.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
   });
 
   void it("同文候选经确认前后都继续检查术语", async (t) => {

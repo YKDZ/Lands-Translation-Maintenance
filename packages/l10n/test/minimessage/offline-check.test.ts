@@ -225,23 +225,25 @@ void describe("无 JAR 保存项目检查旅程", () => {
       "--output-format",
       "structured",
     );
-    assert.equal(checked.status, 1, checked.stderr);
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
     const report = readReport(checked.stderr || checked.stdout);
-    assert.equal(report.state, "incomplete");
+    assert.equal(report.state, "ready");
     assert.deepEqual(report.diagnostics, []);
     const coverage = report.coverage as {
       readonly complete: boolean;
       readonly enabledRuleIds: readonly string[];
       readonly unavailableCapabilities: readonly string[];
     };
-    assert.equal(coverage.complete, false);
+    assert.equal(coverage.complete, true);
     for (const ruleId of [
       "structure",
       "minimessage-syntax",
       "minimessage-tags",
       "minimessage-variables",
       "map-html",
+      "terminology",
       "translation-consistency",
+      "translation-style",
     ]) {
       assert.ok(coverage.enabledRuleIds.includes(ruleId), ruleId);
     }
@@ -271,18 +273,176 @@ void describe("无 JAR 保存项目检查旅程", () => {
       initialFiles,
     );
 
+    const completeTextCheck = runArtifactCli(
+      "check",
+      "--project",
+      projectDirectory,
+    );
+    assert.equal(completeTextCheck.status, checked.status);
+    const completeTextOutput =
+      completeTextCheck.stderr || completeTextCheck.stdout;
+    assert.match(completeTextOutput, /检查覆盖完整/u);
+    assert.match(completeTextOutput, /已知排除资源（已登记，本次不解析）/u);
+    assert.match(completeTextOutput, /Bedrock：bedrock\/lang\/en_us\.json/u);
+    assert.deepEqual(
+      await snapshotProjectFiles(projectDirectory),
+      initialFiles,
+    );
+
     const targetPath = join(projectDirectory, "Locale/zh-CN.yml");
     const initialTarget = await readFile(targetPath, "utf8");
+
+    const qualityProject = join(temporaryDirectory, "terminology-style");
+    await cp(fixtureDirectory, qualityProject, { recursive: true });
+    const qualityTargetPath = join(qualityProject, "Locale/zh-CN.yml");
+    const validQualityTarget = await readFile(qualityTargetPath, "utf8");
+    await writeFile(
+      qualityTargetPath,
+      validQualityTarget
+        .replace(
+          "<green>欢迎,%player%</green>",
+          "<green>您欢迎，%player%</green>",
+        )
+        .replace('duplicate_a: "启用联邦"', 'duplicate_a: "启用国家"')
+        .replace('duplicate_b: "启用联邦"', 'duplicate_b: "启用国家"'),
+    );
+    const invalidQualityFiles = await snapshotProjectFiles(qualityProject);
+    const invalidQualityCheck = runArtifactCli(
+      "check",
+      "--project",
+      qualityProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(invalidQualityCheck.status, 1, invalidQualityCheck.stderr);
+    const invalidQualityReport = readReport(
+      invalidQualityCheck.stderr || invalidQualityCheck.stdout,
+    );
+    assert.equal(invalidQualityReport.state, "issues");
+    const invalidQualityCoverage = invalidQualityReport.coverage as {
+      readonly complete: boolean;
+    };
+    assert.equal(invalidQualityCoverage.complete, true);
+    const invalidQualityDiagnostics =
+      invalidQualityReport.diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      invalidQualityDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" &&
+          diagnostic.code === "terminology.translation-missing",
+      ),
+      JSON.stringify(invalidQualityDiagnostics),
+    );
+    assert.ok(
+      invalidQualityDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "translation-style" &&
+          diagnostic.code === "translation-style.honorific",
+      ),
+      JSON.stringify(invalidQualityDiagnostics),
+    );
+    assert.ok(
+      invalidQualityDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "translation-style" &&
+          diagnostic.code === "translation-style.punctuation",
+      ),
+      JSON.stringify(invalidQualityDiagnostics),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(qualityProject),
+      invalidQualityFiles,
+    );
+
+    const qualityConfigPath = join(qualityProject, ".l10n/config.yml");
+    const qualityConfig = await readFile(qualityConfigPath, "utf8");
+    await writeFile(
+      qualityConfigPath,
+      `${qualityConfig}rules:\n  terminology:\n    severity: warning\n  translation-style:\n    severity: warning\n`,
+    );
+    const warningPolicyFiles = await snapshotProjectFiles(qualityProject);
+    const warningPolicyCheck = runArtifactCli(
+      "check",
+      "--project",
+      qualityProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(warningPolicyCheck.status, 0, warningPolicyCheck.stderr);
+    const warningPolicyReport = readReport(
+      warningPolicyCheck.stderr || warningPolicyCheck.stdout,
+    );
+    assert.equal(warningPolicyReport.state, "ready");
+    assert.equal(
+      (warningPolicyReport.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
+    const warningPolicyDiagnostics =
+      warningPolicyReport.diagnostics as readonly Record<string, unknown>[];
+    assert.ok(warningPolicyDiagnostics.length > 0);
+    assert.ok(
+      warningPolicyDiagnostics.every(
+        (diagnostic) => diagnostic.severity === "warning",
+      ),
+      JSON.stringify(warningPolicyDiagnostics),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(qualityProject),
+      warningPolicyFiles,
+    );
+
+    await writeFile(
+      qualityConfigPath,
+      `${qualityConfig}rules:\n  terminology:\n    severity: warning\n    parameters:\n      translations:\n        nation: 国家\n  translation-style:\n    severity: warning\n`,
+    );
+    const termParameterFiles = await snapshotProjectFiles(qualityProject);
+    const termParameterCheck = runArtifactCli(
+      "check",
+      "--project",
+      qualityProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(termParameterCheck.status, 0, termParameterCheck.stderr);
+    const termParameterReport = readReport(
+      termParameterCheck.stderr || termParameterCheck.stdout,
+    );
+    assert.equal(termParameterReport.state, "ready");
+    assert.equal(
+      (termParameterReport.coverage as { readonly complete: boolean }).complete,
+      true,
+    );
+    const termParameterDiagnostics =
+      termParameterReport.diagnostics as readonly Record<string, unknown>[];
+    assert.equal(
+      termParameterDiagnostics.some(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      false,
+      JSON.stringify(termParameterDiagnostics),
+    );
+    assert.ok(
+      termParameterDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "translation-style" &&
+          diagnostic.code === "translation-style.honorific",
+      ),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(qualityProject),
+      termParameterFiles,
+    );
+
     await writeFile(
       targetPath,
       initialTarget
-        .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
+        .replace("<green>欢迎,%player%</green>", "<blue>欢迎,%player%</blue>")
         .replace(
           "<click:run_command:/lands claim><green>占领<v:land></green></click>",
           "<click:run_command:/lands claim><green>占领</green></click>",
         )
         .replace("draft: Review this policy", "draft: 请审阅此政策")
-        .replace('duplicate_b: "启用国家"', 'duplicate_b: "关闭国家"'),
+        .replace('duplicate_b: "启用联邦"', 'duplicate_b: "关闭联邦"'),
     );
     const editedFiles = await snapshotProjectFiles(projectDirectory);
 
@@ -310,8 +470,8 @@ void describe("无 JAR 保存项目检查旅程", () => {
     const targetWithMissingMessage = (await readFile(targetPath, "utf8"))
       .replace("  draft: 请审阅此政策\n", "")
       .replace(
-        '<div class="land" title="领地">',
-        '<div class="town" title="领地">',
+        '<div class="land" title="城镇">',
+        '<div class="town" title="城镇">',
       );
     await writeFile(targetPath, targetWithMissingMessage);
     const checkInputFiles = await snapshotProjectFiles(projectDirectory);
@@ -480,7 +640,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     const targetWithInvalidatedRecords = (await readFile(targetPath, "utf8"))
       .replace("<blue>", "<red>")
       .replace("</blue>", "</red>")
-      .replace('same_brand: "Lands"', 'same_brand: "Lands 新"');
+      .replace('same_brand: "Lands plugin"', 'same_brand: "Lands plugin 新"');
     await writeFile(targetPath, targetWithInvalidatedRecords);
     const invalidatedFiles = await snapshotProjectFiles(projectDirectory);
     const invalidatedCheck = runArtifactCli(
@@ -525,8 +685,8 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
 
     const targetWithInvalidSyntax = targetWithInvalidatedRecords.replace(
-      "<red>欢迎，%player%</red>",
-      "<red>欢迎，%player% §c世界</red>",
+      "<red>欢迎,%player%</red>",
+      "<red>欢迎,%player% §c世界</red>",
     );
     await writeFile(targetPath, targetWithInvalidSyntax);
     const finalFiles = await snapshotProjectFiles(projectDirectory);
@@ -773,7 +933,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     await writeFile(
       policyTargetPath,
       policyTarget
-        .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
+        .replace("<green>欢迎,%player%</green>", "<blue>欢迎,%player%</blue>")
         .replace("  draft: Review this policy\n", ""),
     );
     const defaultPolicyFiles = await snapshotProjectFiles(policyProject);

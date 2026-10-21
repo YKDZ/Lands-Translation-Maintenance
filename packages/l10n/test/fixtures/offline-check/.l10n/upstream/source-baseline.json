@@ -28,12 +28,12 @@
       }
     ]
   },
-  "jarSha256": "20998483421f5aab35d6b65fa41ec2cba2d327c0c961e8cbf36245b689bc0ba3",
+  "jarSha256": "f86556c1f83d3ae11aa7bb4da95b56d9571f0c257114d01203207899fb54af48",
   "resources": [
     {
       "path": "Locale/en-US.yml",
       "purpose": "chat-language",
-      "sha256": "65128e7fe54732d09b25d3a1caa5101fa06b02ee5107ace78d3e1489402bcc2e"
+      "sha256": "912fea7eef4ba04fae1a282b3590d6b8677c39e9eeae9e85cae4c03e7f96c30a"
     },
     {
       "path": "Locale/theme.yml",
@@ -84,7 +84,7 @@
       "sourceValue": {
         "messages": {
           "greeting": "<green>Welcome, %player%</green>",
-          "same_brand": "Lands",
+          "same_brand": "Lands plugin",
           "duplicate_a": "Enable nation",
           "duplicate_b": "Enable nation",
           "interaction": "<click:run_command:/lands claim><green>Claim <v:land></green></click>",
@@ -107,7 +107,7 @@
           }
         }
       },
-      "sourceSha256": "76c1e9bc8d964a98498919da21048c1c0cf5ca9bb8e31fc7bf8eb2ff422de701"
+      "sourceSha256": "0100cbebe7784999c79b4a7ac4e5c98fde1589cfa9191e0cc83d14d58f80d223"
     }
   ],
   "knownOutOfScopeVisibleTexts": [
