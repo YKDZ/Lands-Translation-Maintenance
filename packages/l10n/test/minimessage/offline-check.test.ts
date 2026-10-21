@@ -55,7 +55,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
         },
       });
 
-    const initialFiles = await snapshotProjectFiles(projectDirectory);
+    let initialFiles = await snapshotProjectFiles(projectDirectory);
     const statusWithoutJava = runArtifactCliWithoutJava(
       "status",
       "--project",
@@ -94,6 +94,31 @@ void describe("无 JAR 保存项目检查旅程", () => {
         purpose: "bedrock-excluded",
       },
     ]);
+    const sameTextCandidate = (
+      statusReport.sameTextToConfirm as readonly Record<string, unknown>[]
+    ).find(
+      (candidate) =>
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+        '["messages","same_brand"]',
+    );
+    assert.ok(sameTextCandidate);
+    if (sameTextCandidate === undefined)
+      throw new Error("缺少待确认的同文候选");
+    const candidateId = String(sameTextCandidate.candidateId);
+    const confirmed = runArtifactCliWithoutJava(
+      "confirm-same-text",
+      "--project",
+      projectDirectory,
+      "--candidate",
+      candidateId,
+      "--reason",
+      "品牌名按约定保留英文",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(confirmed.status, 0, confirmed.stderr);
+    assert.match(confirmed.stdout, new RegExp(candidateId));
+    initialFiles = await snapshotProjectFiles(projectDirectory);
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
       initialFiles,
@@ -110,6 +135,22 @@ void describe("无 JAR 保存项目检查旅程", () => {
     const missingJavaReport = readReport(
       checkWithoutJava.stderr || checkWithoutJava.stdout,
     );
+    assert.equal(
+      (missingJavaReport.summary as { readonly confirmedSameText: number })
+        .confirmedSameText,
+      1,
+    );
+    const remainingSameTextCandidates =
+      missingJavaReport.sameTextToConfirm as readonly Record<string, unknown>[];
+    assert.equal(remainingSameTextCandidates.length, 1);
+    const remainingSeed = remainingSameTextCandidates[0];
+    assert.ok(remainingSeed);
+    if (remainingSeed === undefined) throw new Error("英文待翻译项未保留");
+    assert.equal(remainingSeed.pendingReason, "translation-seed");
+    assert.deepEqual((remainingSeed.message as Record<string, unknown>).path, [
+      "messages",
+      "draft",
+    ]);
     const missingJavaCoverage = missingJavaReport.coverage as {
       readonly complete: boolean;
       readonly unavailableCapabilities: readonly string[];
@@ -206,6 +247,16 @@ void describe("无 JAR 保存项目检查旅程", () => {
         purpose: "bedrock-excluded",
       },
     ]);
+    assert.equal(
+      (report.summary as { readonly confirmedSameText: number })
+        .confirmedSameText,
+      1,
+    );
+    assert.equal(
+      (report.sameTextToConfirm as readonly Record<string, unknown>[])[0]
+        ?.pendingReason,
+      "translation-seed",
+    );
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
       initialFiles,
@@ -216,10 +267,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     await writeFile(
       targetPath,
       initialTarget
-        .replace(
-          "<green>欢迎，%player%</green>",
-          "<blue>欢迎，%player% §c世界</blue>",
-        )
+        .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
         .replace("draft: Review this policy", "draft: 请审阅此政策"),
     );
     const editedFiles = await snapshotProjectFiles(projectDirectory);
@@ -238,8 +286,8 @@ void describe("无 JAR 保存项目检查旅程", () => {
       resourceFiles: 6,
       messages: 8,
       pendingTranslations: 0,
-      sameTextCandidates: 1,
-      confirmedSameText: 0,
+      sameTextCandidates: 0,
+      confirmedSameText: 1,
       modifiedTranslations: 1,
       missingTranslations: 0,
     });
@@ -262,31 +310,188 @@ void describe("无 JAR 保存项目检查旅程", () => {
         diagnostic.code === "minimessage.tag-mismatch",
     );
     assert.equal(tagDiagnostics.length, 2);
+
+    const exemptedDiagnosticId = String(tagDiagnostics[0]?.diagnosticId);
+    const exempted = runArtifactCli(
+      "exempt",
+      "--project",
+      projectDirectory,
+      "--diagnostic",
+      exemptedDiagnosticId,
+      "--reason",
+      "此消息的样式差异已按界面约定审核",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr);
+    const exemptedFiles = await snapshotProjectFiles(projectDirectory);
+
+    const afterExemption = runArtifactCli(
+      "check",
+      "--project",
+      projectDirectory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(afterExemption.status, 1, afterExemption.stderr);
+    const afterExemptionReport = readReport(
+      afterExemption.stderr || afterExemption.stdout,
+    );
+    const afterExemptionDiagnostics =
+      afterExemptionReport.diagnostics as readonly Record<string, unknown>[];
+    const remainingTagDiagnostics = afterExemptionDiagnostics.filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    assert.equal(remainingTagDiagnostics.length, 1);
     assert.ok(
-      (editedReport.diagnostics as readonly Record<string, unknown>[]).some(
+      !afterExemptionDiagnostics.some(
+        (diagnostic) => diagnostic.diagnosticId === exemptedDiagnosticId,
+      ),
+    );
+    assert.equal(
+      (afterExemptionReport.summary as { readonly confirmedSameText: number })
+        .confirmedSameText,
+      1,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(projectDirectory),
+      exemptedFiles,
+    );
+
+    const unavailableExemption = runArtifactCliWithoutJava(
+      "check",
+      "--project",
+      projectDirectory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(unavailableExemption.status, 1, unavailableExemption.stderr);
+    const unavailableExemptionReport = readReport(
+      unavailableExemption.stderr || unavailableExemption.stdout,
+    );
+    const unavailableExemptionDiagnostics =
+      unavailableExemptionReport.diagnostics as readonly Record<
+        string,
+        unknown
+      >[];
+    assert.ok(
+      unavailableExemptionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+    );
+    assert.ok(
+      !unavailableExemptionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+    );
+    assert.equal(
+      (unavailableExemptionReport.coverage as { readonly complete: boolean })
+        .complete,
+      false,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(projectDirectory),
+      exemptedFiles,
+    );
+
+    const targetWithInvalidatedRecords = (await readFile(targetPath, "utf8"))
+      .replace("<blue>", "<red>")
+      .replace("</blue>", "</red>")
+      .replace('same_brand: "Lands"', 'same_brand: "Lands 新"');
+    await writeFile(targetPath, targetWithInvalidatedRecords);
+    const invalidatedFiles = await snapshotProjectFiles(projectDirectory);
+    const invalidatedCheck = runArtifactCli(
+      "check",
+      "--project",
+      projectDirectory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(invalidatedCheck.status, 1, invalidatedCheck.stderr);
+    const invalidatedReport = readReport(
+      invalidatedCheck.stderr || invalidatedCheck.stdout,
+    );
+    const invalidatedDiagnostics =
+      invalidatedReport.diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      invalidatedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.review-required",
+      ),
+    );
+    assert.ok(
+      invalidatedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "same-text.review-required",
+      ),
+    );
+    assert.equal(
+      (invalidatedReport.summary as { readonly confirmedSameText: number })
+        .confirmedSameText,
+      0,
+    );
+    assert.equal(
+      invalidatedDiagnostics.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ).length,
+      2,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(projectDirectory),
+      invalidatedFiles,
+    );
+
+    const targetWithInvalidSyntax = targetWithInvalidatedRecords.replace(
+      "<red>欢迎，%player%</red>",
+      "<red>欢迎，%player% §c世界</red>",
+    );
+    await writeFile(targetPath, targetWithInvalidSyntax);
+    const finalFiles = await snapshotProjectFiles(projectDirectory);
+    const finalCheck = runArtifactCli(
+      "check",
+      "--project",
+      projectDirectory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(finalCheck.status, 1, finalCheck.stderr);
+    const finalReport = readReport(finalCheck.stderr || finalCheck.stdout);
+    const finalDiagnostics = finalReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      finalDiagnostics.some(
         (diagnostic) =>
           diagnostic.ruleId === "minimessage-syntax" &&
           diagnostic.code === "minimessage.syntax-invalid" &&
           diagnostic.origin === "target",
       ),
     );
+    assert.ok(
+      finalDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+    );
 
-    const editedTextCheck = runArtifactCli(
+    const finalTextCheck = runArtifactCli(
       "check",
       "--project",
       projectDirectory,
     );
-    assert.equal(editedTextCheck.status, editedCheck.status);
-    const textOutput = editedTextCheck.stderr || editedTextCheck.stdout;
+    assert.equal(finalTextCheck.status, finalCheck.status);
+    const textOutput = finalTextCheck.stderr || finalTextCheck.stdout;
     assert.match(textOutput, /已修改 1 条/u);
     assert.match(textOutput, /检查覆盖不完整/u);
     assert.match(textOutput, /Bedrock/u);
     assert.match(textOutput, /bedrock\/lang\/en_us\.json/u);
     assert.match(textOutput, /不解析/u);
-    const editedCoverage = editedReport.coverage as {
+    const finalCoverage = finalReport.coverage as {
       readonly unavailableCapabilities: readonly string[];
     };
-    for (const capability of editedCoverage.unavailableCapabilities) {
+    for (const capability of finalCoverage.unavailableCapabilities) {
       const escapedCapability = capability
         .replaceAll("\r", "\\r")
         .replaceAll("\n", "\\n")
@@ -294,9 +499,10 @@ void describe("无 JAR 保存项目检查旅程", () => {
       assert.ok(textOutput.includes(`尚未覆盖：${escapedCapability}`));
     }
     assert.ok(textOutput.includes("minimessage.syntax-invalid"));
-    for (const diagnostic of tagDiagnostics) {
+    assert.ok(textOutput.includes("exception.unable-to-evaluate"));
+    for (const diagnostic of finalDiagnostics) {
       assert.ok(textOutput.includes(String(diagnostic.code)));
     }
-    assert.deepEqual(await snapshotProjectFiles(projectDirectory), editedFiles);
+    assert.deepEqual(await snapshotProjectFiles(projectDirectory), finalFiles);
   });
 });
