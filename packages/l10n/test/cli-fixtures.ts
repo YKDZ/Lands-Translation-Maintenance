@@ -149,6 +149,92 @@ export async function createProject(
   return { directory, jarFile };
 }
 
+export async function createFormatProject(
+  t: TestContext,
+  options: {
+    readonly sourceVersion?: string;
+    readonly mapDescription?: string;
+    readonly mapSpawn?: string;
+    readonly targetMapDescription?: string;
+    readonly targetMapSpawn?: string;
+    readonly legacyTitle?: string;
+    readonly targetLegacyTitle?: string;
+    readonly unrelatedText?: string;
+    readonly targetUnrelatedText?: string;
+  } = {},
+) {
+  const directory = await mkdtemp(join(tmpdir(), "lands-l10n-formats-"));
+  t.after(async () => rm(directory, { force: true, recursive: true }));
+
+  const sourceLocale = [
+    "general:",
+    "  integration:",
+    "    dynmap:",
+    "      land:",
+    `        description: ${JSON.stringify(options.mapDescription ?? '<div class="land" title="Land &amp; stone">Land: <v:land></div>')}`,
+    `        spawn: ${JSON.stringify(options.mapSpawn ?? "Spawn at <v:land>")}`,
+    "  land:",
+    "    title:",
+    "      land:",
+    `        normal: ${JSON.stringify(options.legacyTitle ?? "Owned by %owner%")}`,
+    "  unrelated:",
+    `    text: ${JSON.stringify(options.unrelatedText ?? "A plain %owner% label")}`,
+    "",
+  ].join("\n");
+  const targetLocale = [
+    "general:",
+    "  integration:",
+    "    dynmap:",
+    "      land:",
+    `        description: ${JSON.stringify(options.targetMapDescription ?? '<div class="land" title="领地与石头">土地：<v:land></div>')}`,
+    `        spawn: ${JSON.stringify(options.targetMapSpawn ?? "在<v:land>生成")}`,
+    "  land:",
+    "    title:",
+    "      land:",
+    `        normal: ${JSON.stringify(options.targetLegacyTitle ?? "属于%owner%")}`,
+    "  unrelated:",
+    `    text: ${JSON.stringify(options.targetUnrelatedText ?? "普通 %owner% 文本")}`,
+    "",
+  ].join("\n");
+  const jarFile = join(directory, "Lands.jar");
+  await writeFile(
+    jarFile,
+    zipSync({
+      "plugin.yml": strToU8("name: Lands\n"),
+      "Locale/en-US.yml": strToU8(sourceLocale),
+    }),
+  );
+  await mkdir(join(directory, ".l10n"), { recursive: true });
+  await mkdir(join(directory, "Locale"), { recursive: true });
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      `  version: ${JSON.stringify(options.sourceVersion ?? "8.9.2")}`,
+      '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+      "resources:",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: Locale/en-US.yml",
+      "    purpose: chat-language",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      "    - source: Locale/en-US.yml",
+      "      target: Locale/zh-CN.yml",
+      "      fields:",
+      "        - path: [general]",
+      "          category: chat-string",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(join(directory, "Locale/zh-CN.yml"), targetLocale);
+
+  return { directory, jarFile };
+}
+
 export async function createGuiProject(
   t: TestContext,
   options: {
