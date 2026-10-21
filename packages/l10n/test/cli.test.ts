@@ -279,6 +279,7 @@ async function createGuiProject(t: TestContext) {
 async function writeGuiJar(
   jarFile: string,
   sourceOverrides: Readonly<Record<string, string>> = {},
+  definitionsOverrides: Readonly<Record<string, string>> = {},
 ): Promise<void> {
   const jarEntries: Record<string, Uint8Array> = {
     "plugin.yml": strToU8("name: Lands\n"),
@@ -292,10 +293,11 @@ async function writeGuiJar(
         )),
     );
     jarEntries[module.definitions] = strToU8(
-      await readFile(
-        join(guiFixtureDirectory, module.definitionsFixture),
-        "utf8",
-      ),
+      definitionsOverrides[module.definitions] ??
+        (await readFile(
+          join(guiFixtureDirectory, module.definitionsFixture),
+          "utf8",
+        )),
     );
   }
   await writeFile(jarFile, zipSync(jarEntries));
@@ -1495,6 +1497,136 @@ void describe("CLI 制品", () => {
           JSON.stringify((location as Record<string, unknown>).path) ===
             '["physical","selection","lore"]',
       ),
+    );
+  });
+
+  void it("同步 GUI 外部 definitions 的结构改动并保留已译文本", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    const originalTarget = await readFile(targetPath);
+    const definitions = await readFile(
+      join(guiFixtureDirectory, "main-definitions.yml"),
+      "utf8",
+    );
+    const changedDefinitions = definitions
+      .replace("material: GOLDEN_HOE", "material: IRON_HOE")
+      .replace("slots: 11", "slots: 12");
+    assert.notEqual(changedDefinitions, definitions);
+    const candidateJar = join(project.directory, "candidate.jar");
+    await writeGuiJar(
+      candidateJar,
+      {},
+      {
+        "Locale/definitions_gui.yml": changedDefinitions,
+      },
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const structures = plan.structures as readonly Record<string, unknown>[];
+    const material = structures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["physical","selection","material"]',
+    );
+    const slots = structures.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["gui","main","items","default","lands","slots"]',
+    );
+    assert.equal(material?.action, "update");
+    assert.equal(material?.expected, "IRON_HOE");
+    assert.equal(slots?.action, "update");
+    assert.equal(slots?.expected, 12);
+    assert.ok(
+      (plan.inputSnapshots as readonly Record<string, unknown>[]).some(
+        ({ path }) => path === candidateJar,
+      ),
+    );
+    assert.ok(
+      (plan.messages as readonly Record<string, unknown>[]).every(
+        ({ action }) => action === "preserve",
+      ),
+    );
+    assert.deepEqual(await readFile(targetPath), originalTarget);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const updatedTarget = await readFile(targetPath, "utf8");
+    assert.match(updatedTarget, /material: IRON_HOE/);
+    assert.match(updatedTarget, /slots: 12/);
+    assert.match(updatedTarget, /name: <t:regular_heading>选区工具/);
+    assert.match(updatedTarget, /all: <green>所有<\/green>/);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const checkReport = readReport(checked.stdout || checked.stderr);
+    const diagnostics = checkReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.equal(
+      diagnostics.some(({ code }) => code === "structure.definition-mismatch"),
+      false,
+    );
+
+    const repeated = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    const repeatedPlan = readEnvelope(repeated.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(repeatedPlan.structures, []);
+    assert.equal(
+      (repeatedPlan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
     );
   });
 
