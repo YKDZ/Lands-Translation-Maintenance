@@ -249,7 +249,7 @@ export function fieldSelectorMatchesPath(
   const fixedLength = recursiveIndex === -1 ? selector.length : recursiveIndex;
   if (
     (recursiveIndex === -1 && path.length !== selector.length) ||
-    (recursiveIndex !== -1 && path.length <= fixedLength)
+    (recursiveIndex !== -1 && path.length < fixedLength)
   ) {
     return false;
   }
