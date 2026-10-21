@@ -321,6 +321,7 @@ export interface ObservedMessage extends MessageIdentity {
 }
 
 export interface ProjectView {
+  readonly sourceVersion?: string;
   readonly sourceLanguage: string;
   readonly targetLanguage: string;
   readonly resources: readonly ResourceInventoryEntry[];

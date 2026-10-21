@@ -21,6 +21,7 @@ import {
 import { readJarResources } from "#/jar";
 import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
 import { parseMiniMessages } from "#/minimessage";
+import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
 import {
   captureMiniMessageTheme,
   validateMiniMessageThemeYaml,
@@ -843,6 +844,7 @@ function projectView(
     baseline.releasedTranslationPaths ?? [],
   );
   return {
+    sourceVersion: baseline.source.version,
     sourceLanguage: baseline.translationScope.sourceLanguage,
     targetLanguage: baseline.translationScope.targetLanguage,
     resources: baseline.resources.map(({ path, purpose }) => ({
@@ -1345,13 +1347,19 @@ function translatableTextCoverageUnavailable(
   return [];
 }
 
-function coverageUnavailable(view: ProjectView): readonly string[] {
+function coverageUnavailable(
+  view: ProjectView,
+  configuration: ConsumerConfiguration,
+): readonly string[] {
   const unavailable = [
     "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
     "译文一致性检查尚未实现",
   ];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   unavailable.push(...translatableTextCoverageUnavailable(view));
+  if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
+    unavailable.push(...miniMessageTagCoverageUnavailable(view));
+  }
   if (
     view.resources.some((resource) => resource.purpose === "bedrock-excluded")
   ) {
@@ -1367,7 +1375,7 @@ function evaluateProject(
 ) {
   return evaluateRules(view, registeredRules, {
     configuration: configuration.rules,
-    unavailableCapabilities: coverageUnavailable(view),
+    unavailableCapabilities: coverageUnavailable(view, configuration),
   });
 }
 
@@ -2600,7 +2608,9 @@ function requiredRuleInputUnavailable(
             project.view.miniMessage.documents.some(
               (document) =>
                 document.message.id === messageId &&
-                document.status === "parser-failed",
+                (document.status === "parser-failed" ||
+                  (ruleId === "minimessage-tags" &&
+                    document.status === "syntax-invalid")),
             )
           );
       }
