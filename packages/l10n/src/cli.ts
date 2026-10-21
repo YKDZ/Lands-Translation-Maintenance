@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { executeCli, parseCliInvocation } from "@ykdz/cli-contract";
@@ -27,7 +27,8 @@ export async function runCli(argv: readonly string[]): Promise<number> {
 const mainFile = process.argv[1];
 if (
   mainFile !== undefined &&
-  pathToFileURL(resolve(mainFile)).href === import.meta.url
+  existsSync(mainFile) &&
+  pathToFileURL(realpathSync(mainFile)).href === import.meta.url
 ) {
   process.exitCode = await runCli(process.argv.slice(2));
 }

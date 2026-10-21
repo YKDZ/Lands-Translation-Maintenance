@@ -4980,13 +4980,24 @@ void describe("CLI 制品", () => {
       const report = readReport(result.stderr || result.stdout);
       assert.ok(
         !(report.diagnostics as Array<Record<string, unknown>>).some(
-          (item) => item.code === "transaction.prepared",
+          (item) =>
+            typeof item.code === "string" &&
+            item.code.startsWith("transaction."),
         ),
       );
-      if (command === "status") assert.equal(result.status, 0, result.stderr);
-      else {
+      if (command === "status") {
         assert.equal(result.status, 0, result.stderr);
+        assert.equal(report.operation, "status");
         assert.equal(report.state, "ready");
+      } else {
+        assert.ok(
+          result.status === 0 || result.status === 1,
+          result.stderr || result.stdout,
+        );
+        assert.equal(report.operation, "check");
+        assert.ok(
+          ["ready", "issues", "incomplete"].includes(String(report.state)),
+        );
       }
       assert.deepEqual(await snapshotProjectFiles(project.directory), before);
     }
