@@ -20,6 +20,8 @@ export interface TerminologyEntry {
   readonly suppressOverlaps?: readonly string[];
   readonly notApplicableContext?: readonly {
     readonly form: string;
+    // 默认保留逐字大小写匹配，避免放宽产品名等专名上下文。
+    readonly caseSensitive?: boolean;
     readonly precedingWords?: readonly string[];
     readonly followingWords?: readonly string[];
     readonly pathSegments?: readonly string[];
@@ -130,10 +132,19 @@ export const terminologyEntries: readonly TerminologyEntry[] = [
     allowedTranslations: ["邀请", "加入"],
     context: "对应其他领地插件的 invite；从玩家视角也可表达为被加入。",
     notApplicableContext: [
-      { form: "trust", precedingWords: ["temporary"] },
-      { form: "trusted", precedingWords: ["not", "never"] },
+      {
+        form: "trust",
+        caseSensitive: false,
+        precedingWords: ["temporary"],
+      },
       {
         form: "trusted",
+        caseSensitive: false,
+        precedingWords: ["not", "never"],
+      },
+      {
+        form: "trusted",
+        caseSensitive: false,
         followingWords: ["in", "inside", "here", "there", "for", "only"],
       },
     ],

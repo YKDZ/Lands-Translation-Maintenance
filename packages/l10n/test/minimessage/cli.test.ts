@@ -5546,6 +5546,20 @@ void describe("术语和风格正式检查", () => {
       ),
       gameEntity.checked.stderr || gameEntity.checked.stdout,
     );
+
+    const lowercaseName = await checkGreeting(
+      t,
+      "from lands plugin",
+      "来自 lands 插件.",
+    );
+    assert.ok(
+      lowercaseName.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "terminology" &&
+          diagnostic.code === "terminology.translation-missing",
+      ),
+      lowercaseName.checked.stderr || lowercaseName.checked.stdout,
+    );
   });
 
   void it("区分两类 Flags 和普通 Personal Settings", async (t) => {
@@ -5623,6 +5637,20 @@ void describe("术语和风格正式检查", () => {
       states.checked.stderr || states.checked.stdout,
     );
 
+    const titleCaseTemporaryTrust = await checkGreeting(
+      t,
+      "Temporary Trust.",
+      "临时成员.",
+    );
+    assert.deepEqual(
+      titleCaseTemporaryTrust.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      titleCaseTemporaryTrust.checked.stderr ||
+        titleCaseTemporaryTrust.checked.stdout,
+    );
+
     for (const [source, target, expectedTermId] of [
       ["Trust this player.", "信任此玩家.", "trust"],
       ["Untrust this player.", "保留非成员状态.", "untrust"],
@@ -5644,14 +5672,18 @@ void describe("术语和风格正式检查", () => {
       );
     }
 
-    for (const source of [
-      "You untrusted this player.",
-      "Successfully untrusted this player.",
-    ]) {
+    for (const [source, object] of [
+      ["You untrusted this player.", "此玩家"],
+      ["You untrusted that player.", "该玩家"],
+      ["You untrusted the player.", "该玩家"],
+      ["You untrusted a player.", "一名玩家"],
+      ["You untrusted our player.", "我们的玩家"],
+      ["Successfully untrusted this player.", "此玩家"],
+    ] as const) {
       const correctRemoval = await checkGreeting(
         t,
         source,
-        "你已将此玩家移出.",
+        `你已将${object}移出.`,
       );
       assert.equal(
         correctRemoval.diagnostics.some(
@@ -5664,7 +5696,7 @@ void describe("术语和风格正式检查", () => {
       const wrongState = await checkGreeting(
         t,
         source,
-        "你已保留此玩家为非成员.",
+        `你已保留${object}为非成员.`,
       );
       assert.ok(
         wrongState.diagnostics.some(

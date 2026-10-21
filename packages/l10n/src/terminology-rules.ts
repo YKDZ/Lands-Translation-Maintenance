@@ -47,6 +47,22 @@ const wordBoundary = "[\\p{L}\\p{N}_]";
 const ruleFingerprintVersion = "legacy-readme-terminology-v1";
 const styleFingerprintVersion = "legacy-readme-translation-style-v2";
 const sourceInheritedPunctuation = new Set(["•", "‹", "›", "«", "»", "·"]);
+const directObjectDeterminers = new Set([
+  "a",
+  "an",
+  "the",
+  "this",
+  "that",
+  "these",
+  "those",
+  "my",
+  "your",
+  "his",
+  "her",
+  "its",
+  "our",
+  "their",
+]);
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -323,13 +339,28 @@ function isUntrustRemovalEvent(text: string, start: number, end: number) {
     .slice(end)
     .match(/^\s*([\p{L}\p{N}_]+)/u)?.[1]
     ?.toLowerCase();
-  // “was untrusted because … expired”表达已执行的移出；静态成员状态不如此解释。
+  const followingWords = text
+    .slice(end)
+    .match(/^\s*([\p{L}\p{N}_'-]+)\s+([\p{L}\p{N}_'-]+)/u);
+  const actorOrSuccessCue = [
+    "i",
+    "you",
+    "we",
+    "they",
+    "he",
+    "she",
+    "successfully",
+  ].includes(precedingWord ?? "");
+  const hasDirectObjectPhrase =
+    followingWords !== null &&
+    directObjectDeterminers.has(followingWords[1]?.toLowerCase() ?? "");
+  // 被动过去事件或“主语/成功提示 + 限定词宾语”表达已执行的移出。
   return (
     (["was", "were", "been"].includes(precedingWord ?? "") &&
       !["in", "inside", "here", "there", "for", "only"].includes(
         followingWord ?? "",
       )) ||
-    followingWord === "this"
+    (actorOrSuccessCue && hasDirectObjectPhrase)
   );
 }
 
@@ -352,7 +383,9 @@ function notApplicableContext(
   return (
     entry.notApplicableContext?.some(
       (context) =>
-        context.form === matchedText &&
+        (context.caseSensitive === false
+          ? context.form.toLowerCase() === matchedText.toLowerCase()
+          : context.form === matchedText) &&
         ((context.precedingWords?.includes(precedingWord ?? "") ?? false) ||
           (context.followingWords?.includes(followingWord ?? "") ?? false) ||
           (context.pathSegments?.some((segment) => path.includes(segment)) ??
