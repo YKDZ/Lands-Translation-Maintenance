@@ -83,15 +83,55 @@ function ruleSettings(
 
 function diagnosticFromFinding(
   rule: CheckRule,
+  context: RuleContext,
   severity: Severity,
   finding: RuleFinding,
+  project: ProjectView,
 ): Diagnostic {
   const message = finding.message;
-  const diagnosticId = sha256(
+  const observed =
+    message === undefined
+      ? undefined
+      : project.messages.find((entry) => entry.id === message.id);
+  const objectId = sha256(
     canonicalJson({
       ruleId: rule.id,
       code: finding.code,
       messageId: message?.id,
+      origin: finding.origin,
+      location: {
+        file: finding.location.file,
+        path: finding.location.path,
+      },
+      identity: finding.identity ?? null,
+    }),
+  );
+  const contentFingerprint = sha256(
+    canonicalJson({
+      ruleId: rule.id,
+      severity: context.severity,
+      message:
+        observed === undefined
+          ? null
+          : {
+              source: observed.source,
+              target:
+                observed.target === undefined
+                  ? { state: observed.targetStatus }
+                  : observed.target,
+              targetStatus: observed.targetStatus,
+            },
+      dependencies: finding.fingerprint ?? null,
+      expected: finding.expected,
+      actual: finding.actual,
+    }),
+  );
+  const diagnosticId = sha256(
+    canonicalJson({
+      ruleId: rule.id,
+      code: finding.code,
+      objectId,
+      contentFingerprint,
       origin: finding.origin,
       location: finding.location,
       expected: finding.expected,
@@ -100,6 +140,8 @@ function diagnosticFromFinding(
   );
   return {
     diagnosticId,
+    objectId,
+    contentFingerprint,
     ruleId: rule.id,
     severity,
     code: finding.code,
@@ -155,17 +197,25 @@ export function evaluateRules(
     try {
       const findings = rule.evaluate(ruleInput, context);
       for (const finding of findings) {
-        diagnostics.push(diagnosticFromFinding(rule, severity, finding));
+        diagnostics.push(
+          diagnosticFromFinding(rule, context, severity, finding, project),
+        );
       }
     } catch (error) {
       diagnostics.push(
-        diagnosticFromFinding(rule, severity, {
-          code: "rule.execution-failed",
-          location: { file: rule.id, path: [] },
-          reason: `规则执行失败：${error instanceof Error ? error.message : String(error)}`,
-          expected: { state: "rule-result" },
-          actual: { state: "execution-failed" },
-        }),
+        diagnosticFromFinding(
+          rule,
+          context,
+          severity,
+          {
+            code: "rule.execution-failed",
+            location: { file: rule.id, path: [] },
+            reason: `规则执行失败：${error instanceof Error ? error.message : String(error)}`,
+            expected: { state: "rule-result" },
+            actual: { state: "execution-failed" },
+          },
+          project,
+        ),
       );
       unsupportedRuleIds.push(rule.id);
     }
