@@ -5508,6 +5508,36 @@ void describe("术语和风格正式检查", () => {
     );
   });
 
+  void it("检查正文术语但不把翻译键中的 owner 当作正文", async (t) => {
+    const source = "A <key:key.jump> <lang:lands.owner> <selector:@a> Owner";
+    const result = await checkGreeting(
+      t,
+      source,
+      "一段文字 <key:key.jump> <lang:lands.owner> <selector:@a> 业主",
+    );
+    const terminology = result.diagnostics.filter(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+
+    assert.equal(
+      terminology.length,
+      1,
+      result.checked.stderr || result.checked.stdout,
+    );
+    const finding = terminology[0];
+    assert.ok(finding, result.checked.stderr || result.checked.stdout);
+    assert.equal(finding.code, "terminology.translation-missing");
+    assert.deepEqual(
+      (finding.expected as Record<string, unknown>).sourcePositions,
+      [
+        {
+          start: source.lastIndexOf("Owner"),
+          end: source.lastIndexOf("Owner") + 5,
+        },
+      ],
+    );
+  });
+
   void it("只报告 README 规定的全角标点和‘您’", async (t) => {
     const result = await checkGreeting(t, "Hello", "您好吗？");
     const style = result.diagnostics.filter(
