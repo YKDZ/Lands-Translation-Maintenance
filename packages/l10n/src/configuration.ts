@@ -150,17 +150,25 @@ export function validateConfiguration(
         (field) =>
           field.scene === "gui-item-name" || field.scene === "gui-item-lore",
       );
+    const sourceIndex = resources.get(mapping.source);
+    const sourcePurpose =
+      sourceIndex === undefined
+        ? undefined
+        : configuration.resources[sourceIndex]!.purpose;
+    const hasDialogItemFields =
+      hasGuiFields &&
+      guiFieldsAreDialogItems &&
+      sourcePurpose === "dialog-language";
     const dialogUsesGuiItems = hasDialogFields && hasGuiFields;
     const allowedPurposes = hasChatFields
       ? new Set(["chat-language"])
       : hasConfigurationFields
         ? new Set(["configuration"])
-        : hasDialogFields
+        : hasDialogFields || hasDialogItemFields
           ? new Set(["dialog-language"])
           : hasGuiFields
             ? new Set(["gui-language"])
             : new Set(["configuration"]);
-    const sourceIndex = resources.get(mapping.source);
     if (sourceIndex === undefined) {
       issues.push({
         code: "configuration.mapping-source-unlisted",
@@ -176,7 +184,7 @@ export function validateConfiguration(
         path: ["translationScope", "mappings", mappingIndex, "source"],
         reason: hasChatFields
           ? "聊天字段映射原文必须登记为聊天语言资源"
-          : hasDialogFields
+          : hasDialogFields || hasDialogItemFields
             ? "对话框字段映射原文必须登记为对话框语言资源"
             : hasGuiFields
               ? "GUI 字段映射原文必须登记为 GUI 语言资源"
@@ -198,8 +206,10 @@ export function validateConfiguration(
         actual: mapping.source,
       });
     }
-    const hasGuiLanguageFields = hasGuiFields && !hasDialogFields;
-    const hasSelfStructureSource = hasConfigurationFields || hasDialogFields;
+    const hasGuiLanguageFields =
+      hasGuiFields && !hasDialogFields && !hasDialogItemFields;
+    const hasSelfStructureSource =
+      hasConfigurationFields || hasDialogFields || hasDialogItemFields;
     if (hasGuiLanguageFields && mapping.definitionsSource === undefined) {
       issues.push({
         code: "configuration.mapping-definitions-missing",

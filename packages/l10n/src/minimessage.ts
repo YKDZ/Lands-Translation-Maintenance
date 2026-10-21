@@ -113,6 +113,26 @@ const surfaceOverrides = [
   "dialog",
   "bedrock",
 ] as const satisfies readonly MiniMessageSurface[];
+const guiScenes = new Set([
+  "gui-general",
+  "gui-title",
+  "gui-item-name",
+  "gui-item-lore",
+  "category-name",
+  "category-description",
+  "level-title",
+  "level-attribute-description",
+  "level-requirement-title",
+  "level-requirement-description",
+  "role-name",
+]);
+const dialogScenes = new Set([
+  "dialog-title",
+  "dialog-button-label",
+  "dialog-button-tooltip",
+  "dialog-input-label",
+  "dialog-body-text",
+]);
 const landsControls = new Set([
   "verbose",
   "ingame",
@@ -412,9 +432,11 @@ function messageSurface(
   message: ObservedMessage,
   resourcePurpose: ReadonlyMap<string, ResourceInventoryEntry["purpose"]>,
 ): MiniMessageSurface {
+  if (message.scene !== undefined && guiScenes.has(message.scene)) return "gui";
+  if (message.scene !== undefined && dialogScenes.has(message.scene))
+    return "dialog";
   const path = message.path.map((segment) => segment.toLowerCase());
   const file = message.sourceFile.toLowerCase();
-  if (path.includes("dialogs")) return "dialog";
   if (
     file.includes("bedrock") ||
     resourcePurpose.get(message.sourceFile) === "bedrock-excluded"
@@ -422,7 +444,23 @@ function messageSurface(
     return "bedrock";
   }
   if (resourcePurpose.get(message.sourceFile) === "gui-language") return "gui";
+  if (
+    path.includes("dialogs") ||
+    file.includes("dialogs") ||
+    resourcePurpose.get(message.sourceFile) === "dialog-language"
+  ) {
+    return "dialog";
+  }
   return "chat";
+}
+
+function usesMiniMessage(message: ObservedMessage): boolean {
+  if (message.format !== undefined)
+    return message.format.includes("minimessage");
+  return (
+    message.category === "chat-string" ||
+    message.category === "chat-string-list"
+  );
 }
 
 function messagesToParseInputs(
@@ -436,6 +474,7 @@ function messagesToParseInputs(
   let nextIndex = 0;
 
   for (const message of messages) {
+    if (!usesMiniMessage(message)) continue;
     if (
       message.sourceFile.toLowerCase().split("/").includes("bedrock") ||
       purposes.get(message.sourceFile) === "bedrock-excluded"
@@ -466,17 +505,17 @@ function messagesToParseInputs(
         });
         nextIndex += 1;
       } else if (
-        message.category === "chat-string-list" &&
+        (message.category === "chat-string-list" ||
+          message.category === "configuration-string-list" ||
+          (message.category === "gui-lore" &&
+            message.scene === "gui-item-lore")) &&
         Array.isArray(value) &&
         value.every((item): item is string => typeof item === "string")
       ) {
         const file =
           origin === "source" ? message.sourceFile : message.targetFile;
-        if (
-          surface === "gui" &&
-          message.path.at(-1)?.toLowerCase() === "lore"
-        ) {
-          const input = value.join("\n");
+        if (message.category === "gui-lore") {
+          const input = value.join("<newline>");
           inputs.push({
             index: nextIndex,
             message,
@@ -1077,6 +1116,16 @@ export async function parseMiniMessages(
   const java = await runOfficialParser(theme.definitions, inputs);
   const findings = [...theme.findings];
   const unavailable = new Set<string>();
+  if (
+    inputs.some(
+      ({ message, input }) =>
+        (message.format === "legacy-color-minimessage" ||
+          message.format === "legacy-color-variable-minimessage") &&
+        /[&§][0-9a-fk-orx]|(?<!<)#[0-9a-f]{6}/iu.test(input),
+    )
+  ) {
+    unavailable.add("旧颜色码到 MiniMessage 的运行时转换尚未纳入检查");
+  }
   if (java.unavailable === undefined) {
     for (const definition of theme.definitions) {
       const result = java.themes.get(definition.index);
