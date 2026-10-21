@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "8.9.2",
+  "translationHistory": "b8f6985a4ad2af1b76b05f0f79b718a2234623ad",
+  "jarSha256": "f86556c1f83d3ae11aa7bb4da95b56d9571f0c257114d01203207899fb54af48",
+  "syncConfigurationSha256": "2d52e7c74a3dd0043614e7673caac02eafe080d42255dd54a34eb7b4ea1fc3b1",
+  "sourceBaselineSha256": "14ec607cb7f9524a6d00e9e8b75dc9df624aa98d55405ba77b1e7b2461fc02f1",
+  "resourcesSha256": "f8d3cf68fba242de86335caff9839f74ace6699b0e04cb60ed6299462da1960d",
+  "translationSeeds": [
+    {
+      "id": "ee227b569e64641bee72ab7fef5897fa633dc8307e5e3e3db66aaa9029c6ac66",
+      "sourceSha256": "2742f8360667264501df89cceb9cd0178870bf50627e9d9a23ff31946eb8f235",
+      "reason": "missing"
+    }
+  ],
+  "sameTextCandidates": [
+    {
+      "id": "0d41961ed73f4a1ec6b0dd54bc1549172e034ab338afb87ee993640bc6132f20",
+      "sourceSha256": "b5ef540b1008e8e9de57155a166846fb6e536526c4896aba2bf6cdbc34c1f50d"
+    }
+  ],
+  "integritySha256": "f58fc2df8a68e7f47f983bdc38e276b5edab887b787f53b983579476a187e9c8"
+}

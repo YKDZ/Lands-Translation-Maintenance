@@ -77,6 +77,12 @@ const reportSchema = z.object({
       pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
     }),
   ),
+  knownExcludedResources: z.array(
+    z.object({
+      path: z.string(),
+      purpose: z.enum(["bedrock-excluded", "other-excluded"]),
+    }),
+  ),
   knownOutOfScopeVisibleTexts: z.array(
     z.object({
       file: z.string(),
@@ -216,6 +222,13 @@ function jsonLine(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function textLineValue(value: string): string {
+  return value
+    .replaceAll("\r", "\\r")
+    .replaceAll("\n", "\\n")
+    .replaceAll("\0", "\\0");
+}
+
 type ReportPayload = z.output<typeof reportSchema>;
 
 function reportPayload(report: ProjectReport): ReportPayload {
@@ -253,11 +266,19 @@ function renderReport(report: ReportPayload) {
       `待确认同文 ${candidate.candidateId}（${pendingReasonNames[candidate.pendingReason]}）：${candidate.message.targetFile}:${candidate.message.path.join(".")}；原文 ${jsonLine(candidate.source)}；译文 ${jsonLine(candidate.target)}。`,
     );
   }
+  if (report.knownExcludedResources.length > 0) {
+    lines.push("已知排除资源（已登记，本次不解析）：");
+    for (const resource of report.knownExcludedResources) {
+      const name =
+        resource.purpose === "bedrock-excluded" ? "Bedrock" : "其他范围外资源";
+      lines.push(`  ${name}：${textLineValue(resource.path)}`);
+    }
+  }
   if (report.knownOutOfScopeVisibleTexts.length > 0) {
     lines.push("已知范围外可见文本（仅登记，不纳入翻译维护）：");
     for (const visibleText of report.knownOutOfScopeVisibleTexts) {
       lines.push(
-        `  ${visibleText.file}:${visibleText.path.join(".")} = ${JSON.stringify(visibleText.value)}`,
+        `  ${textLineValue(visibleText.file)}:${visibleText.path.map((part) => textLineValue(String(part))).join(".")} = ${JSON.stringify(visibleText.value)}`,
       );
     }
   }
@@ -276,14 +297,14 @@ function renderReport(report: ReportPayload) {
       );
     }
     for (const capability of report.coverage.unavailableCapabilities) {
-      lines.push(`尚未覆盖：${capability}`);
+      lines.push(`尚未覆盖：${textLineValue(capability)}`);
     }
   }
   if (report.diagnostics.length === 0) {
     lines.push("没有诊断。");
   } else {
     for (const diagnostic of report.diagnostics) {
-      const location = `${diagnostic.location.file}${diagnostic.location.path.length === 0 ? "" : `:${diagnostic.location.path.join(".")}`}`;
+      const location = `${textLineValue(diagnostic.location.file)}${diagnostic.location.path.length === 0 ? "" : `:${diagnostic.location.path.map((part) => textLineValue(String(part))).join(".")}`}`;
       const origins = {
         source: "原文",
         target: "译文",
@@ -294,7 +315,7 @@ function renderReport(report: ReportPayload) {
           ? ""
           : `（来源：${origins[diagnostic.origin]}）`;
       lines.push(
-        `[${diagnostic.severity}] ${location}${origin} ${diagnostic.code}：${diagnostic.reason}；期望 ${jsonLine(diagnostic.expected)}，实际 ${jsonLine(diagnostic.actual)}。（诊断 ID：${diagnostic.diagnosticId}）`,
+        `[${diagnostic.severity}] ${location}${origin} ${diagnostic.code}：${textLineValue(diagnostic.reason)}；期望 ${jsonLine(diagnostic.expected)}，实际 ${jsonLine(diagnostic.actual)}。（诊断 ID：${diagnostic.diagnosticId}）`,
       );
     }
   }

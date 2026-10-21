@@ -1,0 +1,28 @@
+schemaVersion: 1
+source:
+  version: "8.9.2"
+  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"
+resources:
+  - path: plugin.yml
+    purpose: metadata
+  - path: Locale/en-US.yml
+    purpose: chat-language
+  - path: Locale/theme.yml
+    purpose: configuration
+  - path: config.yml
+    purpose: configuration
+  - path: web.yml
+    purpose: configuration
+  - path: bedrock/lang/en_us.json
+    purpose: bedrock-excluded
+translationScope:
+  sourceLanguage: "en-US"
+  targetLanguage: "zh-CN"
+  mappings:
+    - source: Locale/en-US.yml
+      target: Locale/zh-CN.yml
+      fields:
+        - path: [messages]
+          category: chat-string
+        - path: [general]
+          category: chat-string
