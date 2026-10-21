@@ -16,7 +16,7 @@ general:
     general: <t:regular>通常</t>
     members: <t:cmd>成员 ☺</t>
     economy: <t:cost>经济 $</t>
-    relations: <t:regular_value>关系</t>
+    relations: <t:regular_value>外交关系</t>
     posts: <t:regular>通知</t>
     storage: <t:regular>仓库</t>
   wYes: <green>是</green>
@@ -38,7 +38,7 @@ general:
       remove: <t:decoration>✖</t> <t:click>丢弃键<newline>   </t>
       label: <t:regular><v:label></t>
       desc: <t:regular><v:desc></t>
-  enabled: <green>允许</green>
+  enabled: <green>已启用</green>
   offline: <red>离线</red>
   never: <t:regular>从不</t>
   rentables:
@@ -59,7 +59,7 @@ general:
       ratio-wl: 胜利/失败比
   now: <green>现在</green>
   wNo: <red>否</red>
-  disabled: <red>禁止</red>
+  disabled: <red>已禁用</red>
   directions:
     north: 北
     east: 东
@@ -668,7 +668,7 @@ gui:
           material: INHERIT
           slots: 17
         rentable:
-          name: <t:regular_heading>租售
+          name: <t:regular_heading>可租售
           lore:
             - <t:decoration>✖ </t><t:regular>View areas setup for rental and
             - "   lands that can be purchased."
@@ -2412,7 +2412,7 @@ gui:
     items:
       default:
         child_failure_rented:
-          name: <t:error_heading>租售中
+          name: <t:error_heading>已出租或出售
           lore:
             - <t:error>You can't edit this area while
             - it's being rented or sold.
@@ -2518,7 +2518,7 @@ gui:
           bedrock:
             detail: true
         refresh_toggle:
-          name: '<t:regular_heading>仅显示当前子区域: <v:current>'
+          name: '<t:regular_heading>仅显示子区域: <v:current>'
           lore:
             - <t:decoration>✖ </t><t:regular>Display only players who are
             - "   banned in this area <t:decoration>(</t><t:regular_value><v:area></t><t:decoration>)</t><t:regular>?"
@@ -2637,7 +2637,7 @@ gui:
     items:
       default:
         refresh_filter:
-          name: <t:regular_heading>按类型筛选：</t><t:regular_value> <v:type></t>
+          name: <t:regular_heading>按类型筛选:</t><t:regular_value> <v:type></t>
           lore:
             - <t:decoration>✖ </t><t:regular>Cycle through message types.
             - "   Current:<t:regular_value> <v:type></t>"
@@ -2939,7 +2939,7 @@ gui:
           name: <t:entry_heading><v:player>
           material: INHERIT
         refresh_toggle:
-          name: '<t:regular_heading>仅显示当前子区域: <v:current>'
+          name: '<t:regular_heading>仅显示子区域: <v:current>'
           lore:
             - <t:decoration>✖ </t><t:regular>Display only players who are
             - "   trusted in this area <t:decoration>(</t><t:regular_value><v:area></t><t:decoration>)</t><t:regular>?"

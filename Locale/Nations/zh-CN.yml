@@ -38,13 +38,13 @@ general:
   integration:
     bluemap:
       capital:
-        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">首都传送点</span><br /></span>此传送点属于联邦 <v:nation> 的首都.</div><div class="\&quot;infowindow\&quot;"><br />对非成员开放: <v:public></div><ul><li>如果此传送点对非成员开放, 任何人都可执行 /<v:cmd> 传送到这里.</li></ul>'
+        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">首都传送点</span><br /></span>此传送点属于联邦 <v:nation> 的首都.</div><div class="\&quot;infowindow\&quot;"><br />对未加入或被移出联邦的玩家开放: <v:public></div><ul><li>如果此传送点对未加入或被移出联邦的玩家开放, 任何人都可执行 /<v:cmd> 传送到这里.</li></ul>'
       nation:
         description: |
           <div><span style="font-size: 200%;"><span style="color: <v:land_color>;"><v:land></span><br /></span><v:title></div><ul><li>等级: <v:level></li><li>余额: <v:balance></li><li>区块: <v:chunks></li><li>创建时间: <v:created_at></li><li>成员 (<v:members_amount>): <v:members></li></ul><p><strong>这个城镇属于联邦 <v:nation>:</strong></p><ul><li>等级: <v:level_nation></li><li>首都: <v:capital></li><li>成立时间: <v:nation_created_at></li><li>城镇 (数量: <v:lands_amount>, 成员: <v:members_amount_nation>): <v:lands></li></ul>
     dynmap:
       capital:
-        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">首都传送点</span><br /></span>此传送点属于联邦 <v:nation> 的首都.</div><div class="\&quot;infowindow\&quot;"><br />对非成员开放: <v:public></div><ul><li>如果此传送点对非成员开放, 任何人都可执行 /<v:cmd> 传送到这里.</li></ul>'
+        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">首都传送点</span><br /></span>此传送点属于联邦 <v:nation> 的首都.</div><div class="\&quot;infowindow\&quot;"><br />对未加入或被移出联邦的玩家开放: <v:public></div><ul><li>如果此传送点对未加入或被移出联邦的玩家开放, 任何人都可执行 /<v:cmd> 传送到这里.</li></ul>'
       nation:
         description: |
           <div><span style="font-size: 200%;"><span style="color: <v:land_color>;"><v:land></span><br /></span><v:title></div><ul><li>等级: <v:level></li><li>余额: <v:balance></li><li>区块: <v:chunks></li><li>创建时间: <v:created_at></li><li>成员 (<v:members_amount>): <v:members></li></ul><p><strong>这个城镇属于联邦 <v:nation>:</strong></p><ul><li>等级: <v:level_nation></li><li>首都: <v:capital></li><li>成立时间: <v:nation_created_at></li><li>城镇 (数量: <v:lands_amount>, 成员: <v:members_amount_nation>): <v:lands></li></ul>

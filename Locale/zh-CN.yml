@@ -614,7 +614,7 @@ lands:
                 <hover:show_text:"<t:regular>点击这里移除此报价."><click:run_command:"/<v:cmd>"><t:decoration>✔ </t><t:regular>移除报价: <t:cmd>/<v:cmd></t></click></hover>
             land: |
               <t:regular>你已将整个城镇<t:entity_land> <v:land> </t>挂牌出售. 价格:<t:cost> <v:cost></t>
-                <hover:show_text:"<t:regular>点击取消这项出售."><click:run_command:"/<v:cmd>"><t:decoration>✖ </t><t:regular>取消出售: <t:cmd>/<v:cmd></t></click></hover>
+                <hover:show_text:"<t:regular>点击这里移除此报价."><click:run_command:"/<v:cmd>"><t:decoration>✖ </t><t:regular>取消出售: <t:cmd>/<v:cmd></t></click></hover>
           invalid: |
             <t:regular>牌子格式无效 (<t:regular_value>第 <v:line> 行</t>)
              <t:decoration>第 1 行:</t><t:regular> Lands (城镇插件)
@@ -690,7 +690,7 @@ lands:
       input:
         confirm: |
           <t:regular>请点击下方确认执行此操作 <t:decoration>(</t><t:cmd>/<v:input></t><t:decoration>)</t><t:regular>:
-            <hover:show_text:"<t:regular>点击确认执行此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
+            <hover:show_text:"<t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
         land: <t:error>城镇<t:error_value> <v:input> </t>不存在.
         area: <t:error>此城镇中不存在子区域<t:error_value> <v:input> </t>.
         holder: <t:error>没有名为<t:error_value> <v:input> </t>的城镇或联邦. <t:regular>是否输入有误?
@@ -1026,7 +1026,7 @@ lands:
         migrate:
           confirm: |
             <t:negative>请确认你已在 <v:file> 中配置所有限制包. 将旧权限迁移到新限制时, 系统会计算编号权限与限制包之间的差异.<t:regular> 因此应提前配置所有限制包, 否则可能无法得到正确结果.<t:error_value> 另外建议在执行此操作前备份数据库, 以便需要时恢复.
-              </t><hover:show_text:"</t><t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
+              </t><hover:show_text:"<t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
       land:
         addrole:
           confirm: |

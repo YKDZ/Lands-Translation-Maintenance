@@ -74,7 +74,7 @@ gui:
           material: ENDER_PEARL
           slots: 9
         stats:
-          name: <t:regular_heading>统计数据
+          name: <t:regular_heading>统计信息
           lore:
             - "<t:regular>Total players: <t:regular_value><v:members></t>"
             - ""
@@ -140,7 +140,7 @@ gui:
         object_icon:
           slots: 26
   list_nation_effects:
-    title: <t:menu_title>加成
+    title: <t:menu_title>效果
     items:
       default:
         child_failure_max:
