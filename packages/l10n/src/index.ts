@@ -1,9 +1,21 @@
-import * as v from "valibot";
-
-import { nameSchema } from "#/name-schema";
-
-export type Greeting = { message: string };
-
-export function greet(name: string): Greeting {
-  return { message: `Hello, ${v.parse(nameSchema, name)}` };
-}
+export { cli } from "#/cli-contract";
+export { ProjectOperationError } from "#/operations";
+export {
+  initializeProject,
+  inspectProject,
+  operationExitCode,
+} from "#/operations";
+export { builtInRules, evaluateRules } from "#/rules";
+export type { InitializationOptions } from "#/operations";
+export type { RuleEvaluationOptions } from "#/rules";
+export type {
+  CheckCoverage,
+  CheckRule,
+  ConsumerConfiguration,
+  Diagnostic,
+  ProjectReport,
+  ProjectView,
+  RuleContext,
+  RuleFinding,
+  RuleEvaluation,
+} from "#/model";

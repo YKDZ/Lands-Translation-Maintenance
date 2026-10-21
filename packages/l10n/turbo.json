@@ -4,42 +4,50 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": [],
-      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!test/**",
+        "!scripts/**",
+        "$TURBO_ROOT$/packages/typescript-config/base.json"
+      ],
+      "outputs": ["dist/**"],
       "tags": ["quality:light"]
     },
     "format:check": {
-      "inputs": [],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
       "tags": ["quality:light"]
     },
     "format:write": {
       "dependsOn": ["lint:fix"],
-      "inputs": [],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
       "cache": false,
       "tags": ["work:repair"]
     },
     "lint": {
-      "inputs": [],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
       "tags": ["quality:light"]
     },
     "lint:fix": {
-      "inputs": [],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
       "cache": false,
       "tags": ["work:repair"]
     },
     "test": {
-      "dependsOn": [],
-      "inputs": [],
+      "dependsOn": ["build"],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],
       "tags": ["quality:light"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
-      "inputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/typescript-config/base.json"
+      ],
       "outputs": [],
       "tags": ["quality:light"]
     }

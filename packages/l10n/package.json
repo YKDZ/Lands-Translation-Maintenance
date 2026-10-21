@@ -26,7 +26,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "valibot": "catalog:"
+    "@ykdz/cli-contract": "0.3.0",
+    "fflate": "0.8.3",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@lands-l10n/typescript-config": "workspace:*",
