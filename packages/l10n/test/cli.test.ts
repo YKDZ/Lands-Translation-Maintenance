@@ -263,19 +263,7 @@ async function createGuiProject(t: TestContext) {
     ].join("\n"),
   );
 
-  const jarEntries: Record<string, Uint8Array> = {
-    "plugin.yml": strToU8("name: Lands\n"),
-  };
   for (const module of guiModules) {
-    jarEntries[module.source] = strToU8(
-      await readFile(join(guiFixtureDirectory, module.sourceFixture), "utf8"),
-    );
-    jarEntries[module.definitions] = strToU8(
-      await readFile(
-        join(guiFixtureDirectory, module.definitionsFixture),
-        "utf8",
-      ),
-    );
     const targetPath = join(directory, module.target);
     await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(
@@ -284,8 +272,33 @@ async function createGuiProject(t: TestContext) {
     );
   }
   const jarFile = join(directory, "Lands.jar");
-  await writeFile(jarFile, zipSync(jarEntries));
+  await writeGuiJar(jarFile);
   return { directory, jarFile };
+}
+
+async function writeGuiJar(
+  jarFile: string,
+  sourceOverrides: Readonly<Record<string, string>> = {},
+): Promise<void> {
+  const jarEntries: Record<string, Uint8Array> = {
+    "plugin.yml": strToU8("name: Lands\n"),
+  };
+  for (const module of guiModules) {
+    jarEntries[module.source] = strToU8(
+      sourceOverrides[module.source] ??
+        (await readFile(
+          join(guiFixtureDirectory, module.sourceFixture),
+          "utf8",
+        )),
+    );
+    jarEntries[module.definitions] = strToU8(
+      await readFile(
+        join(guiFixtureDirectory, module.definitionsFixture),
+        "utf8",
+      ),
+    );
+  }
+  await writeFile(jarFile, zipSync(jarEntries));
 }
 
 async function createInterruptedProject(t: TestContext, resourceCount = 150) {
@@ -600,6 +613,89 @@ void describe("CLI 制品", () => {
     assert.match(targetAfter, /- 第一行\n            - 第二行/);
   });
 
+  void it("配置文本动态 ID 用显式 selector 进入初始化映射", async (t) => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "lands-l10n-config-fields-"),
+    );
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    const targetPath = join(directory, "Locale/zh-CN_categories.yml");
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(
+      targetPath,
+      [
+        "land:",
+        "  categories:",
+        "    peaceful:",
+        "      name: 和平",
+        "      description: [不会发生战斗]",
+        "      enabled: true",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+        "resources:",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "  - path: categories.yml",
+        "    purpose: configuration",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: categories.yml",
+        "      target: Locale/zh-CN_categories.yml",
+        "      definitionsSource: categories.yml",
+        "      fields:",
+        '        - path: [land, categories, "*", name]',
+        "          category: configuration-string",
+        "          scene: category-name",
+        '        - path: [land, categories, "*", description]',
+        "          category: configuration-string-list",
+        "          scene: category-description",
+        "",
+      ].join("\n"),
+    );
+    const jarFile = join(directory, "Lands.jar");
+    await writeFile(
+      jarFile,
+      zipSync({
+        "plugin.yml": strToU8("name: Lands\n"),
+        "categories.yml": strToU8(
+          [
+            "land:",
+            "  categories:",
+            "    peaceful:",
+            "      name: Peaceful",
+            "      description: [No combat here]",
+            "      enabled: true",
+            "",
+          ].join("\n"),
+        ),
+      }),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal((report.summary as Record<string, unknown>).messages, 2);
+  });
+
   void it("初始化三模块 GUI 时保留中文和已合入的结构定义", async (t) => {
     const project = await createGuiProject(t);
     const initialized = runCli(
@@ -695,6 +791,128 @@ void describe("CLI 制品", () => {
           JSON.stringify((location as Record<string, unknown>).path) ===
             '["physical","selection","lore"]',
       ),
+    );
+  });
+
+  void it("GUI lore 从含换行标签的串改为列表时仍按严格原文重置", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const originalTarget = await readFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+    );
+    const mainSource = await readFile(
+      join(guiFixtureDirectory, "main-en.yml"),
+      "utf8",
+    );
+    const changedMainSource = mainSource.replace(
+      '    lore: "<t:regular>Use this tool to create a selection.<newline>Selections can be used for:<newline> <t:decoration>• </t><t:regular>Claiming<newline> <t:decoration>• </t><t:regular>Unclaiming<newline> <t:decoration>• </t><t:regular>Resizing areas"',
+      [
+        "    lore:",
+        "      - <t:regular>Use this tool to create a selection.",
+        "      - 'Selections can be used for:'",
+        "      - ' <t:decoration>• </t><t:regular>Claiming'",
+        "      - ' <t:decoration>• </t><t:regular>Unclaiming'",
+        "      - ' <t:decoration>• </t><t:regular>Resizing areas'",
+      ].join("\n"),
+    );
+    assert.notEqual(changedMainSource, mainSource);
+    const candidateJar = join(project.directory, "candidate.jar");
+    await writeGuiJar(candidateJar, {
+      "Locale/en-US_gui.yml": changedMainSource,
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const lore = messages.find(
+      ({ path }) => JSON.stringify(path) === '["physical","selection","lore"]',
+    );
+    const changedLore = [
+      "<t:regular>Use this tool to create a selection.",
+      "Selections can be used for:",
+      " <t:decoration>• </t><t:regular>Claiming",
+      " <t:decoration>• </t><t:regular>Unclaiming",
+      " <t:decoration>• </t><t:regular>Resizing areas",
+    ];
+    assert.equal(lore?.action, "reset");
+    assert.equal(lore?.reason, "source-changed");
+    assert.equal(typeof lore?.previousSource, "string");
+    assert.deepEqual(lore?.source, changedLore);
+    assert.deepEqual(lore?.target, changedLore);
+    assert.deepEqual(
+      await readFile(join(project.directory, "Locale/zh-CN_gui.yml")),
+      originalTarget,
+    );
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const updatedTarget = await readFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      "utf8",
+    );
+    assert.match(updatedTarget, /Use this tool to create a selection/);
+    assert.doesNotMatch(updatedTarget, /使用此工具创建选区/);
+
+    const repeated = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    const repeatedPlan = readEnvelope(repeated.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const repeatedMessages = repeatedPlan.messages as readonly Record<
+      string,
+      unknown
+    >[];
+    const preservedLore = repeatedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["physical","selection","lore"]',
+    );
+    assert.equal(preservedLore?.action, "preserve");
+    assert.equal(preservedLore?.reason, "unchanged");
+    assert.equal(
+      (repeatedPlan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
     );
   });
 
