@@ -143,7 +143,12 @@ export interface VariableCountDifference {
 }
 
 export interface MiniMessageContextFrame {
-  readonly kind: "tag" | "hover-text" | "html-element" | "html-attribute";
+  readonly kind:
+    | "tag"
+    | "hover-text"
+    | "tag-argument"
+    | "html-element"
+    | "html-attribute";
   readonly name: string;
   readonly position: MiniMessagePosition;
 }

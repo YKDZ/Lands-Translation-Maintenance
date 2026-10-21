@@ -1,5 +1,6 @@
 import { parseFragment, type DefaultTreeAdapterTypes } from "parse5";
 
+import { translationFallbackSegment } from "#/minimessage-text";
 import type {
   JsonValue,
   MiniMessageContextFrame,
@@ -668,6 +669,31 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
   }
 
   visit(fragment.childNodes, [], document.context);
+  for (const node of document.nodes) {
+    if (node.kind !== "tag") continue;
+    const fallback = translationFallbackSegment(document, node);
+    if (fallback === undefined) continue;
+    const structureIndex = segments.findIndex(
+      (segment) =>
+        segment.kind === "structure" &&
+        segment.raw === node.raw &&
+        segment.position.start === node.position.start &&
+        segment.position.end === node.position.end,
+    );
+    if (structureIndex < 0) continue;
+    const structure = segments[structureIndex]!;
+    const fallbackContext = fallback.context.at(-1);
+    segments[structureIndex] = {
+      ...structure,
+      value: node.parameters[0] ?? "",
+    };
+    if (fallbackContext !== undefined) {
+      segments.splice(structureIndex + 1, 0, {
+        ...fallback,
+        context: [...structure.context, fallbackContext],
+      });
+    }
+  }
   return {
     projection,
     elements,

@@ -51,6 +51,14 @@ void describe("Lands 旧颜色格式适配", () => {
     const unknown = adaptLegacyMiniMessageInput("&a绿", "8.9.3");
 
     assert.equal(old?.input, "§a字面 &z普通");
+    assert.deepEqual(old?.issues, [
+      {
+        code: "legacy-format.code-unsupported",
+        position: { start: 0, end: 2 },
+        expected: "8.0.1 支持的 & 颜色/格式码",
+        actual: "§a",
+      },
+    ]);
     assert.equal(escaped?.input, "\\<green>颜色");
     assert.equal(unknown, undefined);
   });

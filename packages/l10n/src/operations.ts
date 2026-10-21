@@ -28,6 +28,7 @@ import {
 } from "#/minimessage-theme";
 import type {
   CheckCoverage,
+  CheckRule,
   ConsumerConfiguration,
   Diagnostic,
   DiagnosticLocation,
@@ -1362,8 +1363,9 @@ function coverageUnavailable(view: ProjectView): readonly string[] {
 function evaluateProject(
   view: ProjectView,
   configuration: ConsumerConfiguration,
+  registeredRules: readonly CheckRule[],
 ) {
-  return evaluateRules(view, builtInRules, {
+  return evaluateRules(view, registeredRules, {
     configuration: configuration.rules,
     unavailableCapabilities: coverageUnavailable(view),
   });
@@ -2405,6 +2407,7 @@ interface EvaluatedSavedProject extends LoadedSavedProject {
   readonly view: ProjectView;
   readonly diagnostics: readonly Diagnostic[];
   readonly coverage: CheckCoverage;
+  readonly registeredRules: readonly CheckRule[];
 }
 
 async function loadSavedProject(
@@ -2517,8 +2520,9 @@ async function loadSavedProject(
 function enabledRulesRequireInput(
   configuration: ConsumerConfiguration,
   input: RuleInput,
+  registeredRules: readonly CheckRule[],
 ): boolean {
-  return builtInRules.some(
+  return registeredRules.some(
     (rule) =>
       rule.requiredInputs?.includes(input) === true &&
       configuration.rules?.[rule.id]?.enabled !== false,
@@ -2528,10 +2532,12 @@ function enabledRulesRequireInput(
 async function evaluateSavedProject(
   loaded: LoadedSavedProject,
   operation: "status" | "check",
+  registeredRules: readonly CheckRule[] = builtInRules,
 ): Promise<EvaluatedSavedProject> {
+  const rules = [...registeredRules];
   const view =
     operation === "check" &&
-    enabledRulesRequireInput(loaded.configuration, "minimessage-parse")
+    enabledRulesRequireInput(loaded.configuration, "minimessage-parse", rules)
       ? {
           ...loaded.view,
           miniMessage: await parseMiniMessages(
@@ -2542,12 +2548,13 @@ async function evaluateSavedProject(
           ),
         }
       : loaded.view;
-  const evaluation = evaluateProject(view, loaded.configuration);
+  const evaluation = evaluateProject(view, loaded.configuration, rules);
   return {
     ...loaded,
     view,
     diagnostics: [...loaded.staticDiagnostics, ...evaluation.diagnostics],
     coverage: evaluation.coverage,
+    registeredRules: rules,
   };
 }
 
@@ -2570,7 +2577,9 @@ function requiredRuleInputUnavailable(
   operation: "status" | "check",
   messageId?: string,
 ): boolean {
-  const rule = builtInRules.find((candidate) => candidate.id === ruleId);
+  const rule = project.registeredRules.find(
+    (candidate) => candidate.id === ruleId,
+  );
   if (rule === undefined) return true;
   return (
     rule.requiredInputs?.some((input) => {
@@ -2957,10 +2966,12 @@ function applyExceptionRecords(
 async function evaluatedProjectForInspection(
   projectDirectory: string,
   operation: "status" | "check",
+  registeredRules: readonly CheckRule[] = builtInRules,
 ): Promise<EvaluatedSavedProject> {
   return evaluateSavedProject(
     await loadSavedProject(projectDirectory),
     operation,
+    registeredRules,
   );
 }
 
@@ -3172,12 +3183,14 @@ export async function confirmSameText(
 export async function inspectProject(
   projectDirectory: string,
   operation: "status" | "check",
+  registeredRules: readonly CheckRule[] = builtInRules,
 ): Promise<ProjectReport> {
   let evaluated: EvaluatedSavedProject;
   try {
     evaluated = await evaluatedProjectForInspection(
       projectDirectory,
       operation,
+      registeredRules,
     );
   } catch (error) {
     return invalidStateReport(

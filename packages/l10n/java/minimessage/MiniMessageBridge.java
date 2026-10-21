@@ -389,18 +389,16 @@ public final class MiniMessageBridge {
     }
     if (name.equals("translate_or") || name.equals("tr_or") || name.equals("lang_or")) {
       List<Integer> indexes = new ArrayList<>();
-      for (int index = 2; index < parts.size(); index++) indexes.add(index);
+      // The official resolver consumes the key and fallback with value(), then
+      // deserializes only the remaining component arguments.
+      for (int index = 3; index < parts.size(); index++) indexes.add(index);
       return indexes;
     }
     if (name.equals("nbt") || name.equals("data")) {
-      int separatorIndex = parts.size() - 1;
-      if (separatorIndex >= 1
-          && parts.get(separatorIndex).value().equalsIgnoreCase("interpret")) {
-        separatorIndex--;
-      }
-      if (separatorIndex >= 4
-          && !parts.get(separatorIndex).value().equalsIgnoreCase("interpret")) {
-        return List.of(separatorIndex);
+      // NbtTag consumes at most parts[4] as the optional separator. A later
+      // part is only the optional "interpret" flag; excess arguments are ignored.
+      if (parts.size() > 4 && !parts.get(4).value().equalsIgnoreCase("interpret")) {
+        return List.of(4);
       }
     }
     return List.of();
