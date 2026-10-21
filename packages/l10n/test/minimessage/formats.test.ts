@@ -327,6 +327,12 @@ void describe("地图 HTML 与旧格式正式检查", () => {
           ),
       ),
     );
+    const sourceAnchor = sourceDocument?.segments
+      .find((segment) => segment.kind === "text" && segment.value === "Land")
+      ?.context.find(
+        (frame) => frame.kind === "html-element" && frame.name === "a",
+      );
+    assert.deepEqual(sourceAnchor?.position, { start: 11, end: 45 });
     assert.ok(
       sourceDocument?.segments.some(
         (segment) =>
@@ -447,6 +453,57 @@ void describe("地图 HTML 与旧格式正式检查", () => {
         reason.includes("依赖游戏运行时数据"),
       ),
       false,
+    );
+  });
+
+  void it("普通聊天只把按键、翻译键和选择器作为结构身份暴露", async (t) => {
+    const input =
+      "A <key:key.jump> <lang:lands.owner> <selector:@a> <lang_or:lands.owner:'Owner'> label";
+    const project = await createFormatProject(t, {
+      unrelatedText: input,
+      targetUnrelatedText: input,
+    });
+    const { report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const document = view.miniMessage?.translatableText.find(
+      (entry) => entry.origin === "source" && entry.path.at(-1) === "text",
+    );
+
+    assert.ok(document);
+    assert.equal(
+      diagnostics(report).some((entry) =>
+        String(entry.code).startsWith("minimessage."),
+      ),
+      false,
+    );
+    for (const technicalValue of ["key.jump", "lands.owner", "@a"]) {
+      assert.equal(
+        document.segments.some(
+          (segment) =>
+            segment.kind === "text" && segment.value === technicalValue,
+        ),
+        false,
+        `${technicalValue} 不应作为普通可译正文重复提供`,
+      );
+      assert.ok(
+        document.segments.some(
+          (segment) =>
+            segment.kind === "structure" &&
+            segment.value.includes(technicalValue),
+        ),
+        `${technicalValue} 应保留为结构身份`,
+      );
+    }
+    const fallback = document.segments.find(
+      (segment) => segment.kind === "text" && segment.value === "Owner",
+    );
+    assert.ok(fallback);
+    assert.ok(
+      fallback.context.some(
+        (frame) =>
+          frame.kind === "tag-argument" &&
+          frame.name === "translate_or:fallback",
+      ),
     );
   });
 
