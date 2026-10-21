@@ -560,7 +560,7 @@ gui:
     items:
       default:
         tax_area:
-          name: <t:regular_heading>Tax:</t> <t:regular_value><v:tax></t>
+          name: <t:regular_heading>税费:</t> <t:regular_value><v:tax></t>
           lore:
             - <t:regular>In<t:time> <v:time></t> your land
             - will receive <t:regular_value><v:revenue></t> <t:regular>in total as taxes
@@ -2238,7 +2238,7 @@ gui:
   list_admin_wilderness_landflags:
     title: <t:menu_title>环境设置
   list_area_roles:
-    title: <t:menu_title>Roles
+    title: <t:menu_title>职位
     items:
       default:
         child_failure_max-roles:
@@ -2721,7 +2721,7 @@ gui:
           bedrock:
             detail: true
         lands:
-          name: <t:regular_heading>拥有的城镇</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          name: <t:regular_heading>城镇</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
           lore:
             - <t:regular_value><v:lands></t>
           material: OAK_SIGN
@@ -2764,13 +2764,13 @@ gui:
           material: skin:3e4f2f9698c3f186fe44cc63d2f3c4f9a241223acf0581775d9cecd7075
           slots: 24
         enemies:
-          name: <t:regular_heading>Enemies
+          name: <t:regular_heading>政敌
           lore:
             - <t:decoration>✖ </t><t:regular>Manage enemies.
           material: RED_BANNER
           slots: 22
         allies:
-          name: <t:regular_heading>Allies
+          name: <t:regular_heading>盟友
           lore:
             - <t:decoration>✖ </t><t:regular>Manage allies.
           material: LIME_BANNER
@@ -2860,7 +2860,7 @@ gui:
           bedrock:
             detail: true
         entry_ally:
-          name: <t:entry_heading>Ally <v:object>
+          name: <t:entry_heading>盟友 <v:object>
           lore:
             - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
             - "<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>"
@@ -2878,7 +2878,7 @@ gui:
           material: skin:548d7d1e03e1af145b0125ab841285672b421265da2ab915015f9058438ba2d8
           slots: 42
         entry_enemy:
-          name: <t:entry_heading>Enemy <v:object>
+          name: <t:entry_heading>政敌 <v:object>
           lore:
             - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
             - "<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>"
@@ -2908,14 +2908,14 @@ gui:
     items:
       default:
         enemies:
-          name: <t:negative_heading>Enemies
+          name: <t:negative_heading>政敌
           lore:
             - <t:decoration>✖ </t><t:regular>View enemies.
             - "   <t:decoration>• </t><t:regular>Amount: <v:enemies>"
           material: RED_BANNER
           slots: 25
         allies:
-          name: <t:positive_heading>Allies
+          name: <t:positive_heading>盟友
           lore:
             - <t:decoration>✖ </t><t:regular>View allies.
             - "   <t:decoration>• </t><t:regular>Amount: <v:allies>"

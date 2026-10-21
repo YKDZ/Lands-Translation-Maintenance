@@ -240,7 +240,7 @@ lands:
         add:
           nation: |
             <t:error>无法将城镇<t:error_value> <v:land> </t>设为政敌. <t:regular>该城镇由联邦<t:entity_nation> <v:nation> </t>管理.
-              <hover:show_text:"<t:regular>点击此处向联邦<t:entity_nation> <v:nation> </t>宣战."><click:run_command:"/<v:cmd>"><t:regular>✖ 改为向联邦<t:entity_nation> <v:nation></t> 宣战: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
+              <hover:show_text:"<t:regular>点击此处将联邦<t:entity_nation> <v:nation> </t>设为政敌."><click:run_command:"/<v:cmd>"><t:regular>✖ 改为将联邦<t:entity_nation> <v:nation></t> 设为政敌: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       nation: <t:error>所有外交关系均由联邦<t:error_value> <v:nation></t> 管理, 你的城镇属于该联邦.
     nation:
       leave:

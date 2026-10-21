@@ -219,7 +219,7 @@ help:
           ally: {}
           enemy: {}
       view:
-        main: <hover:show_text:"<t:regular>此命令也会可视化附近的占领区块. <t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>占领区块信息</click></hover>
+        main: <hover:show_text:"<t:regular>此命令也会显示附近的领土. <t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>领土信息</click></hover>
         disable: <hover:show_text:"<t:regular>关闭当前可视化. 点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>关闭可视化</click></hover>
         here: <hover:show_text:"<t:regular>可视化你当前所在的子区域. <t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>可视化子区域</click></hover>
         stay: <hover:show_text:"<t:regular>可视化范围将不再跟随你的高度. <t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>锁定Y轴位置</click></hover>
@@ -263,7 +263,7 @@ help:
         about: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>显示城镇插件信息</click></hover>
         chatspy: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>监听聊天</click></hover>
         dismiss: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>忽略通知</click></hover>
-        import: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>导入第三方占领数据</click></hover>
+        import: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>导入第三方领土数据</click></hover>
         menu: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>打开管理员菜单</click></hover>
         deleteinactive: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>删除不活跃玩家和城镇</click></hover>
         limits:
@@ -282,7 +282,7 @@ help:
             first-join-items: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>给予已启用的首次加入物品</click></hover>
             limit: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>修改限制</click></hover>
 
-        resetworld: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>删除世界内所有占领</click></hover>
+        resetworld: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>删除世界内所有领土</click></hover>
         hologram:
           main: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>管理排行榜全息图</click></hover>
           create: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>创建全息图</click></hover>
@@ -677,7 +677,7 @@ lands:
       action:
         cooldown: <t:error>你现在不能这么做. <t:regular>你需要等待<t:time> <v:time></t>.
         spam: '<t:error>你当前已有命令或操作正在处理. <t:regular>请等待其完成, 不要连续刷命令. <t:decoration>操作: </t><t:regular_value><v:action></t>'
-      wilderness: <t:error>你当前位置没有已占领的城镇. <t:regular>请先进入你的城镇以执行此操作. <t:regular>你可以使用 <t:cmd>/<v:cmd> </t><t:regular>查看周围的占领范围.
+      wilderness: <t:error>你当前位置没有已占领的城镇. <t:regular>请先进入你的城镇以执行此操作. <t:regular>你可以使用 <t:cmd>/<v:cmd> </t><t:regular>查看周围的领土范围.
       player-self: <t:error>你不能对自己执行此操作.
       banks-disabled: <t:regular>金库功能已被管理员禁用. 管理员可以在配置中启用它.
       area-not-trusted: <t:error>你不能在这里这么做. <t:regular>你不是子区域<t:regular_value> <v:area> </t>的成员, 该子区域属于城镇<t:entity_land> <v:land></t>.

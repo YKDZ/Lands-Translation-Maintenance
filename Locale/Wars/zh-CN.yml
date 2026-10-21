@@ -22,7 +22,7 @@ general:
         mutual:
           sent: <t:regular>已向<t:entity_land> <v:0> </t>发送战争请求. 对方需要接受.
           received: '<t:negative_value><v:0></t> <t:negative>发送了战争请求. 接受: <t:cmd>/<v:1></t>'
-          denied: <t:regular><t:entity_land> <v:0> </t>已拒绝战争请求.
+          denied: <t:regular><t:entity_land> <v:0> </t>已拒绝互相宣战请求.
       surrender:
         sent: <t:negative>We surrendered to<t:negative_value> <v:0></t>. They robbed<t:cost> <v:1></t> from us.
         received: <t:regular>The enemy<t:entity_land> <v:0></t> surrendered to us. We robbed<t:cost> <v:1></t> from them.
@@ -64,7 +64,7 @@ general:
   wars:
     object:
       enemy: <t:error_value>政敌</t>
-      ally: <t:regular_value>Ally</t>
+      ally: <t:regular_value>盟友</t>
     nametag:
       enemy: <t:error_value>政敌 </t><t:decoration>| </t>
       ally: <t:regular_value>盟友 </t><t:decoration>| </t>
@@ -227,7 +227,7 @@ wars:
         defender: <t:error>守方 <v:object> <t:error>的余额过低. <t:regular>只能攻击余额至少为<t:limit> <v:min> </t>的其他目标.
       min-chunks:
         attacker: '<t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>需要至少拥有<t:limit> <v:min> </t>个区块才能发动战争. 占领区块: <hover:show_text:"<t:regular>点击此处占领."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>'
-        defender: <t:error>守方 <v:object> <t:error>的占领区块数过少. <t:regular>只能攻击至少拥有<t:limit> <v:min> </t>个区块的其他目标.
+        defender: <t:error>守方 <v:object> <t:error>的领土区块数过少. <t:regular>只能攻击至少拥有<t:limit> <v:min> </t>个区块的其他目标.
       min-age:
         attacker: <t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>的成立时间至少达到<t:time> <v:min></t>, 才能发动战争.
         defender: <t:error>守方 <v:object> <t:error>的成立时间过短. <t:regular>只能攻击成立时间至少达到<t:time> <v:min> </t>的其他目标.
@@ -297,7 +297,7 @@ help:
   command:
     wars:
       menu: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>打开战争菜单</click></hover>
-      deny: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>拒绝战争宣战请求</click></hover>
+      deny: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>拒绝互相宣战请求</click></hover>
       spawn: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>传送到政敌处</click></hover>
       declare: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> - </t><t:regular>发起战争的宣战请求</click></hover>
       list: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> - </t><t:regular>查看进行中的战争</click></hover>
@@ -436,7 +436,7 @@ lands:
       war: <t:error>你不能在参与战争时使用这个命令.
     capture:
       dropped: <t:error>一些战旗掉在了地上. <t:regular>你的背包没有剩余空间.
-      success: <t:regular>你获得了<t:regular_value> <v:blocks> </t>面战旗. <t:regular>在战争期间, 将它们放置在政敌的占领区块中, 开始占领一个子区域.
+      success: <t:regular>你获得了<t:regular_value> <v:blocks> </t>面战旗. <t:regular>在战争期间, 将它们放置在政敌领土中, 开始占领一个子区域.
     war: <t:error>你现在不能这样做. <t:regular><v:object> <t:regular>正在与 <v:enemy><t:regular> 进行战争. <t:regular>请在战争结束后重试.
 nations:
   command:

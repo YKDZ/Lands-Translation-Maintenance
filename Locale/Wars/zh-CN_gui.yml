@@ -62,7 +62,7 @@ gui:
           slots: 16
         tribute_defender: {}
         child_failure_none:
-          name: <t:error_heading>无占领区块
+          name: <t:error_heading>暂无领土
           lore:
             - <t:error>The enemy <t:error_value><v:enemy></t> has no claims
             - to teleport to.
