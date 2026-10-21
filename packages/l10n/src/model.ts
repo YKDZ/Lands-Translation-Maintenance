@@ -198,6 +198,10 @@ export interface MiniMessageThemeEntry {
 
 export interface MiniMessageFinding {
   readonly code: string;
+  /** 用于区分同一规则、消息和路径下的不同出现位置；不要包含可变内容。 */
+  readonly identity?: JsonValue;
+  /** 此诊断实际依赖的规则配置或外部内容。 */
+  readonly fingerprint?: JsonValue;
   readonly message?: MessageIdentity;
   readonly origin: MiniMessageOrigin;
   readonly location: DiagnosticLocation;
@@ -321,6 +325,8 @@ export interface DiagnosticLocation {
 
 export interface Diagnostic {
   readonly diagnosticId: string;
+  readonly objectId: string;
+  readonly contentFingerprint: string;
   readonly ruleId: string;
   readonly severity: Severity;
   readonly code: string;
@@ -334,7 +340,9 @@ export interface Diagnostic {
 
 export interface RuleFinding {
   readonly code: string;
+  /** 用于区分同一规则、消息和路径下的不同问题对象；不要包含可变内容。 */
   readonly identity?: JsonValue;
+  /** 此诊断实际依赖的规则配置或外部内容。 */
   readonly fingerprint?: JsonValue;
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;

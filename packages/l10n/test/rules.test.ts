@@ -5,6 +5,7 @@ import {
   evaluateRules,
   type CheckRule,
   type ProjectView,
+  type RuleFinding,
 } from "@lands-l10n/l10n";
 
 const sampleProject: ProjectView = {
@@ -114,5 +115,87 @@ void describe("规则注册契约", () => {
     assert.equal(disabled.diagnostics.length, 0);
     assert.deepEqual(disabled.coverage.disabledRuleIds, ["sample"]);
     assert.equal(disabled.coverage.complete, false);
+  });
+
+  void it("将消息内容、规则相关配置和显式依赖纳入诊断指纹", () => {
+    const sample: CheckRule = {
+      id: "sample",
+      defaultSeverity: "error",
+      evaluate(project, context) {
+        const message = project.messages[0];
+        if (message === undefined) return [];
+        const result: RuleFinding = {
+          ...finding("sample.dependency"),
+          message,
+          fingerprint: context.parameters.themeFingerprint as string,
+        };
+        return [result];
+      },
+    };
+    const evaluate = (
+      project: ProjectView,
+      themeFingerprint: string,
+      extraConfiguration: Record<string, { enabled: boolean }> = {},
+      severity: "error" | "warning" = "error",
+    ) =>
+      evaluateRules(project, [sample], {
+        configuration: {
+          sample: { severity, parameters: { themeFingerprint } },
+          ...extraConfiguration,
+        },
+      }).diagnostics[0];
+
+    const base = evaluate(sampleProject, "theme-token-v1");
+    const changedTheme = evaluate(sampleProject, "theme-token-v2");
+    const changedMessage = evaluate(
+      {
+        ...sampleProject,
+        messages: [{ ...sampleProject.messages[0]!, source: "Changed" }],
+      },
+      "theme-token-v1",
+    );
+    const changedSeverity = evaluate(
+      sampleProject,
+      "theme-token-v1",
+      {},
+      "warning",
+    );
+    const unrelatedRule = evaluate(sampleProject, "theme-token-v1", {
+      future: { enabled: true },
+    });
+    const unrelatedParameter = evaluateRules(sampleProject, [sample], {
+      configuration: {
+        sample: {
+          parameters: {
+            themeFingerprint: "theme-token-v1",
+            unrelated: "ignored by this finding",
+          },
+        },
+      },
+    }).diagnostics[0];
+
+    assert.ok(base);
+    assert.ok(changedTheme);
+    assert.ok(changedMessage);
+    assert.ok(changedSeverity);
+    assert.ok(unrelatedRule);
+    assert.ok(unrelatedParameter);
+    assert.equal(base?.objectId, changedTheme?.objectId);
+    assert.notEqual(base?.contentFingerprint, changedTheme?.contentFingerprint);
+    assert.notEqual(base?.diagnosticId, changedTheme?.diagnosticId);
+    assert.notEqual(
+      base?.contentFingerprint,
+      changedMessage?.contentFingerprint,
+    );
+    assert.notEqual(
+      base?.contentFingerprint,
+      changedSeverity?.contentFingerprint,
+    );
+    assert.equal(base?.contentFingerprint, unrelatedRule?.contentFingerprint);
+    assert.equal(base?.diagnosticId, unrelatedRule?.diagnosticId);
+    assert.equal(
+      base?.contentFingerprint,
+      unrelatedParameter?.contentFingerprint,
+    );
   });
 });
