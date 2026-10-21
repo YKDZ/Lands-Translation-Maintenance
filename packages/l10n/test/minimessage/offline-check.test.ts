@@ -235,7 +235,16 @@ void describe("无 JAR 保存项目检查旅程", () => {
       readonly unavailableCapabilities: readonly string[];
     };
     assert.equal(coverage.complete, false);
-    assert.ok(coverage.enabledRuleIds.includes("minimessage-syntax"));
+    for (const ruleId of [
+      "structure",
+      "minimessage-syntax",
+      "minimessage-tags",
+      "minimessage-variables",
+      "map-html",
+      "translation-consistency",
+    ]) {
+      assert.ok(coverage.enabledRuleIds.includes(ruleId), ruleId);
+    }
     assert.ok(
       !coverage.unavailableCapabilities.some((capability) =>
         capability.includes("Bedrock"),
@@ -268,6 +277,10 @@ void describe("无 JAR 保存项目检查旅程", () => {
       targetPath,
       initialTarget
         .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
+        .replace(
+          "<click:run_command:/lands claim><green>占领<v:land></green></click>",
+          "<click:run_command:/lands claim><green>占领</green></click>",
+        )
         .replace("draft: Review this policy", "draft: 请审阅此政策")
         .replace('duplicate_b: "启用国家"', 'duplicate_b: "关闭国家"'),
     );
@@ -294,6 +307,15 @@ void describe("无 JAR 保存项目检查旅程", () => {
     });
     assert.deepEqual(await snapshotProjectFiles(projectDirectory), editedFiles);
 
+    const targetWithMissingMessage = (await readFile(targetPath, "utf8"))
+      .replace("  draft: 请审阅此政策\n", "")
+      .replace(
+        '<div class="land" title="领地">',
+        '<div class="town" title="领地">',
+      );
+    await writeFile(targetPath, targetWithMissingMessage);
+    const checkInputFiles = await snapshotProjectFiles(projectDirectory);
+
     const editedCheck = runArtifactCli(
       "check",
       "--project",
@@ -303,6 +325,33 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
     assert.equal(editedCheck.status, 1, editedCheck.stderr);
     const editedReport = readReport(editedCheck.stderr || editedCheck.stdout);
+    const editedDiagnostics = editedReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      editedDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "structure" &&
+          diagnostic.code === "message.missing" &&
+          JSON.stringify(
+            (diagnostic.message as Record<string, unknown>).path,
+          ) === '["messages","draft"]',
+      ),
+      JSON.stringify(editedDiagnostics),
+    );
+    assert.ok(
+      editedDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "map-html" &&
+          diagnostic.code === "map-html.behavior-attribute-mismatch",
+      ),
+      JSON.stringify(editedDiagnostics),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(projectDirectory),
+      checkInputFiles,
+    );
     const tagDiagnostics = (
       editedReport.diagnostics as readonly Record<string, unknown>[]
     ).filter(
@@ -310,7 +359,20 @@ void describe("无 JAR 保存项目检查旅程", () => {
         diagnostic.ruleId === "minimessage-tags" &&
         diagnostic.code === "minimessage.tag-mismatch",
     );
-    assert.equal(tagDiagnostics.length, 2);
+    const greetingTagDiagnostics = tagDiagnostics.filter(
+      (diagnostic) =>
+        JSON.stringify((diagnostic.message as Record<string, unknown>).path) ===
+        '["messages","greeting"]',
+    );
+    assert.equal(greetingTagDiagnostics.length, 2);
+    assert.ok(
+      (editedReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-variables" &&
+          diagnostic.code === "minimessage.variable-missing",
+      ),
+      JSON.stringify(editedReport.diagnostics),
+    );
     const consistencyDiagnostics = (
       editedReport.diagnostics as readonly Record<string, unknown>[]
     ).filter(
@@ -328,7 +390,9 @@ void describe("无 JAR 保存项目检查旅程", () => {
       /duplicate_b/u,
     );
 
-    const exemptedDiagnosticId = String(tagDiagnostics[0]?.diagnosticId);
+    const exemptedDiagnosticId = String(
+      greetingTagDiagnostics[0]?.diagnosticId,
+    );
     const exempted = runArtifactCli(
       "exempt",
       "--project",
@@ -361,7 +425,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
         diagnostic.ruleId === "minimessage-tags" &&
         diagnostic.code === "minimessage.tag-mismatch",
     );
-    assert.equal(remainingTagDiagnostics.length, 1);
+    assert.equal(remainingTagDiagnostics.length, 2);
     assert.ok(
       !afterExemptionDiagnostics.some(
         (diagnostic) => diagnostic.diagnosticId === exemptedDiagnosticId,
@@ -453,7 +517,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
           diagnostic.ruleId === "minimessage-tags" &&
           diagnostic.code === "minimessage.tag-mismatch",
       ).length,
-      2,
+      3,
     );
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
@@ -500,7 +564,8 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
     assert.equal(finalTextCheck.status, finalCheck.status);
     const textOutput = finalTextCheck.stderr || finalTextCheck.stdout;
-    assert.match(textOutput, /已修改 1 条/u);
+    assert.match(textOutput, /已修改 0 条/u);
+    assert.match(textOutput, /缺失 1 条/u);
     assert.match(textOutput, /检查覆盖不完整/u);
     assert.match(textOutput, /Bedrock/u);
     assert.match(textOutput, /bedrock\/lang\/en_us\.json/u);
@@ -521,5 +586,291 @@ void describe("无 JAR 保存项目检查旅程", () => {
       assert.ok(textOutput.includes(String(diagnostic.code)));
     }
     assert.deepEqual(await snapshotProjectFiles(projectDirectory), finalFiles);
+
+    const declarationProject = join(temporaryDirectory, "changed-declaration");
+    await cp(fixtureDirectory, declarationProject, { recursive: true });
+    const declarationPath = join(declarationProject, ".l10n/config.yml");
+    const originalDeclaration = await readFile(declarationPath, "utf8");
+    await writeFile(
+      declarationPath,
+      originalDeclaration.replace(
+        "  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+        "  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n  - path: Locale/unavailable-candidate.yml\n    purpose: chat-language\n",
+      ),
+    );
+    const changedDeclarationFiles =
+      await snapshotProjectFiles(declarationProject);
+    const changedDeclarationStatus = runArtifactCliWithoutJava(
+      "status",
+      "--project",
+      declarationProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(changedDeclarationStatus.status, 1);
+    const changedDeclarationReport = readReport(
+      changedDeclarationStatus.stdout || changedDeclarationStatus.stderr,
+    );
+    assert.ok(
+      (
+        changedDeclarationReport.diagnostics as readonly Record<
+          string,
+          unknown
+        >[]
+      ).some((diagnostic) => diagnostic.code === "sync.configuration-changed"),
+    );
+    assert.equal(
+      (changedDeclarationReport.summary as { readonly resourceFiles: number })
+        .resourceFiles,
+      6,
+    );
+    assert.equal(
+      (changedDeclarationReport.summary as { readonly messages: number })
+        .messages,
+      8,
+    );
+    assert.ok(
+      !JSON.stringify(changedDeclarationReport).includes(
+        "Locale/unavailable-candidate.yml",
+      ),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(declarationProject),
+      changedDeclarationFiles,
+    );
+    const changedDeclarationCheck = runArtifactCliWithoutJava(
+      "check",
+      "--project",
+      declarationProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(changedDeclarationCheck.status, 1);
+    const changedDeclarationCheckReport = readReport(
+      changedDeclarationCheck.stdout || changedDeclarationCheck.stderr,
+    );
+    assert.ok(
+      (
+        changedDeclarationCheckReport.diagnostics as readonly Record<
+          string,
+          unknown
+        >[]
+      ).some((diagnostic) => diagnostic.code === "sync.configuration-changed"),
+    );
+    assert.ok(
+      !JSON.stringify(changedDeclarationCheckReport).includes(
+        "Locale/unavailable-candidate.yml",
+      ),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(declarationProject),
+      changedDeclarationFiles,
+    );
+    const changedDeclarationText = runArtifactCliWithoutJava(
+      "status",
+      "--project",
+      declarationProject,
+    );
+    assert.equal(
+      changedDeclarationText.status,
+      changedDeclarationStatus.status,
+    );
+    assert.match(
+      changedDeclarationText.stdout || changedDeclarationText.stderr,
+      /需重新初始化/u,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(declarationProject),
+      changedDeclarationFiles,
+    );
+
+    const baselineProject = join(temporaryDirectory, "changed-baseline");
+    await cp(fixtureDirectory, baselineProject, { recursive: true });
+    const baselinePath = join(
+      baselineProject,
+      ".l10n/upstream/source-baseline.json",
+    );
+    await writeFile(baselinePath, `${await readFile(baselinePath, "utf8")} `);
+    const changedBaselineFiles = await snapshotProjectFiles(baselineProject);
+    for (const operation of ["status", "check"] as const) {
+      const result = runArtifactCliWithoutJava(
+        operation,
+        "--project",
+        baselineProject,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stderr);
+      const invalidReport = readReport(result.stdout || result.stderr);
+      const invalidDiagnostics = invalidReport.diagnostics as readonly Record<
+        string,
+        unknown
+      >[];
+      assert.ok(
+        invalidDiagnostics.some(
+          (diagnostic) =>
+            diagnostic.code === "state.invalid" &&
+            String(diagnostic.reason).includes(
+              "原文基线摘要与同步锁文件不一致",
+            ),
+        ),
+        JSON.stringify(invalidDiagnostics),
+      );
+      assert.equal(
+        (invalidReport.summary as { readonly resourceFiles: number })
+          .resourceFiles,
+        0,
+      );
+      assert.deepEqual(invalidReport.sameTextToConfirm, []);
+      assert.deepEqual(
+        await snapshotProjectFiles(baselineProject),
+        changedBaselineFiles,
+      );
+    }
+    const incompleteLockProject = join(temporaryDirectory, "incomplete-lock");
+    await cp(fixtureDirectory, incompleteLockProject, { recursive: true });
+    await rm(join(incompleteLockProject, ".l10n/lock.json"));
+    const incompleteLockFiles = await snapshotProjectFiles(
+      incompleteLockProject,
+    );
+    for (const operation of ["status", "check"] as const) {
+      const result = runArtifactCliWithoutJava(
+        operation,
+        "--project",
+        incompleteLockProject,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stderr);
+      const invalidReport = readReport(result.stdout || result.stderr);
+      const invalidDiagnostics = invalidReport.diagnostics as readonly Record<
+        string,
+        unknown
+      >[];
+      assert.ok(
+        invalidDiagnostics.some(
+          (diagnostic) =>
+            diagnostic.code === "state.invalid" &&
+            String(diagnostic.reason).includes("同步锁文件不完整"),
+        ),
+        JSON.stringify(invalidDiagnostics),
+      );
+      assert.equal(
+        (invalidReport.summary as { readonly resourceFiles: number })
+          .resourceFiles,
+        0,
+      );
+      assert.deepEqual(invalidReport.sameTextToConfirm, []);
+      assert.deepEqual(
+        await snapshotProjectFiles(incompleteLockProject),
+        incompleteLockFiles,
+      );
+    }
+    const policyProject = join(temporaryDirectory, "changed-policy");
+    await cp(fixtureDirectory, policyProject, { recursive: true });
+    const policyTargetPath = join(policyProject, "Locale/zh-CN.yml");
+    const policyTarget = await readFile(policyTargetPath, "utf8");
+    await writeFile(
+      policyTargetPath,
+      policyTarget
+        .replace("<green>欢迎，%player%</green>", "<blue>欢迎，%player%</blue>")
+        .replace("  draft: Review this policy\n", ""),
+    );
+    const defaultPolicyFiles = await snapshotProjectFiles(policyProject);
+    const defaultPolicyCheck = runArtifactCli(
+      "check",
+      "--project",
+      policyProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(defaultPolicyCheck.status, 1, defaultPolicyCheck.stderr);
+    const defaultPolicyReport = readReport(
+      defaultPolicyCheck.stdout || defaultPolicyCheck.stderr,
+    );
+    const defaultPolicyDiagnostics =
+      defaultPolicyReport.diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      defaultPolicyDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "message.missing" &&
+          diagnostic.severity === "error",
+      ),
+    );
+    assert.ok(
+      defaultPolicyDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.tag-mismatch",
+      ),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(policyProject),
+      defaultPolicyFiles,
+    );
+    const policyConfigPath = join(policyProject, ".l10n/config.yml");
+    await writeFile(
+      policyConfigPath,
+      `${await readFile(policyConfigPath, "utf8")}rules:\n  structure:\n    severity: warning\n  minimessage-tags:\n    enabled: false\n`,
+    );
+    const configuredPolicyFiles = await snapshotProjectFiles(policyProject);
+    const configuredPolicyCheck = runArtifactCli(
+      "check",
+      "--project",
+      policyProject,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(configuredPolicyCheck.status, 1);
+    const configuredPolicyReport = readReport(
+      configuredPolicyCheck.stdout || configuredPolicyCheck.stderr,
+    );
+    const configuredPolicyDiagnostics =
+      configuredPolicyReport.diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      configuredPolicyDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "message.missing" &&
+          diagnostic.severity === "warning",
+      ),
+    );
+    assert.ok(
+      !configuredPolicyDiagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.tag-mismatch",
+      ),
+    );
+    const configuredCoverage = configuredPolicyReport.coverage as {
+      readonly complete: boolean;
+      readonly enabledRuleIds: readonly string[];
+      readonly disabledRuleIds: readonly string[];
+    };
+    assert.equal(configuredCoverage.complete, false);
+    assert.ok(configuredCoverage.disabledRuleIds.includes("minimessage-tags"));
+    assert.ok(!configuredCoverage.enabledRuleIds.includes("minimessage-tags"));
+    assert.ok(
+      !configuredPolicyDiagnostics.some(
+        (diagnostic) => diagnostic.code === "sync.configuration-changed",
+      ),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(policyProject),
+      configuredPolicyFiles,
+    );
+    const configuredPolicyText = runArtifactCli(
+      "check",
+      "--project",
+      policyProject,
+    );
+    assert.equal(configuredPolicyText.status, configuredPolicyCheck.status);
+    assert.match(
+      configuredPolicyText.stdout || configuredPolicyText.stderr,
+      /已禁用规则：minimessage-tags/u,
+    );
+    assert.match(
+      configuredPolicyText.stdout || configuredPolicyText.stderr,
+      /\[warning\].*message\.missing/u,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(policyProject),
+      configuredPolicyFiles,
+    );
   });
 });
