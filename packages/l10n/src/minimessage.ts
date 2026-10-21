@@ -724,6 +724,10 @@ async function runOfficialParser(
         encode(input.adapted.input),
         input.adapted.sourceOffsets.join(","),
         String(input.adapted.exact),
+        String(
+          input.message.format === "map-html-minimessage" ||
+            input.message.format === "legacy-variable-minimessage",
+        ),
       ].join("\t"),
     );
   }

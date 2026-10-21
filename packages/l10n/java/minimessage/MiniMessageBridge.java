@@ -53,7 +53,8 @@ public final class MiniMessageBridge {
       String originalInput,
       String input,
       int[] sourceOffsets,
-      boolean exact) {}
+      boolean exact,
+      boolean requiresRenderedProjection) {}
 
   private record StyleParse(Style style, String error, int start, int end) {}
 
@@ -649,6 +650,7 @@ public final class MiniMessageBridge {
       int parentDocumentIndex,
       String input,
       SourceMap sourceMap,
+      boolean requiresRenderedProjection,
       List<Frame> initialContext,
       int[] nextDocumentIndex,
       List<String> output) {
@@ -717,7 +719,7 @@ public final class MiniMessageBridge {
         visibleOffsets = rendered.sourceOffsets();
       } else if (!closing && treeTag != null && treeTag.tag() instanceof Inserting inserting) {
         Component inserted = inserting.value();
-        if (hasRuntimeDependentComponent(inserted)) {
+        if (requiresRenderedProjection && hasRuntimeDependentComponent(inserted)) {
           output.add("W\t" + messageIndex + "\t" + encode(
               "MiniMessage 组件依赖游戏运行时数据，静态可见文本投影不完整"));
         }
@@ -725,8 +727,10 @@ public final class MiniMessageBridge {
           visibleText = PlainTextComponentSerializer.plainText().serialize(inserted);
           visibleOffsets = visibleOffsetsForInsertion(visibleText, parameters, position);
         } catch (RuntimeException exception) {
-          output.add("W\t" + messageIndex + "\t" + encode(
-              "官方 MiniMessage 插入组件无法静态序列化；可见文本投影不完整"));
+          if (requiresRenderedProjection) {
+            output.add("W\t" + messageIndex + "\t" + encode(
+                "官方 MiniMessage 插入组件无法静态序列化；可见文本投影不完整"));
+          }
         }
         if (!visibleText.isEmpty()
             && !parameters.isEmpty()
@@ -807,7 +811,8 @@ public final class MiniMessageBridge {
               sourceMap.range(treeTag.token().startIndex(), treeTag.token().endIndex())));
           int nestedDocumentIndex = nextDocumentIndex[0]++;
           outputDocument(resolver, theme, messageIndex,
-              nestedDocumentIndex, documentIndex, nestedInput, nestedMap, nestedContext,
+              nestedDocumentIndex, documentIndex, nestedInput, nestedMap,
+              requiresRenderedProjection, nestedContext,
               nextDocumentIndex, output);
         }
       }
@@ -819,17 +824,19 @@ public final class MiniMessageBridge {
     String renderedProjection = nodes.stream()
         .map(NodeOutput::visibleText)
         .reduce("", String::concat);
-    try {
-      MiniMessage runtimeParser = MiniMessage.builder().tags(resolver).build();
-      String officialPlainText = PlainTextComponentSerializer.plainText()
-          .serialize(runtimeParser.deserialize(input));
-      if (!renderedProjection.equals(officialPlainText)) {
+    if (requiresRenderedProjection) {
+      try {
+        MiniMessage runtimeParser = MiniMessage.builder().tags(resolver).build();
+        String officialPlainText = PlainTextComponentSerializer.plainText()
+            .serialize(runtimeParser.deserialize(input));
+        if (!renderedProjection.equals(officialPlainText)) {
+          output.add("W\t" + messageIndex + "\t" + encode(
+              "官方 MiniMessage 源节点与 PlainText 输出不一致；可见文本投影不完整"));
+        }
+      } catch (RuntimeException exception) {
         output.add("W\t" + messageIndex + "\t" + encode(
-            "官方 MiniMessage 源节点与 PlainText 输出不一致；可见文本投影不完整"));
+            "官方 MiniMessage PlainText 依赖运行时数据，静态可见文本投影不完整"));
       }
-    } catch (RuntimeException exception) {
-      output.add("W\t" + messageIndex + "\t" + encode(
-          "官方 MiniMessage PlainText 依赖运行时数据，静态可见文本投影不完整"));
     }
     for (UnresolvedOutput item : unresolved) {
       output.add("U\t" + messageIndex + "\t" + item.documentIndex() + "\t" + item.position()
@@ -880,12 +887,13 @@ public final class MiniMessageBridge {
       if (fields.get(0).equals("T") && fields.size() == 5) {
         themes.add(new ThemeInput(Integer.parseInt(fields.get(1)), decode(fields.get(2)),
             decode(fields.get(3)), decode(fields.get(4))));
-      } else if (fields.get(0).equals("M") && (fields.size() == 4 || fields.size() == 7)) {
+      } else if (fields.get(0).equals("M")
+          && (fields.size() == 4 || fields.size() == 7 || fields.size() == 8)) {
         String surface = decode(fields.get(2));
         if (fields.size() == 4) {
           String input = decode(fields.get(3));
           messages.add(new MessageInput(Integer.parseInt(fields.get(1)), surface,
-              input, input, identityOffsets(input), true));
+              input, input, identityOffsets(input), true, false));
         } else {
           String originalInput = decode(fields.get(3));
           String input = decode(fields.get(4));
@@ -898,8 +906,16 @@ public final class MiniMessageBridge {
           if (!fields.get(6).equals("true") && !fields.get(6).equals("false")) {
             throw new IllegalArgumentException("Invalid exact source map flag");
           }
+          boolean requiresRenderedProjection = false;
+          if (fields.size() == 8) {
+            if (!fields.get(7).equals("true") && !fields.get(7).equals("false")) {
+              throw new IllegalArgumentException("Invalid rendered projection flag");
+            }
+            requiresRenderedProjection = fields.get(7).equals("true");
+          }
           messages.add(new MessageInput(Integer.parseInt(fields.get(1)), surface,
-              originalInput, input, sourceOffsets, fields.get(6).equals("true")));
+              originalInput, input, sourceOffsets, fields.get(6).equals("true"),
+              requiresRenderedProjection));
         }
       } else {
         throw new IllegalArgumentException("Invalid bridge request row");
@@ -956,7 +972,7 @@ public final class MiniMessageBridge {
       // Structure collection must use the runtime resolver: a fallback Tag would hide official resolver failures.
       TagResolver structuralResolver = messageResolver(theme);
       outputDocument(structuralResolver, theme, message.index(), 0, -1, message.input(), sourceMap,
-          List.of(), nextDocumentIndex, structureOutput);
+          message.requiresRenderedProjection(), List.of(), nextDocumentIndex, structureOutput);
       for (String row : structureOutput) System.out.println(row);
     }
   }
