@@ -6,6 +6,7 @@ import type {
   JsonValue,
   MessageIdentity,
   MiniMessageOrigin,
+  RuleInputDependency,
 } from "#/model";
 import { canonicalJson, sha256 } from "#/value";
 import { parseYaml } from "#/yaml-data";
@@ -18,6 +19,7 @@ export interface DiagnosticExemptionRecord {
   readonly code: string;
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;
+  readonly requiredInputDependencies?: readonly RuleInputDependency[];
   readonly location: DiagnosticLocation;
   readonly reason: string;
 }
@@ -53,6 +55,15 @@ const locationSchema = z.object({
   line: z.number().int().positive().optional(),
   column: z.number().int().positive().optional(),
 });
+const requiredInputDependencySchema = z
+  .object({
+    input: z.literal("minimessage-parse"),
+    messageId: z.string().regex(/^[0-9a-f]{64}$/),
+    origin: z.enum(["source", "target", "theme"]),
+    documentIndex: z.number().int().nonnegative(),
+    path: z.array(z.union([z.string(), z.number()])),
+  })
+  .strict();
 const diagnosticExemptionSchema = z
   .object({
     diagnosticId: z.string().regex(/^[0-9a-f]{64}$/),
@@ -62,6 +73,9 @@ const diagnosticExemptionSchema = z
     code: z.string().min(1),
     message: messageIdentitySchema.optional(),
     origin: z.enum(["source", "target", "theme"]).optional(),
+    requiredInputDependencies: z
+      .array(requiredInputDependencySchema)
+      .optional(),
     location: locationSchema,
     reason: z.string().trim().min(1),
   })
