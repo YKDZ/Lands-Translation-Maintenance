@@ -156,6 +156,10 @@ export interface MiniMessageContextFrame {
 export interface MiniMessageTextNode {
   readonly kind: "text";
   readonly raw: string;
+  /** 官方 MiniMessage 树节点实际贡献给 PlainText 的可见文本。 */
+  readonly visibleText: string;
+  /** visibleText 每个 UTF-16 边界对应的原始消息边界。 */
+  readonly visibleSourceOffsets: readonly number[];
   readonly position: MiniMessagePosition;
   readonly context: readonly MiniMessageContextFrame[];
 }
@@ -163,6 +167,10 @@ export interface MiniMessageTextNode {
 export interface MiniMessageTagNode {
   readonly kind: "tag";
   readonly raw: string;
+  /** 官方插入组件或字面化节点实际贡献给 PlainText 的可见文本。 */
+  readonly visibleText: string;
+  /** visibleText 每个 UTF-16 边界对应的原始消息边界。 */
+  readonly visibleSourceOffsets: readonly number[];
   readonly name: string;
   readonly parameters: readonly string[];
   readonly parameterPositions: readonly MiniMessagePosition[];

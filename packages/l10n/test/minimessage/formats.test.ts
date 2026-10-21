@@ -277,6 +277,158 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     assert.match(JSON.stringify(finding?.actual), /region/u);
   });
 
+  void it("按官方 PlainText 结果检查插入 keybind 的地图 HTML", async (t) => {
+    const source = `<div><key:'<a href=/keep title="Old">Land</a>'></div>`;
+    const target = `<div><key:'<a href=/drop title="新">领地</a>'></div>`;
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: source,
+      targetMapDescription: target,
+    });
+    const { checked, report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const finding = diagnostics(report).find(
+      (entry) => entry.code === "map-html.behavior-attribute-mismatch",
+    );
+    const actual = finding?.actual as
+      | { readonly position?: { readonly start: number; readonly end: number } }
+      | undefined;
+    const expected = finding?.expected as
+      | { readonly position?: { readonly start: number; readonly end: number } }
+      | undefined;
+    const sourceDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" && entry.path.at(-1) === "description",
+    );
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" && entry.path.at(-1) === "description",
+    );
+
+    assert.equal(checked.status, 1);
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.ok(actual?.position);
+    assert.ok(expected?.position);
+    assert.equal(
+      target.slice(actual.position.start, actual.position.end),
+      "href=/drop",
+    );
+    assert.equal(
+      source.slice(expected.position.start, expected.position.end),
+      "href=/keep",
+    );
+    assert.ok(
+      sourceDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === "Land" &&
+          segment.context.some(
+            (frame) => frame.kind === "html-element" && frame.name === "a",
+          ),
+      ),
+    );
+    assert.ok(
+      sourceDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === "Old" &&
+          segment.context.some(
+            (frame) =>
+              frame.kind === "html-attribute" && frame.name === "title",
+          ),
+      ),
+    );
+    assert.ok(
+      targetDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === "领地" &&
+          segment.context.some(
+            (frame) => frame.kind === "html-element" && frame.name === "a",
+          ),
+      ),
+    );
+    assert.ok(
+      targetDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === "新" &&
+          segment.context.some(
+            (frame) =>
+              frame.kind === "html-attribute" && frame.name === "title",
+          ),
+      ),
+    );
+  });
+
+  void it("按官方文本节点的转义结果检查地图并映射回原文", async (t) => {
+    const source = "<div>\\<red>Land\\</red></div>";
+    const target = "<div>\\<red>领地\\</red></div>";
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: source,
+      targetMapDescription: target,
+    });
+    const { report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const sourceDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" && entry.path.at(-1) === "description",
+    );
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" && entry.path.at(-1) === "description",
+    );
+    const sourceText = sourceDocument?.segments.find(
+      (segment) => segment.kind === "text" && segment.value === "Land",
+    );
+
+    assert.equal(
+      diagnostics(report).some(
+        (entry) => entry.code === "map-html.structure-invalid",
+      ),
+      false,
+    );
+    assert.ok(sourceText);
+    assert.equal(
+      source.slice(sourceText.position.start, sourceText.position.end),
+      "Land",
+    );
+    assert.ok(
+      targetDocument?.segments.some(
+        (segment) => segment.kind === "text" && segment.value === "领地",
+      ),
+    );
+    assert.equal(
+      sourceDocument?.segments.some(
+        (segment) => segment.kind === "text" && segment.value.includes("\\"),
+      ),
+      false,
+    );
+  });
+
+  void it("动态游戏组件明确降低静态可见文本覆盖", async (t) => {
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: "<div><score:'Alex':'points'></div>",
+      targetMapDescription: "<div><score:'Alex':'points'></div>",
+    });
+    const { report } = initAndCheck(project);
+    const coverage = report.coverage as
+      | {
+          readonly complete: boolean;
+          readonly unavailableCapabilities: readonly string[];
+        }
+      | undefined;
+
+    assert.equal(coverage?.complete, false);
+    assert.ok(
+      coverage?.unavailableCapabilities.some((reason) =>
+        reason.includes("依赖游戏运行时数据"),
+      ),
+    );
+  });
+
   void it("按 MiniMessage PlainText 后的地图 HTML fallback 检查链接属性", async (t) => {
     const target = "<div><lang_or:lands.key:'<a href=/drop>城镇</a>'></div>";
     const project = await createFormatProject(t, {
@@ -580,6 +732,44 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       ),
       false,
       checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("按官方插入组件纯文本检查旧标题占位符", async (t) => {
+    const source = "Owned by <key:'%owner%'>";
+    const project = await createFormatProject(t, {
+      legacyTitle: source,
+      targetLegacyTitle: "属于<key:'某人'>",
+    });
+    const { checked, report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const finding = diagnostics(report).find(
+      (entry) => entry.code === "legacy-variable.missing",
+    );
+    const expected = finding?.expected as
+      | {
+          readonly positions?: readonly {
+            readonly start: number;
+            readonly end: number;
+          }[];
+        }
+      | undefined;
+    const sourceDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.path.join(".").includes("land.title.land.normal"),
+    );
+
+    assert.equal(checked.status, 1);
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.equal(expected?.positions?.length, 1);
+    const position = expected?.positions?.[0];
+    assert.ok(position);
+    assert.equal(source.slice(position.start, position.end), "%owner%");
+    assert.ok(
+      sourceDocument?.segments.some(
+        (segment) => segment.kind === "variable" && segment.value === "owner",
+      ),
     );
   });
 
