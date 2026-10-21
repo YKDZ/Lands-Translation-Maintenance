@@ -28,10 +28,10 @@ dialogs:
     buttons:
       add:
         label: <t:positive>添加
-        tooltip: 将此玩家永久加入城镇.
+        tooltip: 让此玩家永久加入.
       add-temporary:
         label: <t:regular_value>临时加入
-        tooltip: 将此玩家限时加入城镇.
+        tooltip: 让此玩家限时加入.
       discard:
         label: <t:negative>放弃
         tooltip: 点击放弃.
@@ -60,7 +60,7 @@ dialogs:
     buttons:
       add:
         label: <t:positive>添加
-        tooltip: 将此玩家加入城镇, 有效期为选定时长.
+        tooltip: 让此玩家加入, 有效期为选定时长.
       back:
         label: <t:regular>返回
         tooltip: 返回.
