@@ -254,6 +254,51 @@ void describe("MiniMessage 官方检查制品", () => {
     );
   });
 
+  void it("默认宽松闭合允许先闭合嵌套外层样式", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red><bold>Welcome</red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const initialTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      initialTarget.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("<red><bold>欢迎</red>")}`,
+      ),
+    );
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const diagnostics = readReport(checked.stderr || checked.stdout)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.deepEqual(
+      diagnostics.filter(
+        (diagnostic) =>
+          typeof diagnostic.ruleId === "string" &&
+          diagnostic.ruleId.startsWith("minimessage-"),
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+  });
+
   void it("把 lang_or 后备文本作为字面字符串，只递归检查官方组件参数", async (t) => {
     const source =
       "<lang_or:lands.key:'<v:owner> <red>fallback</red>':'<bold>argument</bold>'>";
