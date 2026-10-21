@@ -779,9 +779,22 @@ function planStructureChanges(
         : undefined;
     const target = targets.get(mapping.target);
     if (target === undefined) continue;
-    const translationPaths = [...currentMessages, ...previousMessages]
+    const currentTranslationPaths = currentMessages
       .filter((message) => message.sourceFile === mapping.source)
       .map((message) => message.path);
+    const releasedPreviousPaths = previousMessages
+      .filter(
+        (message) =>
+          message.sourceFile === mapping.source &&
+          !mapping.fields.some((field) =>
+            fieldSelectorMatchesPath(message.path, field),
+          ),
+      )
+      .map((message) => message.path);
+    const translationPaths = [
+      ...currentTranslationPaths,
+      ...releasedPreviousPaths,
+    ];
 
     if (!isRecord(currentDefinitions)) {
       blockers.push({
@@ -839,6 +852,33 @@ function planStructureChanges(
         reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual)}，上游结构类型为${structureValueType(expected)}`,
       });
     };
+    const canDeleteManagedSubtree = (
+      path: readonly string[],
+      previous: JsonValue,
+      actual: JsonValue,
+    ): boolean => {
+      if (
+        selectedAt(translationPaths, path) ||
+        selectedBelow(translationPaths, path)
+      ) {
+        return false;
+      }
+      const previousIsMap = isRecord(previous);
+      const actualIsMap = isRecord(actual);
+      if (previousIsMap || actualIsMap) {
+        if (!previousIsMap || !actualIsMap) return false;
+        return Object.keys(actual).every(
+          (key) =>
+            Object.prototype.hasOwnProperty.call(previous, key) &&
+            canDeleteManagedSubtree(
+              [...path, key],
+              previous[key]!,
+              actual[key]!,
+            ),
+        );
+      }
+      return structureValueType(previous) === structureValueType(actual);
+    };
     const visit = (
       path: readonly string[],
       previous: JsonValue | undefined,
@@ -854,6 +894,7 @@ function planStructureChanges(
 
       if (current === undefined) {
         if (previous === undefined) {
+          if (hasSelectedDescendant) return;
           if (actual !== undefined) {
             changes.push({
               sourceFile: mapping.source,
@@ -870,6 +911,17 @@ function planStructureChanges(
         if (previousIsMap) {
           if (!actualIsMap) {
             blockTargetType(path, actual, previous);
+            return;
+          }
+          if (canDeleteManagedSubtree(path, previous, actual)) {
+            changes.push({
+              sourceFile: mapping.source,
+              definitionsSource,
+              targetFile: mapping.target,
+              path,
+              action: "delete",
+              previous: actual,
+            });
             return;
           }
           for (const key of sortedKeys(previous, actual)) {
@@ -899,6 +951,10 @@ function planStructureChanges(
           } else {
             blockTargetType(path, actual, current);
           }
+          return;
+        }
+        if (actual === undefined && Object.keys(current).length === 0) {
+          update(path, current, undefined);
           return;
         }
         for (const key of sortedKeys(previous, current, actual)) {
@@ -1631,8 +1687,16 @@ export async function previewSyncProject(
           `无法准备目标文件：${previous.targetFile}`,
         );
       }
-      target.document.deleteIn(previous.path);
-      changedTargetPaths.add(previous.targetFile);
+      const removedByStructure = structurePlan.changes.some(
+        (change) =>
+          change.action === "delete" &&
+          change.targetFile === previous.targetFile &&
+          pathStartsWith(previous.path, change.path),
+      );
+      if (!removedByStructure) {
+        target.document.deleteIn(previous.path);
+        changedTargetPaths.add(previous.targetFile);
+      }
     }
     plannedMessages.push({
       id: previous.id,

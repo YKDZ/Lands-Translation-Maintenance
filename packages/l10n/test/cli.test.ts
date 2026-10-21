@@ -834,6 +834,11 @@ void describe("CLI 制品", () => {
         "&7This land is actively searching",
         "&7New members are welcome",
       );
+    const changedCategories = parseYaml(changedCategoriesSource) as {
+      land: { categories: Record<string, unknown> };
+    };
+    delete changedCategories.land.categories.mobfarm;
+    const candidateCategoriesSource = stringifyYaml(changedCategories);
     const changedLevelsSource = levelsSource
       .replace("value: 0", "value: 5")
       .replace(
@@ -847,14 +852,19 @@ void describe("CLI 制品", () => {
         "DIAMOND",
       )
       .replace("      default: 'ALL'", "");
+    const changedRoles = parseYaml(changedRolesSource) as {
+      land: { roles: { owner: Record<string, unknown> } };
+    };
+    changedRoles.land.roles.owner["custom-flags"] = {};
+    const candidateRolesSource = stringifyYaml(changedRoles);
     await writeFile(
       candidateJar,
       zipSync({
         "Locale/en-US_dialogs.yml": strToU8(changedDialogSource),
         "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
-        "categories.yml": strToU8(changedCategoriesSource),
+        "categories.yml": strToU8(candidateCategoriesSource),
         "levels.yml": strToU8(changedLevelsSource),
-        "roles.yml": strToU8(changedRolesSource),
+        "roles.yml": strToU8(candidateRolesSource),
         "plugin.yml": strToU8("name: Lands\n"),
       }),
     );
@@ -902,6 +912,16 @@ void describe("CLI 制品", () => {
     );
     assert.equal(targetOnlyRoleOption?.action, "preserve");
     assert.equal(targetOnlyRoleOption?.previous, "保留");
+    const deletedCategoryStructure = changedStructures.find(
+      ({ path }) => JSON.stringify(path) === '["land","categories","mobfarm"]',
+    );
+    assert.equal(deletedCategoryStructure?.action, "delete");
+    const emptyMapStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","roles","owner","custom-flags"]',
+    );
+    assert.equal(emptyMapStructure?.action, "update");
+    assert.deepEqual(emptyMapStructure?.expected, {});
     assert.equal(
       changedStructures.some(
         ({ path }) => JSON.stringify(path) === '["dialogs","input","title"]',
@@ -983,10 +1003,12 @@ void describe("CLI 制品", () => {
             readonly "allow-auto-accept": boolean;
             readonly description: readonly string[];
           };
+          readonly [key: string]: unknown;
         };
       };
     };
     assert.equal(updatedCategories.land.categories.members.name, "招募成员");
+    assert.equal("mobfarm" in updatedCategories.land.categories, false);
     assert.equal(updatedCategories.land.categories.members.enabled, true);
     assert.equal(
       updatedCategories.land.categories.members["allow-auto-accept"],
@@ -1028,13 +1050,18 @@ void describe("CLI 制品", () => {
     ) as {
       readonly land: {
         readonly roles: {
-          readonly owner: { readonly name: string; readonly icon: string };
+          readonly owner: {
+            readonly name: string;
+            readonly icon: string;
+            readonly [key: string]: unknown;
+          };
         };
       };
     };
     assert.equal(updatedRoles.land.roles.owner.name, "主人");
     assert.equal(updatedRoles.land.roles.owner.icon, "DIAMOND");
     assert.equal("default" in updatedRoles.land.roles.owner, false);
+    assert.deepEqual(updatedRoles.land.roles.owner["custom-flags"], {});
     assert.equal(
       (updatedRoles.land.roles.owner as Record<string, unknown>)[
         "local-option"
@@ -1162,7 +1189,7 @@ void describe("CLI 制品", () => {
     await writeFile(rolesPath, stringifyYaml(malformedRoles));
 
     const badJar = join(directory, "Lands-invalid-description.jar");
-    const malformedCategories = parseYaml(changedCategoriesSource) as {
+    const malformedCategories = parseYaml(candidateCategoriesSource) as {
       land: { categories: { members: { description: string | string[] } } };
     };
     malformedCategories.land.categories.members.description = "&7Market";
@@ -1173,7 +1200,7 @@ void describe("CLI 制品", () => {
         "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
         "categories.yml": strToU8(stringifyYaml(malformedCategories)),
         "levels.yml": strToU8(changedLevelsSource),
-        "roles.yml": strToU8(changedRolesSource),
+        "roles.yml": strToU8(candidateRolesSource),
         "plugin.yml": strToU8("name: Lands\n"),
       }),
     );
