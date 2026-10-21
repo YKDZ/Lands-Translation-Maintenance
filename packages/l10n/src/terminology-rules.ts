@@ -6,6 +6,7 @@ import type {
   TranslatableTextSegment,
 } from "#/model";
 import { terminologyEntries, terminologyStyleSource } from "#/terminology-data";
+import { pairedTextDocuments } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 
 interface TextPart {
@@ -447,10 +448,6 @@ function oppositeEntry(
   });
 }
 
-function documentKey(document: TranslatableTextDocument): string {
-  return `${document.message.id}\0${canonicalJson(document.path)}\0${document.origin}\0${document.documentIndex}`;
-}
-
 function exactSeed(
   project: Parameters<CheckRule["evaluate"]>[0],
   document: TranslatableTextDocument,
@@ -460,6 +457,9 @@ function exactSeed(
   );
   return (
     message?.targetStatus === "present" &&
+    message.target !== undefined &&
+    message.translationReview?.pendingReason === "translation-seed" &&
+    message.translationReview.confirmedSameText === false &&
     canonicalJson(message.source) === canonicalJson(message.target)
   );
 }
@@ -576,20 +576,13 @@ export const terminologyRule: CheckRule = {
     const parsed = project.miniMessage;
     if (parsed === undefined) return [];
     const overrides = translationOverrides(context.parameters);
-    const documentsByKey = new Map(
-      parsed.translatableText.map((document) => [
-        documentKey(document),
-        document,
-      ]),
-    );
     const findings: ReturnType<CheckRule["evaluate"]>[number][] = [];
 
-    for (const source of parsed.translatableText) {
-      if (source.origin !== "source") continue;
-      const target = documentsByKey.get(
-        `${source.message.id}\0${canonicalJson(source.path)}\0target\0${source.documentIndex}`,
-      );
-      if (target === undefined || exactSeed(project, source)) continue;
+    for (const {
+      sourceDocument: source,
+      targetDocument: target,
+    } of pairedTextDocuments(project)) {
+      if (exactSeed(project, source)) continue;
       const sourceDocument = parsed.documents.find(
         (document) =>
           document.message.id === source.message.id &&

@@ -915,10 +915,10 @@ void describe("跨消息翻译一致性", () => {
         "Lands cannot claim 3 plots for <v:owner> today under this rule.",
       ],
       [
-        "你不能认领<v:land>的2块地。",
-        "你可以认领<v:land>的2块地。",
-        "Nation不能认领<v:land>的2块地。",
-        "Lands不能认领<v:owner>的3块地。",
+        "你不能占领<v:land>的2块地.",
+        "你可以占领<v:land>的2块地.",
+        "联邦不能占领<v:land>的2块地.",
+        "城镇不能占领<v:owner>的3块地.",
       ],
     );
     const checked = runCli(
@@ -934,8 +934,8 @@ void describe("跨消息翻译一致性", () => {
         diagnostic.code === "translation-consistency.similar-source-candidate",
     );
 
-    assert.equal(checked.status, 1, checked.stderr || checked.stdout);
-    assert.equal(report.state, "incomplete");
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+    assert.equal(report.state, "ready", JSON.stringify(report));
     assert.ok(candidates.length > 0, checked.stderr || checked.stdout);
     assert.equal(
       candidates.some((diagnostic) => diagnostic.severity === "error"),
@@ -1520,7 +1520,7 @@ void describe("跨消息翻译一致性", () => {
     const configuration = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  minimessage-tags:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
+      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  minimessage-tags:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  terminology:\n    enabled: false\n  translation-style:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
     );
     const disabledCheck = runCliWithoutJava(
       "check",

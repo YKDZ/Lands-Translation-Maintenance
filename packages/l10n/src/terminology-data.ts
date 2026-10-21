@@ -252,7 +252,7 @@ export const terminologyEntries: readonly TerminologyEntry[] = [
 ];
 
 export const terminologyStyleSource = {
-  path: ".scratch/minimessage-audit/legacy/README.md",
+  path: "README.md",
   commit: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad",
   section: "翻译风格",
 } as const;

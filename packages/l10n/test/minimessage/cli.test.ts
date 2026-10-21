@@ -5536,6 +5536,25 @@ void describe("术语和风格正式检查", () => {
     assert.match(JSON.stringify(terminology[0]?.actual), /所有权/u);
   });
 
+  void it("按 click 所属对象换序配对 hover 术语", async (t) => {
+    const sourceA = `<click:run_command:"/lands a"><hover:show_text:'Nation'>A</hover></click>`;
+    const sourceB = `<click:run_command:"/lands b"><hover:show_text:'Owner'>B</hover></click>`;
+    const targetB = `<click:run_command:"/lands b"><hover:show_text:'所有者'>乙</hover></click>`;
+    const targetA = `<click:run_command:"/lands a"><hover:show_text:'联邦'>甲</hover></click>`;
+    const result = await checkGreeting(
+      t,
+      `${sourceA} ${sourceB}`,
+      `${targetB} ${targetA}`,
+    );
+    assert.deepEqual(
+      result.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      result.checked.stderr || result.checked.stdout,
+    );
+  });
+
   void it("变量和命令参数不参与术语或风格检查", async (t) => {
     const result = await checkGreeting(
       t,
@@ -5733,21 +5752,132 @@ void describe("术语和风格正式检查", () => {
     );
   });
 
-  void it("不因待翻译英文种子缺少中文术语而报告", async (t) => {
-    const result = await checkGreeting(t, "Nation", "Nation");
-    assert.equal(
-      result.diagnostics.some(
-        (diagnostic) => diagnostic.ruleId === "terminology",
-      ),
-      false,
-      result.checked.stderr || result.checked.stdout,
+  void it("仅跳过锁中标记的待翻译英文种子", async (t) => {
+    const project = await createProject(t, { sourceGreeting: "Nation" });
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(targetPath, target.replace("  greeting: 你好\n", ""));
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
     );
-    assert.equal(result.checked.status, 1);
-    assert.equal(result.report.state, "incomplete");
-    const coverage = result.report.coverage as Record<string, unknown>;
-    assert.ok((coverage.enabledRuleIds as string[]).includes("terminology"));
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
     assert.ok(
-      (coverage.enabledRuleIds as string[]).includes("translation-style"),
+      Number((report.summary as Record<string, unknown>).pendingTranslations) >
+        0,
+      checked.stderr || checked.stdout,
+    );
+    const seed = (
+      report.sameTextToConfirm as readonly Record<string, unknown>[]
+    ).find((candidate) => {
+      const message = candidate.message as Record<string, unknown>;
+      return JSON.stringify(message.path) === '["messages","greeting"]';
+    });
+    assert.ok(seed, checked.stderr || checked.stdout);
+    assert.equal(seed.pendingReason, "translation-seed");
+    assert.equal(
+      diagnostics.some((diagnostic) => diagnostic.ruleId === "terminology"),
+      false,
+      checked.stderr || checked.stdout,
+    );
+    assert.equal(checked.status, 1);
+    assert.equal(report.state, "incomplete");
+  });
+
+  void it("同文候选经确认前后都继续检查术语", async (t) => {
+    const project = await createProject(t, { sourceGreeting: "Nation" });
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("  greeting: 你好", "  greeting: Nation"),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const candidates = beforeReport.sameTextToConfirm as readonly Record<
+      string,
+      unknown
+    >[];
+    const greeting = candidates.find((candidate) => {
+      const message = candidate.message as Record<string, unknown>;
+      return JSON.stringify(message.path) === '["messages","greeting"]';
+    });
+    assert.ok(greeting, before.stderr || before.stdout);
+    if (greeting === undefined) throw new Error("缺少 greeting 同文候选");
+    assert.equal(greeting.pendingReason, "same-text-candidate");
+
+    const beforeTerms = (
+      beforeReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "terminology");
+    assert.equal(beforeTerms.length, 1, before.stderr || before.stdout);
+    assert.equal(beforeTerms[0]?.code, "terminology.translation-missing");
+
+    const confirmed = runCli(
+      "confirm-same-text",
+      "--project",
+      project.directory,
+      "--candidate",
+      String(greeting.candidateId),
+      "--reason",
+      "同文确认不代表术语已经译好",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(confirmed.status, 0, confirmed.stderr);
+
+    const after = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const afterReport = readReport(after.stdout || after.stderr);
+    const afterTerms = (
+      afterReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "terminology");
+    assert.equal(afterTerms.length, 1, after.stderr || after.stdout);
+    assert.equal(afterTerms[0]?.code, "terminology.translation-missing");
+    assert.equal(
+      (afterReport.summary as Record<string, unknown>).confirmedSameText,
+      1,
     );
   });
 });
