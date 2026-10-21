@@ -413,6 +413,92 @@ void describe("MiniMessage 官方检查制品", () => {
     );
   });
 
+  void it("NBT storage owner 按官方 Key 身份匹配默认命名空间", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting:
+        "<nbt:storage:lands:data:'<v:x>'> <nbt:storage:lands:owner:'<v:y>'> <nbt:storage:lands:owner:'<v:z>'>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    const equivalentTarget =
+      "<nbt:storage:'minecraft:lands':data:'<v:x>'> <data:storage:lands:owner:'<v:y>'> <data:storage:'minecraft:lands':owner:'<v:z>'>";
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(equivalentTarget)}`,
+      ),
+    );
+
+    const equivalentCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const equivalentDiagnostics = readReport(
+      equivalentCheck.stderr || equivalentCheck.stdout,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.deepEqual(
+      equivalentDiagnostics.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" ||
+          diagnostic.ruleId === "minimessage-variables",
+      ),
+      [],
+      equivalentCheck.stderr || equivalentCheck.stdout,
+    );
+
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(
+          equivalentTarget.replace("minecraft:lands", "minecraft:other"),
+        )}`,
+      ),
+    );
+    const changedKeyCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const changedKeyDiagnostics = readReport(
+      changedKeyCheck.stderr || changedKeyCheck.stdout,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      changedKeyDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      changedKeyCheck.stderr || changedKeyCheck.stdout,
+    );
+    assert.ok(
+      changedKeyDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-variables" &&
+          (diagnostic.code === "minimessage.variable-missing" ||
+            diagnostic.code === "minimessage.variable-added"),
+      ),
+      changedKeyCheck.stderr || changedKeyCheck.stdout,
+    );
+  });
+
   void it("翻译组件参数绑定所属 key，完整对象仍可换序", async (t) => {
     const project = await createProject(t, {
       sourceGreeting:
