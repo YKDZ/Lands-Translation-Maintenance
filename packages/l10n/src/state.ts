@@ -34,6 +34,12 @@ export interface MappingSnapshot {
   readonly definitionsSha256?: string;
 }
 
+export interface ReleasedTranslationPath {
+  readonly sourceFile: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
+}
+
 export interface SourceBaseline {
   readonly schemaVersion: 1;
   readonly source: ConsumerConfiguration["source"];
@@ -41,6 +47,7 @@ export interface SourceBaseline {
   readonly jarSha256: string;
   readonly resources: readonly ResourceSnapshot[];
   readonly mappings: readonly MappingSnapshot[];
+  readonly releasedTranslationPaths?: readonly ReleasedTranslationPath[];
   readonly miniMessageTheme?: {
     readonly file: string;
     readonly source: string;
@@ -154,6 +161,17 @@ const baselineSchema = z
         })
         .strict(),
     ),
+    releasedTranslationPaths: z
+      .array(
+        z
+          .object({
+            sourceFile: z.string().min(1),
+            targetFile: z.string().min(1),
+            path: z.array(z.string()),
+          })
+          .strict(),
+      )
+      .optional(),
     miniMessageTheme: z
       .object({ file: z.string().min(1), source: z.string() })
       .strict()
