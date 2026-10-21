@@ -2757,10 +2757,110 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.equal(loreIdentity.scene, "gui-item-lore");
     assert.equal(loreIdentity.format, "legacy-color-minimessage");
     const coverage = report.coverage as Record<string, unknown>;
-    assert.ok(
+    assert.equal(
       (coverage.unavailableCapabilities as string[]).some((capability) =>
         capability.includes("旧颜色码"),
       ),
+      false,
+      JSON.stringify(coverage.unavailableCapabilities),
+    );
+  });
+  void it("通过真实 CLI 把 GUI 旧颜色码映射为 MiniMessage 标签后比较", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "&aHello",
+      lore: ["说明"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    const target = await readFile(targetPath, "utf8");
+    assert.ok(target.includes(JSON.stringify("&aHello")));
+    await writeFile(
+      targetPath,
+      target.replace(JSON.stringify("&aHello"), JSON.stringify("<blue>你好")),
+    );
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const diagnostics = readReport(checked.stdout || checked.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const green = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch" &&
+        JSON.stringify(diagnostic.expected).includes("#55ff55"),
+    );
+    assert.ok(green, checked.stderr || checked.stdout);
+    assert.deepEqual((green.expected as Record<string, unknown>).positions, [
+      { start: 0, end: 2 },
+    ]);
+  });
+  void it("真实 CLI 对当前 Lands 版本不支持的旧颜色码报告一次精确错误", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "工具",
+      lore: ["说明"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    const target = await readFile(targetPath, "utf8");
+    assert.match(target, /name:.*工具/u);
+    const modifiedTarget = target.replace("name: 工具", 'name: "§a工具"');
+    assert.notEqual(modifiedTarget, target);
+    assert.match(modifiedTarget, /§a工具/u);
+    await writeFile(targetPath, modifiedTarget);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(checked.status, 1, checked.stderr);
+    const diagnostics = readReport(checked.stdout || checked.stderr)
+      .diagnostics as readonly Record<string, unknown>[];
+    const unsupportedCodes = diagnostics.filter(
+      (diagnostic) => diagnostic.code === "legacy-format.code-unsupported",
+    );
+    assert.equal(unsupportedCodes.length, 1, checked.stdout || checked.stderr);
+    const [unsupported] = unsupportedCodes;
+    assert.ok(unsupported);
+    assert.equal(unsupported.origin, "target");
+    assert.deepEqual((unsupported.actual as Record<string, unknown>).position, {
+      start: 0,
+      end: 2,
+    });
+    assert.equal((unsupported.actual as Record<string, unknown>).actual, "§a");
+    assert.equal(
+      diagnostics.filter(
+        (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+      ).length,
+      1,
+      checked.stdout || checked.stderr,
     );
   });
   void it("按场景把对话框物品和混合配置字符串交给 GUI 主题", async (t) => {
