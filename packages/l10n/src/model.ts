@@ -166,6 +166,7 @@ export interface MiniMessageTagNode {
   readonly name: string;
   readonly parameters: readonly string[];
   readonly parameterPositions: readonly MiniMessagePosition[];
+  readonly parameterSourceOffsets: readonly (readonly number[])[];
   readonly closing: boolean;
   readonly selfClosing: boolean;
   readonly semanticKind:

@@ -56,7 +56,7 @@ public final class MiniMessageBridge {
 
   private record Frame(String kind, String name, Position position) {}
 
-  private record Parameter(String value, Position position) {}
+  private record Parameter(String value, Position position, int[] sourceOffsets) {}
 
   private record NodeOutput(
       String kind,
@@ -332,12 +332,25 @@ public final class MiniMessageBridge {
     List<TagPart> officialParts = treeTag == null ? List.of() : treeTag.parts();
     for (int index = 1; index < childTokens.size(); index++) {
       Token partToken = childTokens.get(index);
+      MappedValue decoded = decodePart(input, partToken, sourceMap);
       String value = index < officialParts.size()
           ? officialParts.get(index).value()
-          : decodePart(input, partToken, sourceMap).value();
-      result.add(new Parameter(value, sourceMap.range(partToken.startIndex(), partToken.endIndex())));
+          : decoded.value();
+      Position position = sourceMap.range(partToken.startIndex(), partToken.endIndex());
+      int[] sourceOffsets = decoded.value().equals(value)
+          ? decoded.sourceOffsets()
+          : unavailableSourceOffsets(value, position);
+      result.add(new Parameter(value, position, sourceOffsets));
     }
     return result;
+  }
+
+  private static int[] unavailableSourceOffsets(String value, Position position) {
+    int[] offsets = new int[value.length() + 1];
+    java.util.Arrays.fill(offsets, -1);
+    offsets[0] = position.start();
+    if (offsets.length > 1) offsets[offsets.length - 1] = position.end();
+    return offsets;
   }
 
   private static List<String> partValues(String input, Token token, TagNode treeTag, SourceMap sourceMap) {
@@ -404,16 +417,45 @@ public final class MiniMessageBridge {
     return List.of();
   }
 
+  private static String canonicalNestedTagName(String tagName) {
+    return switch (tagName.toLowerCase(Locale.ROOT)) {
+      case "tr", "lang" -> "translate";
+      case "tr_or", "lang_or" -> "translate_or";
+      case "data" -> "nbt";
+      default -> tagName.toLowerCase(Locale.ROOT);
+    };
+  }
+
+  private static List<String> nestedOwnerParameters(TagNode tag, int argumentIndex) {
+    List<TagPart> parts = tag.parts();
+    if (parts.size() < 2) return List.of();
+    String canonicalName = canonicalNestedTagName(parts.get(0).value());
+    if (canonicalName.equals("translate") || canonicalName.equals("translate_or")) {
+      return List.of(parts.get(1).value());
+    }
+    if (canonicalName.equals("nbt") && argumentIndex == 4 && parts.size() >= 4) {
+      return List.of(
+          parts.get(1).lowerValue(),
+          parts.get(2).value(),
+          parts.get(3).value());
+    }
+    return List.of();
+  }
+
+  private static String nestedOwnerKey(TagNode tag, int argumentIndex) {
+    StringBuilder ownerKey = new StringBuilder();
+    for (String parameter : nestedOwnerParameters(tag, argumentIndex)) {
+      ownerKey.append(parameter.length()).append(':').append(parameter);
+    }
+    return encode(ownerKey.toString());
+  }
+
   private static Frame nestedContentFrame(
-      String tagName,
+      TagNode tag,
       int argumentIndex,
       Position argumentPosition,
       Position tagPosition) {
-    String canonicalName = switch (tagName.toLowerCase(Locale.ROOT)) {
-      case "tr", "lang" -> "translate";
-      case "tr_or", "lang_or" -> "translate_or";
-      default -> tagName.toLowerCase(Locale.ROOT);
-    };
+    String canonicalName = canonicalNestedTagName(tag.name());
     if (canonicalName.equals("hover")) {
       String action = "unknown";
       if (argumentIndex == 2) action = "show_text";
@@ -423,7 +465,10 @@ public final class MiniMessageBridge {
     int argumentNumber = argumentIndex - 2;
     if (canonicalName.equals("translate_or")) argumentNumber = argumentIndex - 3;
     if (canonicalName.equals("nbt") && argumentIndex >= 4) argumentNumber = 0;
-    return new Frame("tag-argument", canonicalName + ":" + argumentNumber, argumentPosition);
+    return new Frame(
+        "tag-argument",
+        canonicalName + ":" + argumentNumber + ":" + nestedOwnerKey(tag, argumentIndex),
+        argumentPosition);
   }
 
   private static String frameFields(List<Frame> frames) {
@@ -568,7 +613,7 @@ public final class MiniMessageBridge {
           SourceMap nestedMap = sourceMap.nested(nestedInput, nestedOffsets, exact, emptyRange);
           List<Frame> nestedContext = new ArrayList<>(currentContext);
           nestedContext.add(nestedContentFrame(
-              name,
+              treeTag,
               contentIndex,
               emptyRange,
               sourceMap.range(treeTag.token().startIndex(), treeTag.token().endIndex())));
@@ -600,10 +645,20 @@ public final class MiniMessageBridge {
     for (Parameter parameter : node.parameters()) {
       line.append('\t').append(encode(parameter.value()))
           .append('\t').append(parameter.position().start())
-          .append('\t').append(parameter.position().end());
+          .append('\t').append(parameter.position().end())
+          .append('\t').append(offsetFields(parameter.sourceOffsets()));
     }
     line.append('\t').append(frameFields(node.context()));
     return line.toString();
+  }
+
+  private static String offsetFields(int[] offsets) {
+    StringBuilder result = new StringBuilder();
+    for (int index = 0; index < offsets.length; index++) {
+      if (index > 0) result.append(',');
+      result.append(offsets[index]);
+    }
+    return result.toString();
   }
 
   private static List<String> readInput() throws Exception {

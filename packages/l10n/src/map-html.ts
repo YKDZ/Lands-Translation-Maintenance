@@ -33,8 +33,11 @@ interface ProjectionMarker {
     | "command-open"
     | "command-close"
     | "boundary"
+    | "fallback-open"
+    | "fallback-close"
     | "structure";
   readonly node: Extract<MiniMessageSourceNode, { readonly kind: "tag" }>;
+  readonly value?: string;
 }
 
 export interface HtmlTagRange {
@@ -293,6 +296,48 @@ function appendProjection(
   }
 }
 
+function appendMappedProjection(
+  pieces: string[],
+  sourceOffsets: number[],
+  text: string,
+  offsets: readonly number[],
+): void {
+  if (text.length === 0) return;
+  if (offsets.length !== text.length + 1) {
+    throw new Error("地图 fallback 的来源位置映射长度无效");
+  }
+  const currentBoundary = sourceOffsets.length - 1;
+  const start = offsets[0] ?? -1;
+  if (pieces.length === 0) {
+    sourceOffsets[currentBoundary] = start;
+  } else if (sourceOffsets[currentBoundary] !== start) {
+    sourceOffsets[currentBoundary] = -1;
+  }
+  pieces.push(text);
+  sourceOffsets.push(...offsets.slice(1));
+}
+
+function fallbackSourceOffsets(
+  node: Extract<MiniMessageSourceNode, { readonly kind: "tag" }>,
+  value: string,
+): readonly number[] {
+  const offsets = node.parameterSourceOffsets[1];
+  if (offsets === undefined || offsets.length !== value.length + 1) {
+    return Array.from({ length: value.length + 1 }, () => -1);
+  }
+  return offsets;
+}
+
+function projectionMarker(
+  markerIndex: number,
+  markers: Map<string, ProjectionMarker>,
+  value: ProjectionMarker,
+): string {
+  const marker = `\uE000L${markerIndex}\uE001`;
+  markers.set(marker, value);
+  return marker;
+}
+
 function projectionFor(document: ParsedMiniMessageDocument): Projection {
   const htmlTagRanges = parserTagRanges(document.input, document.nodes);
   const htmlAttributeRanges = attributeRanges(document.input);
@@ -310,6 +355,56 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
     const { start, end } = node.position;
     if (start < cursor || start < 0 || end < start) continue;
     appendSourceRange(document.input, pieces, sourceOffsets, cursor, start);
+
+    const fallback =
+      node.kind === "tag"
+        ? translationFallbackSegment(document, node)
+        : undefined;
+    if (
+      fallback !== undefined &&
+      !isWithinHtmlAttribute(start, end, htmlAttributeRanges)
+    ) {
+      const nodeTag = node as Extract<
+        MiniMessageSourceNode,
+        { readonly kind: "tag" }
+      >;
+      const offsets = fallbackSourceOffsets(nodeTag, fallback.value);
+      const fallbackStart = offsets[0] ?? -1;
+      const fallbackEnd = offsets[offsets.length - 1] ?? -1;
+      const structureMarker = projectionMarker(markerIndex, markers, {
+        kind: "structure",
+        node: nodeTag,
+        value: nodeTag.parameters[0] ?? "",
+      });
+      markerIndex += 1;
+      appendProjection(pieces, sourceOffsets, structureMarker, {
+        start,
+        end: start,
+      });
+      // 分隔结构片段和 fallback 片段，避免来源位置跨过整段 MiniMessage 包装。
+      appendProjection(pieces, sourceOffsets, "<!-- -->", { start, end });
+      const openMarker = projectionMarker(markerIndex, markers, {
+        kind: "fallback-open",
+        node: nodeTag,
+      });
+      markerIndex += 1;
+      appendProjection(pieces, sourceOffsets, openMarker, {
+        start: fallbackStart,
+        end: fallbackStart,
+      });
+      appendMappedProjection(pieces, sourceOffsets, fallback.value, offsets);
+      const closeMarker = projectionMarker(markerIndex, markers, {
+        kind: "fallback-close",
+        node: nodeTag,
+      });
+      markerIndex += 1;
+      appendProjection(pieces, sourceOffsets, closeMarker, {
+        start: fallbackEnd,
+        end: fallbackEnd,
+      });
+      cursor = end;
+      continue;
+    }
 
     let marker: string | undefined;
     if (
@@ -405,6 +500,7 @@ function segmentsForTextNode(
   projection: Projection,
   context: TranslatableTextSegment["context"],
   activeClicks: MiniMessageContextFrame[],
+  activeFallbacks: MiniMessageContextFrame[],
 ): TranslatableTextSegment[] {
   const location = node.sourceCodeLocation;
   if (location === null || location === undefined) return [];
@@ -415,6 +511,15 @@ function segmentsForTextNode(
   const currentContext = (): TranslatableTextSegment["context"] => [
     ...context,
     ...activeClicks,
+    ...activeFallbacks.filter(
+      (frame) =>
+        !context.some(
+          (existing) =>
+            existing.kind === frame.kind &&
+            existing.name === frame.name &&
+            existing.position.start === frame.position.start,
+        ),
+    ),
   ];
   if (
     markers.length === 0 ||
@@ -514,10 +619,28 @@ function segmentsForTextNode(
           position: markerNode.position,
           context: markerContext,
         });
+      } else if (projectionMarker.kind === "fallback-open") {
+        const fallbackPosition = markerNode.parameterPositions[1];
+        if (fallbackPosition !== undefined) {
+          activeFallbacks.push({
+            kind: "tag-argument",
+            name: "translate_or:fallback",
+            position: fallbackPosition,
+          });
+        }
+      } else if (projectionMarker.kind === "fallback-close") {
+        const fallbackPosition = markerNode.parameterPositions[1];
+        const openIndex =
+          fallbackPosition === undefined
+            ? activeFallbacks.length - 1
+            : activeFallbacks.findLastIndex(
+                (frame) => frame.position.start === fallbackPosition.start,
+              );
+        if (openIndex >= 0) activeFallbacks.splice(openIndex, 1);
       } else {
         segments.push({
           kind: "structure",
-          value: markerNode.parameters.join(":"),
+          value: projectionMarker.value ?? markerNode.parameters.join(":"),
           raw: markerNode.raw,
           position: markerNode.position,
           context: markerContext,
@@ -557,6 +680,7 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
     actual: string;
   }[] = [];
   const activeClicks: MiniMessageContextFrame[] = [];
+  const activeFallbacks: MiniMessageContextFrame[] = [];
 
   function visit(
     nodes: readonly HtmlNode[],
@@ -572,6 +696,7 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
             projection,
             inheritedContext,
             activeClicks,
+            activeFallbacks,
           ),
         );
         continue;
@@ -599,6 +724,15 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
       );
       const context = [
         ...inheritedContext,
+        ...activeFallbacks.filter(
+          (frame) =>
+            !inheritedContext.some(
+              (existing) =>
+                existing.kind === frame.kind &&
+                existing.name === frame.name &&
+                existing.position.start === frame.position.start,
+            ),
+        ),
         {
           kind: "html-element" as const,
           name: element.tagName.toLowerCase(),
@@ -669,31 +803,6 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
   }
 
   visit(fragment.childNodes, [], document.context);
-  for (const node of document.nodes) {
-    if (node.kind !== "tag") continue;
-    const fallback = translationFallbackSegment(document, node);
-    if (fallback === undefined) continue;
-    const structureIndex = segments.findIndex(
-      (segment) =>
-        segment.kind === "structure" &&
-        segment.raw === node.raw &&
-        segment.position.start === node.position.start &&
-        segment.position.end === node.position.end,
-    );
-    if (structureIndex < 0) continue;
-    const structure = segments[structureIndex]!;
-    const fallbackContext = fallback.context.at(-1);
-    segments[structureIndex] = {
-      ...structure,
-      value: node.parameters[0] ?? "",
-    };
-    if (fallbackContext !== undefined) {
-      segments.splice(structureIndex + 1, 0, {
-        ...fallback,
-        context: [...structure.context, fallbackContext],
-      });
-    }
-  }
   return {
     projection,
     elements,
