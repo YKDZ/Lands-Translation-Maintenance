@@ -34,6 +34,7 @@ import type {
   Diagnostic,
   DiagnosticLocation,
   JsonValue,
+  KnownExcludedResource,
   KnownOutOfScopeVisibleText,
   ObservedMessage,
   ProjectFileIssue,
@@ -727,6 +728,14 @@ function makeReport(
       lock,
       confirmedSameTextIds,
     ),
+    knownExcludedResources: project.resources
+      .filter(
+        (resource): resource is KnownExcludedResource =>
+          resource.purpose === "bedrock-excluded" ||
+          resource.purpose === "other-excluded",
+      )
+      .map(({ path, purpose }) => ({ path, purpose }))
+      .sort((left, right) => compareText(left.path, right.path)),
     knownOutOfScopeVisibleTexts: project.knownOutOfScopeVisibleTexts,
     ...(coverage === undefined ? {} : { coverage }),
   };
@@ -1373,11 +1382,6 @@ function coverageUnavailable(
   unavailable.push(...translatableTextCoverageUnavailable(view));
   if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
     unavailable.push(...miniMessageTagCoverageUnavailable(view));
-  }
-  if (
-    view.resources.some((resource) => resource.purpose === "bedrock-excluded")
-  ) {
-    unavailable.push("Bedrock JSON 已登记但本票不解析");
   }
   return unavailable;
 }

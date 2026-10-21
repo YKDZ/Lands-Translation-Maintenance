@@ -4,6 +4,10 @@
   "bin": {
     "lands-l10n": "./dist/cli.js"
   },
+  "files": [
+    "dist/**",
+    "target/minimessage/**"
+  ],
   "type": "module",
   "imports": {
     "#/*": {
