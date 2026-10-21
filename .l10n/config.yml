@@ -1,6 +1,6 @@
 schemaVersion: 1
 source:
-  version: "8.0.1"
+  version: "8.9.2"
   translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"
 resources:
   - path: META-INF/MANIFEST.MF
@@ -17,8 +17,6 @@ resources:
     purpose: configuration
   - path: levels.yml
     purpose: configuration
-  - path: nations.yml
-    purpose: configuration
   - path: player-limits.yml
     purpose: configuration
   - path: plugin.yml
@@ -26,8 +24,6 @@ resources:
   - path: roles.yml
     purpose: configuration
   - path: server-name.yml
-    purpose: configuration
-  - path: wars.yml
     purpose: configuration
   - path: web.yml
     purpose: configuration
@@ -59,6 +55,14 @@ resources:
     purpose: chat-language
   - path: Locale/Wars/en-US_gui.yml
     purpose: gui-language
+  - path: Modules/Nations/nations.yml
+    purpose: configuration
+  - path: Modules/RandomTeleport/rtp.yml
+    purpose: configuration
+  - path: Modules/Wars/modes.yml
+    purpose: configuration
+  - path: Modules/Wars/wars.yml
+    purpose: configuration
 translationScope:
   sourceLanguage: "en-US"
   targetLanguage: "zh-CN"

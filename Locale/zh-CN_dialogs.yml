@@ -73,8 +73,7 @@ dialogs:
         label: 标签
     bodies:
       info:
-        text: 创建此城镇需要花费<t:cost> <v:cost></t>. 如果空间足够, 将为你的新城镇占领<t:regular_value> <v:chunks></t>
-          个区块.
+        text: 创建此城镇需要花费<t:cost> <v:cost></t>. 如果空间足够, 将为你的新城镇占领<t:regular_value> <v:chunks></t> 个区块.
       tag:
         text: 标签是你城镇名称的简写.
         item:
@@ -87,3 +86,15 @@ dialogs:
       discard:
         label: <t:negative>放弃
         tooltip: 点击放弃创建城镇.
+  confirm:
+    buttons:
+      discard:
+        tooltip: Click to cancel.
+        label: <t:negative>Cancel
+      confirm:
+        label: <t:positive>Confirm
+        tooltip: Click here to confirm.
+    bodies:
+      info:
+        text: <v:message>
+    title: Confirm
