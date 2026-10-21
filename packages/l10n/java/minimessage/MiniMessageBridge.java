@@ -209,19 +209,8 @@ public final class MiniMessageBridge {
     });
   }
 
-  private static TagResolver structureHoverResolver() {
-    return TagResolver.resolver("hover", (arguments, context) -> {
-      while (arguments.hasNext()) arguments.pop();
-      return Tag.styling(builder -> {});
-    });
-  }
-
-  private static TagResolver messageResolver(Map<String, Style> theme, boolean structural) {
+  private static TagResolver messageResolver(Map<String, Style> theme) {
     TagResolver standard = StandardTags.defaults();
-    if (structural) {
-      // Keep hover's decoded show_text value in a separate source-mapped document below.
-      return TagResolver.resolver(structureHoverResolver(), standard, themeResolver(theme), variableResolver());
-    }
     return TagResolver.resolver(standard, themeResolver(theme), variableResolver());
   }
 
@@ -543,7 +532,7 @@ public final class MiniMessageBridge {
     for (MessageInput message : messages) {
       Map<String, Style> theme = stylesBySurface.getOrDefault(message.surface(), Map.of());
       MiniMessage runtimeParser = MiniMessage.builder()
-          .tags(messageResolver(theme, false))
+          .tags(messageResolver(theme))
           .build();
       try {
         Component component = runtimeParser.deserialize(message.input());
@@ -564,7 +553,8 @@ public final class MiniMessageBridge {
           new Position(0, 0));
       int[] nextDocumentIndex = {1};
       List<String> structureOutput = new ArrayList<>();
-      TagResolver structuralResolver = messageResolver(theme, true);
+      // Structure collection must use the runtime resolver: a fallback Tag would hide official resolver failures.
+      TagResolver structuralResolver = messageResolver(theme);
       outputDocument(structuralResolver, theme, message.index(), 0, -1, message.input(), sourceMap,
           List.of(), nextDocumentIndex, structureOutput);
       for (String row : structureOutput) System.out.println(row);

@@ -432,6 +432,115 @@ void describe("MiniMessage 官方检查制品", () => {
     }
   });
 
+  void it("定位官方未解析的 hover 参数且不伪造 hover 上下文", async (t) => {
+    const cases = [
+      "<hover:bogus:tip>X</hover>",
+      "<hover:show_text>X</hover>",
+      "<hover:bogus:tip><future:inner>正文</future></hover>",
+    ];
+
+    for (const sourceGreeting of cases) {
+      const project = await createProject(t, { sourceGreeting });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+
+      const targetPath = join(project.directory, "lang/zh.yml");
+      const target = await readFile(targetPath, "utf8");
+      await writeFile(
+        targetPath,
+        target.replace(
+          "greeting: 你好",
+          `greeting: ${JSON.stringify(sourceGreeting)}`,
+        ),
+      );
+
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(checked.stdout || checked.stderr);
+      const diagnostics = report.diagnostics as readonly Record<
+        string,
+        unknown
+      >[];
+      const unresolved = diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === "minimessage.tag-unresolved" &&
+          (diagnostic.actual as Record<string, unknown>).tag ===
+            sourceGreeting.slice(0, sourceGreeting.indexOf(">") + 1),
+      );
+      assert.equal(unresolved.length, 2, JSON.stringify(diagnostics, null, 2));
+      assert.deepEqual(
+        unresolved
+          .map((diagnostic) => String(diagnostic.origin))
+          .sort((left, right) => left.localeCompare(right)),
+        ["source", "target"],
+      );
+      assert.deepEqual(
+        unresolved
+          .map((diagnostic) =>
+            Number((diagnostic.actual as Record<string, unknown>).position),
+          )
+          .sort((left, right) => left - right),
+        [0, 0],
+      );
+      assert.ok(
+        unresolved.every((diagnostic) => {
+          const actual = diagnostic.actual as Record<string, unknown>;
+          return !(actual.context as readonly unknown[]).some(
+            (frame) => Array.isArray(frame) && frame[0] === "hover-text",
+          );
+        }),
+      );
+      assert.equal(
+        new Set(unresolved.map((diagnostic) => diagnostic.diagnosticId)).size,
+        2,
+      );
+      assert.equal(
+        diagnostics.some(
+          (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
+        ),
+        false,
+      );
+      if (sourceGreeting.includes("<future:inner>")) {
+        const nestedUnknown = diagnostics.filter(
+          (diagnostic) =>
+            diagnostic.code === "minimessage.tag-unknown" &&
+            (diagnostic.actual as Record<string, unknown>).tag ===
+              "<future:inner>",
+        );
+        assert.equal(nestedUnknown.length, 2);
+        assert.deepEqual(
+          nestedUnknown
+            .map((diagnostic) => String(diagnostic.origin))
+            .sort((left, right) => left.localeCompare(right)),
+          ["source", "target"],
+        );
+        assert.ok(
+          nestedUnknown.every((diagnostic) => {
+            const actual = diagnostic.actual as Record<string, unknown>;
+            return !(actual.context as readonly unknown[]).some(
+              (frame) =>
+                Array.isArray(frame) &&
+                (frame[0] === "hover-text" || frame[1] === "hover"),
+            );
+          }),
+        );
+      }
+    }
+  });
+
   void it("正式 CLI 接受 MiniMessage 4.26.1 官方别名与颜色写法", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "<c:red><grey><#00ff88><!bold>正文",
