@@ -22,7 +22,7 @@ general:
         mutual:
           sent: <t:regular>已向<t:entity_land> <v:0> </t>发送战争请求. 对方需要接受.
           received: '<t:negative_value><v:0></t> <t:negative>发送了战争请求. 接受: <t:cmd>/<v:1></t>'
-          denied: <t:regular><t:entity_land> <v:0> </t>已拒绝互相宣战请求.
+          denied: <t:regular><t:entity_land> <v:0> </t>已拒绝互相宣战书.
       surrender:
         sent: <t:negative>We surrendered to<t:negative_value> <v:0></t>. They robbed<t:cost> <v:1></t> from us.
         received: <t:regular>The enemy<t:entity_land> <v:0></t> surrendered to us. We robbed<t:cost> <v:1></t> from them.
@@ -243,7 +243,7 @@ wars:
         defender: <t:error>你现在不能向他们宣战. <t:regular>目标 <v:object> <t:regular>已经处于战争中.
       min-players:
         attacker: <t:error>你无法参与战争, 因为<t:error_value> <v:object> </t>需要更多成员. <t:regular>攻方宣战所需的最低成员数为<t:limit> <v:min> </t>人.
-        defender: <t:error>无法向<t:error_value> <v:object> </t>宣战, 因为对方需要更多成员. <t:regular>这场战争要求守方至少有<t:limit> <v:min> </t>名成员.
+        defender: <t:error>无法向<t:error_value> <v:object> </t>宣战, 因为对方需要更多成员. <t:regular>守方至少需要有<t:limit> <v:min> </t>名成员才能收到宣战书.
       level-difference: <t:error>You can't declare war against<t:error_value> <v:defender></t><t:error>. <t:regular>They're too far from <v:attacker><t:regular> in level <t:decoration>(</t><t:regular><v:defender_level> <t:regular>vs <v:attacker_level><t:decoration>)</t><t:regular>. You can only declare war within<t:limit> <v:max></t> level(s).
     deny:
       attacker: <t:error>攻方不能拒绝自己的宣战书. <t:regular>只有守方可以这样做.
@@ -297,7 +297,7 @@ help:
   command:
     wars:
       menu: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>打开战争菜单</click></hover>
-      deny: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>拒绝互相宣战请求</click></hover>
+      deny: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>拒绝互相宣战书</click></hover>
       spawn: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>传送到政敌处</click></hover>
       declare: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> - </t><t:regular>发起战争的宣战请求</click></hover>
       list: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> - </t><t:regular>查看进行中的战争</click></hover>

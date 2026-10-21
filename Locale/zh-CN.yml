@@ -116,7 +116,7 @@ general:
         alert:
           land:
             normal: <t:negative>你需要在<t:error_value> <v:1> </t>内支付<t:error_value> <v:0> </t>维护费, 但<t:error_value> <v:2> </t>资金不足.
-            delete: <t:negative>你需要在<t:error_value> <v:1> </t>内支付<t:error_value> <v:0> </t>维护费, 但<t:error_value> <v:2> </t>资金不足. <t:regular>这会导致至少部分最近占领的区块被取消占领. 请存入资金以避免这种情况.
+            delete: <t:negative>你需要在<t:error_value> <v:1> </t>内支付<t:error_value> <v:0> </t>维护费, 但<t:error_value> <v:2> </t>资金不足. <t:regular>这会导致最近占领的领土至少有一部分被取消占领. 请存入资金以避免这种情况.
         warning: <t:negative>无法支付维护费:<t:error_value> <v:0></t>
         unclaim: <t:negative>无法支付全部维护费<t:error_value> <v:0></t>. 最近占领的<t:error_value> <v:1> </t>个区块已被取消占领.
         paid: <t:regular>已支付维护费:<t:cost> <v:0> </t>新余额:<t:regular_value> <v:1></t>
@@ -134,7 +134,7 @@ general:
         remove: <t:regular>我们已与<t:regular_value> <v:0> </t>解除盟友关系.
       enemy:
         add: <t:regular>我们现已与<t:regular_value> <v:0> </t>互为政敌.
-        offer: <t:regular_value><v:0> </t><t:regular>想与我们和解.
+        offer: <t:regular_value><v:0> </t><t:regular>不想再与我们互为政敌.
         accepted: <t:regular>我们不再与<t:regular_value> <v:0> </t>互为政敌.
   combat-logout: <t:regular_value><v:player> </t><t:regular>因在战斗中离开服务器而死亡.
   command:
@@ -442,7 +442,7 @@ lands:
         attacker: <t:error>你不能在这里攻击玩家. <t:regular>这个子区域属于城镇<t:entity_land> <v:land></t>.
         target: <t:error>对方不能在这里攻击玩家. <t:regular>你不能在这里与其战斗. <t:regular>这个子区域属于城镇<t:entity_land> <v:land></t>.
         ally: <t:error>你不能在荒野攻击这个玩家, 因为他是你某个城镇的成员. <t:regular>若要在你的城镇中进行竞技场战斗, 请在职位设置中允许 PVP.
-        wilderness: <t:error>你不能攻击这个玩家, 因为他在荒野中, 而你身处城镇领土.
+        wilderness: <t:error>你不能攻击这个玩家, 因为他在荒野中, 而你身处已占领的城镇领土.
     area:
       exists: <t:error>名为<t:error_value> <v:area> </t>的子区域已存在于城镇<t:error_value> <v:land> </t>中.
       max: <t:error>你的城镇<t:error_value> <v:land> </t>已达到子区域数量上限<t:error_value> <v:max></t><t:regular>, 而子区域<t:regular_value> <v:area> </t>尚不存在.
@@ -496,7 +496,7 @@ lands:
       success: <t:regular>你获得了<t:regular_value> <v:blocks> </t>个露营地物品. 将其放置在目标位置即可创建露营地.
     blacklist:
       untrusted: <t:error>你不能在这里使用此命令. <t:regular>你不是子区域<t:regular_value> <v:area> </t>(城镇<t:entity_land> <v:land></t>)的成员.
-      general: <t:error>你不能在城镇领土内使用此命令.
+      general: <t:error>你不能在已占领的城镇领土内使用此命令.
     auto-action:
       started:
         claim: <title><t:regular_heading>自动占领<subtitle><t:regular>继续行走以占领区块
