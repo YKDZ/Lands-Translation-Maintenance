@@ -55,6 +55,56 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.match(JSON.stringify(missing?.actual), /0/u);
   });
 
+  void it("关闭语法规则时仍由启用的变量规则驱动共享解析", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "Hello <v:owner>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const configurationPath = join(project.directory, ".l10n/config.yml");
+    const configuration = await readFile(configurationPath, "utf8");
+    await writeFile(
+      configurationPath,
+      `${configuration}\nrules:\n  minimessage-syntax:\n    enabled: false\n`,
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const coverage = report.coverage as Record<string, unknown>;
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === "minimessage.variable-missing",
+      ),
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      (coverage.enabledRuleIds as string[]).includes("minimessage-variables"),
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      (coverage.disabledRuleIds as string[]).includes("minimessage-syntax"),
+      checked.stderr || checked.stdout,
+    );
+  });
+
   void it("允许中文正文改写和变量语序调整，并忽略相似普通文本", async (t) => {
     const project = await createProject(t, {
       sourceGreeting:
@@ -328,7 +378,7 @@ void describe("MiniMessage 官方检查制品", () => {
     );
   });
 
-  void it("同一父交互下无法区分的多段 hover 变量集合变化时报告覆盖限制", async (t) => {
+  void it("同一父交互下多段 hover 完整换序时保留对象变量分布", async (t) => {
     const project = await createProject(t, {
       sourceGreeting:
         "<click:run_command:\"/lands claim <v:land>\"><hover:show_text:'<v:owner> owns it'>Owner</hover><hover:show_text:'<v:date> created it'>Date</hover></click>",
@@ -362,22 +412,129 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    assert.equal(checked.status, 1, checked.stderr);
     const report = readReport(checked.stdout || checked.stderr);
     const diagnostics = report.diagnostics as readonly Record<
       string,
       unknown
     >[];
-    const limitation = diagnostics.find(
-      (diagnostic) =>
-        diagnostic.code === "minimessage.variable-coverage-unavailable" &&
-        JSON.stringify(diagnostic.reason).includes("多个变量集合不同的 hover"),
+    assert.equal(
+      diagnostics.some((diagnostic) =>
+        String(diagnostic.code).startsWith("minimessage.variable-"),
+      ),
+      false,
+      checked.stderr || checked.stdout,
     );
-    assert.ok(limitation, checked.stderr || checked.stdout);
-    assert.match(JSON.stringify(limitation), /hover-text/u);
   });
 
-  void it("相同命令模板下无法区分的多个 click 变量集合变化时报告覆盖限制", async (t) => {
+  void it("同命令的多个 click 正文按对象分别核对变量分布", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting:
+        '<click:run_command:"/lands info">Owner <v:owner></click> <click:run_command:"/lands info">Land <v:land></click>',
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(
+          '<click:run_command:"/lands info">所有者 <v:owner> <v:land></click> <click:run_command:"/lands info">土地</click>',
+        )}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const distributionMismatch = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code ===
+        "minimessage.variable-interaction-distribution-mismatch",
+    );
+    assert.ok(distributionMismatch, checked.stderr || checked.stdout);
+    assert.match(JSON.stringify(distributionMismatch.expected), /owner/u);
+    assert.match(JSON.stringify(distributionMismatch.actual), /land/u);
+    assert.match(JSON.stringify(distributionMismatch.expected), /click-text/u);
+    assert.match(JSON.stringify(distributionMismatch.actual), /positions/u);
+  });
+
+  void it("多段 hover 按内部正文与 click 上下文分别核对变量分布", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting:
+        "<hover:show_text:'<v:owner> <click:run_command:\"/lands info\"><v:land></click>'>Owner</hover> <hover:show_text:'<v:land> <click:run_command:\"/lands info\"><v:owner></click>'>Land</hover>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(
+          "<hover:show_text:'<v:owner> <v:land> <click:run_command:\"/lands info\"></click>'>所有者</hover> <hover:show_text:'<click:run_command:\"/lands info\"><v:owner> <v:land></click>'>土地</hover>",
+        )}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const distributionMismatch = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code ===
+        "minimessage.variable-interaction-distribution-mismatch",
+    );
+    assert.ok(distributionMismatch, checked.stderr || checked.stdout);
+    assert.match(JSON.stringify(distributionMismatch.expected), /hover-text/u);
+    assert.match(
+      JSON.stringify(distributionMismatch.expected),
+      /commandVariables/u,
+    );
+    assert.match(
+      JSON.stringify(distributionMismatch.expected),
+      /textVariables/u,
+    );
+    assert.match(JSON.stringify(distributionMismatch.actual), /positions/u);
+  });
+
+  void it("相同命令模板下多个 click 整体换序时保留对象变量分布", async (t) => {
     const project = await createProject(t, {
       sourceGreeting:
         '<click:run_command:"/lands info <v:owner>">Owner</click> <click:run_command:"/lands info <v:land>">Land</click>',
@@ -417,15 +574,13 @@ void describe("MiniMessage 官方检查制品", () => {
       string,
       unknown
     >[];
-    const limitation = diagnostics.find(
-      (diagnostic) =>
-        diagnostic.code === "minimessage.variable-coverage-unavailable" &&
-        JSON.stringify(diagnostic.reason).includes(
-          "相同命令模板下存在多个变量集合不同的 click",
-        ),
+    assert.equal(
+      diagnostics.some((diagnostic) =>
+        String(diagnostic.code).startsWith("minimessage.variable-"),
+      ),
+      false,
+      checked.stderr || checked.stdout,
     );
-    assert.ok(limitation, checked.stderr || checked.stdout);
-    assert.match(JSON.stringify(limitation), /click-command/u);
   });
 
   void it("变量在不同 click 命令间调换时分别报告上下文", async (t) => {
@@ -661,6 +816,87 @@ void describe("MiniMessage 官方检查制品", () => {
       assert.match(JSON.stringify(difference?.expected), /lands/u);
       assert.match(JSON.stringify(difference?.actual), /land/u);
     }
+  });
+
+  void it("按 Lands Java Pattern 行终止符边界保留多行 click 字面参数", async (t) => {
+    const lineTerminators = ["\n", "\r", "\u0085", "\u2028", "\u2029"];
+    const source = lineTerminators.map(
+      (lineTerminator) =>
+        `<click:run_command:"/lands${lineTerminator} <v:owner> <v:land>">Info</click>`,
+    );
+    const target = lineTerminators.map(
+      (lineTerminator) =>
+        `<click:run_command:"/lands${lineTerminator} <v:land> <v:owner>">详情</click>`,
+    );
+    source.push(
+      '<click:run_command:"/lands info <v:owner> <v:land>">Single line</click>',
+    );
+    target.push(
+      '<click:run_command:"/lands info <v:land> <v:owner>">单行</click>',
+    );
+    const project = await createProject(t, {
+      sourceGreeting: source.join(" "),
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(target.join(" "))}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const argumentDifferences = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.click-command-arguments-mismatch",
+    );
+    assert.equal(argumentDifferences.length, lineTerminators.length);
+    for (const lineTerminator of lineTerminators) {
+      assert.ok(
+        argumentDifferences.some((diagnostic) => {
+          const expected = diagnostic.expected as Record<string, unknown>;
+          return (
+            typeof expected.value === "string" &&
+            expected.value.includes(
+              `/lands${lineTerminator} <v:owner> <v:land>`,
+            )
+          );
+        }),
+        checked.stderr || checked.stdout,
+      );
+    }
+    assert.equal(
+      diagnostics.some(
+        (diagnostic) =>
+          String(diagnostic.code).startsWith("minimessage.variable-") &&
+          diagnostic.code !== "minimessage.variable-coverage-unavailable",
+      ),
+      false,
+      checked.stderr || checked.stdout,
+    );
   });
 
   void it("保留 click 引号转义并接受单引号变量参数", async (t) => {
@@ -1197,6 +1433,84 @@ void describe("MiniMessage 官方检查制品", () => {
     const categoryIdentity = categoryIssue.message as Record<string, unknown>;
     assert.equal(categoryIdentity.scene, "category-name");
     assert.equal(categoryIdentity.format, "legacy-color-minimessage");
+  });
+
+  void it("变量规则通过正式场景检查 GUI lore、对话框物品和配置文本", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "工具",
+      lore: ["说明 <v:owner>"],
+      dialogItemName: "对话框 <v:player>",
+      categoryName: "分类 <v:land>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    for (const [file, variable] of [
+      ["Locale/zh-CN_gui.yml", "owner"],
+      ["Locale/zh-CN_dialogs.yml", "player"],
+      ["Locale/zh-CN_categories.yml", "land"],
+    ] as const) {
+      const targetPath = join(project.directory, file);
+      const target = await readFile(targetPath, "utf8");
+      assert.ok(target.includes(`<v:${variable}>`), `${file} 缺少初始化文本`);
+      await writeFile(targetPath, target.replace(`<v:${variable}>`, ""));
+    }
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const missingVariables = diagnostics.filter(
+      (diagnostic) => diagnostic.code === "minimessage.variable-missing",
+    );
+    assert.equal(missingVariables.length, 3, checked.stderr || checked.stdout);
+    const expectedFields = [
+      {
+        file: "Locale/zh-CN_gui.yml",
+        path: ["physical", "selection", "lore"],
+        scene: "gui-item-lore",
+      },
+      {
+        file: "Locale/zh-CN_dialogs.yml",
+        path: ["dialogs", "confirmation", "bodies", "icon", "item", "name"],
+        scene: "gui-item-name",
+      },
+      {
+        file: "Locale/zh-CN_categories.yml",
+        path: ["land", "categories", "peaceful", "name"],
+        scene: "category-name",
+      },
+    ];
+    for (const field of expectedFields) {
+      assert.ok(
+        missingVariables.some((diagnostic) => {
+          const location = diagnostic.location as Record<string, unknown>;
+          const message = diagnostic.message as Record<string, unknown>;
+          return (
+            location.file === field.file &&
+            JSON.stringify(location.path) === JSON.stringify(field.path) &&
+            message.scene === field.scene
+          );
+        }),
+        `${field.file} ${field.path.join(".")} ${checked.stderr || checked.stdout}`,
+      );
+    }
   });
 
   void it("为每个重复主题 token 保留各自的原文位置", async (t) => {

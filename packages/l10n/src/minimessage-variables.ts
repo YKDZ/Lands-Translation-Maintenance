@@ -28,6 +28,7 @@ interface ClickInteraction {
 interface SideExtraction {
   readonly variables: readonly VariableOccurrence[];
   readonly clicks: readonly ClickInteraction[];
+  readonly interactionRoots: readonly InteractionDistribution[];
   readonly limitations: readonly CoverageLimitation[];
 }
 
@@ -52,11 +53,17 @@ interface IndexedTag {
   readonly node: MiniMessageTagNode;
 }
 
-interface HoverSignatureGroup {
-  readonly signatures: string[][];
-  readonly context: readonly VariableContextPart[];
+interface InteractionDistribution {
+  readonly fieldKey: string;
+  readonly fieldContext: VariableContextPart;
+  readonly parentKey?: string;
+  readonly kind: "click" | "hover";
   readonly position: MiniMessagePosition;
-  readonly object: JsonValue;
+  readonly behaviorKey: string;
+  readonly behavior: JsonValue;
+  readonly textVariables: Map<string, number>;
+  readonly commandVariables: Map<string, number>;
+  readonly children: InteractionDistribution[];
 }
 
 function addLimitation(
@@ -70,7 +77,7 @@ function addLimitation(
 
 const variablePattern = /<v:([A-Za-z0-9_.-]+)>/gu;
 const landsClickPattern =
-  /^<click:(run_command|suggest_command|copy_to_clipboard):(["'])((?:\\[\s\S]|(?!\2)[\s\S])*)\2>/u;
+  /^<click:(run_command|suggest_command|copy_to_clipboard):(["'])((?:\\[^\n\r\u0085\u2028\u2029]|(?!\2)[^\n\r\u0085\u2028\u2029])*)\2>/u;
 const commandActions = new Set(["run_command", "suggest_command"]);
 
 function isVariable(node: MiniMessageTagNode): boolean {
@@ -361,6 +368,13 @@ function hoverIdentity(
   tag: MiniMessageTagNode,
   parent: readonly VariableContextPart[],
 ): JsonValue {
+  return { ...hoverBehavior(tag), parent: parent as unknown as JsonValue };
+}
+
+function hoverBehavior(tag: MiniMessageTagNode): {
+  readonly action: string;
+  readonly parameters: readonly string[];
+} {
   const action = tag.parameters[0]?.toLowerCase() ?? "unknown";
   const parameters =
     action === "show_text"
@@ -368,151 +382,176 @@ function hoverIdentity(
       : action === "show_entity"
         ? tag.parameters.slice(1, 3)
         : tag.parameters.slice(1);
-  return {
-    action,
-    parameters,
-    parent: parent as unknown as JsonValue,
-  };
+  return { action, parameters };
 }
 
-function appendAmbiguousHoverLimitations(
+function nearestInteractionFrame(
+  frames: readonly MiniMessageContextFrame[],
+): MiniMessageContextFrame | undefined {
+  return [...frames]
+    .reverse()
+    .find(
+      (frame) =>
+        frame.kind === "hover-text" ||
+        (frame.kind === "tag" && frame.name === "click"),
+    );
+}
+
+function addVariableCount(counts: Map<string, number>, name: string): void {
+  counts.set(name, (counts.get(name) ?? 0) + 1);
+}
+
+function interactionTree(
   documents: readonly ParsedMiniMessageDocument[],
-  tags: ReadonlyMap<string, IndexedTag>,
-  clicks: ReadonlyMap<string, ClickInteraction>,
+  clicks: readonly ClickInteraction[],
   limitations: LimitationCollection,
-): void {
-  const groups = new Map<string, HoverSignatureGroup>();
+): readonly InteractionDistribution[] {
+  const interactions = new Map<string, InteractionDistribution>();
+  const clicksByPosition = new Map(
+    clicks.map((interaction) => [
+      sourcePositionKey(interaction.document, interaction.node.position.start),
+      interaction,
+    ]),
+  );
+
   for (const document of documents) {
     if (document.status !== "parsed") continue;
     for (const node of document.nodes) {
-      if (node.kind !== "tag" || node.name !== "hover" || node.closing)
+      if (node.kind !== "tag" || node.closing) continue;
+      const key = sourcePositionKey(document, node.position.start);
+      let kind: "click" | "hover";
+      let behavior: JsonValue;
+      if (node.name === "click") {
+        const click = clicksByPosition.get(key);
+        if (click === undefined) continue;
+        kind = "click";
+        behavior = {
+          action: click.action,
+          value: click.normalizedValue,
+        };
+      } else if (node.name === "hover") {
+        kind = "hover";
+        behavior = hoverBehavior(node) as unknown as JsonValue;
+      } else {
         continue;
-      const parent = interactionContext(
-        node.context,
-        document,
-        tags,
-        clicks,
-        limitations,
-      );
-      const identity = hoverIdentity(node, parent);
-      const key = canonicalJson({ field: fieldContext(document), identity });
-      const payloadDocuments = documents.filter((candidate) => {
-        const frame = [...candidate.context]
-          .reverse()
-          .find((context) => context.kind === "hover-text");
-        return (
-          frame !== undefined &&
-          documentKey(candidate) === documentKey(document) &&
-          frame.position.start === node.position.start &&
-          frame.position.end === node.position.end
-        );
-      });
-      const names: string[] = [];
-      for (const payload of payloadDocuments) {
-        for (const payloadNode of payload.nodes) {
-          if (
-            payloadNode.kind === "tag" &&
-            isVariable(payloadNode) &&
-            !isInsideTagParameter(payload, payloadNode)
-          ) {
-            names.push(payloadNode.parameters[0]!);
-          }
-        }
-        for (const interaction of clicks.values()) {
-          if (interaction.document !== payload) continue;
-          names.push(
-            ...variablesInClick(interaction, limitations).map(
-              (variable) => variable.name,
-            ),
-          );
-        }
       }
-      names.sort();
-      const group: HoverSignatureGroup = groups.get(key) ?? {
-        signatures: [],
-        context: [
-          fieldContext(document),
-          ...parent,
-          { kind: "hover-text", identity },
-        ],
+      if (node.position.start < 0) {
+        addLimitation(
+          limitations,
+          "交互对象分布缺少官方解析位置，无法可靠区分同类对象",
+          {
+            context: [fieldContext(document)],
+            object: { kind, tag: node.raw },
+          },
+        );
+        continue;
+      }
+      const parent = nearestInteractionFrame(node.context);
+      if (parent !== undefined && parent.position.start < 0) {
+        addLimitation(
+          limitations,
+          "交互对象的父上下文缺少官方解析位置，无法可靠比较内部变量分布",
+          {
+            context: [fieldContext(document)],
+            object: { kind, tag: node.raw, parent: parent.name },
+          },
+        );
+        continue;
+      }
+      const field = fieldContext(document);
+      const fieldKey = canonicalJson(field);
+      interactions.set(key, {
+        fieldKey,
+        fieldContext: field,
+        ...(parent === undefined
+          ? {}
+          : { parentKey: sourcePositionKey(document, parent.position.start) }),
+        kind,
         position: node.position,
-        object: {
-          tag: node.raw,
-          action: node.parameters[0] ?? "unknown",
-          parent: parent as unknown as JsonValue,
-        },
-      };
-      group.signatures.push(names);
-      groups.set(key, group);
+        behaviorKey: canonicalJson({ kind, behavior }),
+        behavior,
+        textVariables: new Map(),
+        commandVariables: new Map(),
+        children: [],
+      });
     }
   }
-  for (const group of groups.values()) {
-    if (group.signatures.length < 2) continue;
-    const unique = new Set(
-      group.signatures.map((names) => canonicalJson(names)),
-    );
-    if (unique.size > 1) {
-      addLimitation(
-        limitations,
-        "同一父交互下存在多个变量集合不同的 hover 文本；翻译后的纯文本不能作为稳定身份，未按出现位置强行配对",
-        {
-          context: group.context,
-          position: group.position,
-          object: group.object,
-        },
-      );
-    }
-  }
-}
 
-function appendAmbiguousClickLimitations(
-  clicks: readonly ClickInteraction[],
-  limitations: LimitationCollection,
-): void {
-  const groups = new Map<string, ClickInteraction[]>();
   for (const interaction of clicks) {
-    const key = canonicalJson({
-      parent: clickGroupKey(interaction),
-      behavior: clickBehaviorKey(interaction),
-    });
-    const group = groups.get(key) ?? [];
-    group.push(interaction);
-    groups.set(key, group);
+    const key = sourcePositionKey(
+      interaction.document,
+      interaction.node.position.start,
+    );
+    const distribution = interactions.get(key);
+    if (distribution === undefined) continue;
+    for (const variable of variablesInClick(interaction, limitations)) {
+      addVariableCount(distribution.commandVariables, variable.name);
+    }
   }
 
-  for (const group of groups.values()) {
-    if (group.length < 2) continue;
-    const signatures = group.map((interaction) =>
-      variablesInClick(interaction, limitations)
-        .map((variable) => variable.name)
-        .sort(),
-    );
-    if (new Set(signatures.map((names) => canonicalJson(names))).size < 2) {
+  for (const document of documents) {
+    if (document.status !== "parsed") continue;
+    for (const node of document.nodes) {
+      if (
+        node.kind !== "tag" ||
+        !isVariable(node) ||
+        isInsideTagParameter(document, node)
+      ) {
+        continue;
+      }
+      const frame = nearestInteractionFrame(node.context);
+      if (frame === undefined) continue;
+      if (frame.position.start < 0) {
+        addLimitation(
+          limitations,
+          "变量所属交互缺少官方解析位置，无法核对对象内分布",
+          {
+            context: [fieldContext(document)],
+            object: { name: node.parameters[0]!, interaction: frame.name },
+          },
+        );
+        continue;
+      }
+      const key = sourcePositionKey(document, frame.position.start);
+      const interaction = interactions.get(key);
+      if (interaction === undefined) {
+        addLimitation(
+          limitations,
+          "变量的官方交互上下文没有对应对象，无法核对对象内分布",
+          {
+            context: [fieldContext(document)],
+            position: node.position,
+            object: { name: node.parameters[0]!, interaction: frame.name },
+          },
+        );
+        continue;
+      }
+      addVariableCount(interaction.textVariables, node.parameters[0]!);
+    }
+  }
+
+  const roots: InteractionDistribution[] = [];
+  for (const interaction of interactions.values()) {
+    if (interaction.parentKey === undefined) {
+      roots.push(interaction);
       continue;
     }
-    const interaction = group[0]!;
-    addLimitation(
-      limitations,
-      "相同命令模板下存在多个变量集合不同的 click；译文顺序可变且命令相同，未按出现位置强行配对",
-      {
-        context: [
-          fieldContext(interaction.document),
-          ...interaction.parentContext,
-          {
-            kind: commandActions.has(interaction.action)
-              ? "click-command"
-              : "click-interaction",
-            identity: {
-              action: interaction.action,
-              value: interaction.normalizedValue,
-            },
-          },
-        ],
-        position: interaction.node.position,
-        object: clickPayload(interaction),
-      },
-    );
+    const parent = interactions.get(interaction.parentKey);
+    if (parent === undefined) {
+      addLimitation(
+        limitations,
+        "交互对象的父节点无法从官方解析结果映射，无法核对对象内变量分布",
+        {
+          context: [interaction.fieldContext],
+          object: { kind: interaction.kind, behavior: interaction.behavior },
+        },
+      );
+      continue;
+    }
+    parent.children.push(interaction);
   }
+
+  return roots;
 }
 
 function extractSide(
@@ -608,17 +647,10 @@ function extractSide(
     }
   }
 
-  appendAmbiguousHoverLimitations(
-    documents,
-    tags,
-    clicksByPosition,
-    limitations,
-  );
-  appendAmbiguousClickLimitations(clicks, limitations);
-
   return {
     variables,
     clicks,
+    interactionRoots: interactionTree(documents, clicks, limitations),
     limitations: [...limitations.values()].sort((left, right) =>
       canonicalJson(left).localeCompare(canonicalJson(right)),
     ),
@@ -960,6 +992,147 @@ function appendClickFindings(
   }
 }
 
+function interactionDistributionSignature(
+  interaction: InteractionDistribution,
+): JsonValue {
+  const textVariables = Object.fromEntries(
+    [...interaction.textVariables].sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+  const commandVariables = Object.fromEntries(
+    [...interaction.commandVariables].sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+  const children = interaction.children
+    .map(interactionDistributionSignature)
+    .sort((left, right) =>
+      canonicalJson(left).localeCompare(canonicalJson(right)),
+    );
+  return {
+    kind: interaction.kind,
+    behavior: interaction.behavior,
+    textVariables,
+    commandVariables,
+    children,
+  };
+}
+
+function groupInteractionDistributions(
+  interactions: readonly InteractionDistribution[],
+): ReadonlyMap<string, InteractionDistribution[]> {
+  const groups = new Map<string, InteractionDistribution[]>();
+  for (const interaction of interactions) {
+    const group = groups.get(interaction.behaviorKey) ?? [];
+    group.push(interaction);
+    groups.set(interaction.behaviorKey, group);
+  }
+  return groups;
+}
+
+function appendInteractionDistributionFindings(
+  message: ProjectView["messages"][number],
+  source: readonly InteractionDistribution[],
+  target: readonly InteractionDistribution[],
+  findings: RuleFinding[],
+): void {
+  const fieldKeys = [
+    ...new Set([
+      ...source.map((item) => item.fieldKey),
+      ...target.map((item) => item.fieldKey),
+    ]),
+  ].sort();
+
+  const compareSiblings = (
+    expected: readonly InteractionDistribution[],
+    actual: readonly InteractionDistribution[],
+    parentContext: readonly VariableContextPart[],
+  ): void => {
+    const expectedGroups = groupInteractionDistributions(expected);
+    const actualGroups = groupInteractionDistributions(actual);
+    const behaviorKeys = [
+      ...new Set([...expectedGroups.keys(), ...actualGroups.keys()]),
+    ].sort();
+
+    for (const behaviorKey of behaviorKeys) {
+      const expectedGroup = expectedGroups.get(behaviorKey) ?? [];
+      const actualGroup = actualGroups.get(behaviorKey) ?? [];
+      if (
+        expectedGroup.length === 0 ||
+        expectedGroup.length !== actualGroup.length
+      ) {
+        continue;
+      }
+      const sample = expectedGroup[0]!;
+      const context = {
+        kind: sample.kind === "click" ? "click-text" : "hover-text",
+        identity: sample.behavior,
+      } satisfies VariableContextPart;
+      if (expectedGroup.length > 1) {
+        const fullContext = [...parentContext, context];
+        const expectedSignatures = expectedGroup
+          .map(interactionDistributionSignature)
+          .sort((left, right) =>
+            canonicalJson(left).localeCompare(canonicalJson(right)),
+          );
+        const actualSignatures = actualGroup
+          .map(interactionDistributionSignature)
+          .sort((left, right) =>
+            canonicalJson(left).localeCompare(canonicalJson(right)),
+          );
+        if (
+          canonicalJson(expectedSignatures) !== canonicalJson(actualSignatures)
+        ) {
+          findings.push(
+            finding(
+              message,
+              "minimessage.variable-interaction-distribution-mismatch",
+              fullContext,
+              {
+                behavior: sample.behavior,
+                context: fullContext as unknown as JsonValue,
+                objects: expectedSignatures,
+                positions: expectedGroup
+                  .map(({ position }) => ({
+                    start: position.start,
+                    end: position.end,
+                  }))
+                  .sort((left, right) => left.start - right.start),
+              },
+              {
+                behavior: sample.behavior,
+                context: fullContext as unknown as JsonValue,
+                objects: actualSignatures,
+                positions: actualGroup
+                  .map(({ position }) => ({
+                    start: position.start,
+                    end: position.end,
+                  }))
+                  .sort((left, right) => left.start - right.start),
+              },
+              "同一父交互下多个同类对象的变量及嵌套上下文分配不同；按完整对象分布忽略对象顺序",
+            ),
+          );
+        }
+        continue;
+      }
+      compareSiblings(expectedGroup[0]!.children, actualGroup[0]!.children, [
+        ...parentContext,
+        context,
+      ]);
+    }
+  };
+
+  for (const fieldKey of fieldKeys) {
+    const expected = source.filter((item) => item.fieldKey === fieldKey);
+    const actual = target.filter((item) => item.fieldKey === fieldKey);
+    const field = expected[0]?.fieldContext ?? actual[0]?.fieldContext;
+    if (field === undefined) continue;
+    compareSiblings(expected, actual, [field]);
+  }
+}
+
 function appendLimitations(
   message: ProjectView["messages"][number],
   side: "原文" | "译文",
@@ -1101,6 +1274,12 @@ export const miniMessageVariablesRule: CheckRule = {
         findings,
       );
       appendClickFindings(message, source.clicks, target.clicks, findings);
+      appendInteractionDistributionFindings(
+        message,
+        source.interactionRoots,
+        target.interactionRoots,
+        findings,
+      );
       appendLimitations(message, "原文", source.limitations, findings);
       appendLimitations(message, "译文", target.limitations, findings);
     }

@@ -2293,17 +2293,19 @@ export async function inspectProject(
   if (operation === "status") {
     return makeReport(operation, loaded.view, loaded.lock, loaded.diagnostics);
   }
-  const view =
-    loaded.configuration.rules?.["minimessage-syntax"]?.enabled === false
-      ? loaded.view
-      : {
-          ...loaded.view,
-          miniMessage: await parseMiniMessages(
-            loaded.view.messages,
-            loaded.view.resources,
-            loaded.baseline.miniMessageTheme,
-          ),
-        };
+  const miniMessageChecksEnabled =
+    loaded.configuration.rules?.["minimessage-syntax"]?.enabled !== false ||
+    loaded.configuration.rules?.["minimessage-variables"]?.enabled !== false;
+  const view = miniMessageChecksEnabled
+    ? {
+        ...loaded.view,
+        miniMessage: await parseMiniMessages(
+          loaded.view.messages,
+          loaded.view.resources,
+          loaded.baseline.miniMessageTheme,
+        ),
+      }
+    : loaded.view;
   const evaluation = evaluateProject(view, loaded.configuration);
   const diagnostics = [
     ...loaded.diagnostics,
