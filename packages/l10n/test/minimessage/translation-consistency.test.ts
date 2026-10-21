@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 
 import { builtInRules, inspectProject } from "@lands-l10n/l10n";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 import {
   createFormatProject,
@@ -458,6 +459,227 @@ void describe("跨消息翻译一致性", () => {
         (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
       ),
       disabled.stderr || disabled.stdout,
+    );
+  });
+
+  void it("同步删除参与消息后将旧组豁免标为孤立", async (t) => {
+    const project = await createProject(t, { sourceGreeting: "Welcome" });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target
+        .replace(/^  greeting:.*$/mu, `  greeting: ${JSON.stringify("你好")}`)
+        .replace(/^  welcome:.*$/mu, `  welcome: ${JSON.stringify("欢迎")}`),
+    );
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const group = consistencyDiagnostics(beforeReport).find(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.ok(group, before.stderr || before.stdout);
+    const exempted = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(group.diagnosticId),
+      "--reason",
+      "临时复核参与消息删除后的生命周期",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr || exempted.stdout);
+
+    const jar = unzipSync(await readFile(project.jarFile));
+    jar["lang/en.yml"] = strToU8(
+      strFromU8(jar["lang/en.yml"]!).replace(/^  welcome:.*\n/mu, ""),
+    );
+    await writeFile(project.jarFile, zipSync(jar));
+    const synchronized = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      synchronized.status,
+      0,
+      synchronized.stderr || synchronized.stdout,
+    );
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const exceptionDiagnostics = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "exceptions");
+    assert.ok(
+      exceptionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      checked.stderr || checked.stdout,
+    );
+    assert.equal(
+      exceptionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("已解析的参与 hover 表面消失时仍孤立旧组豁免", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<hover:show_text:'Welcome'>First</hover>",
+    });
+    const jar = unzipSync(await readFile(project.jarFile));
+    jar["lang/en.yml"] = strToU8(
+      strFromU8(jar["lang/en.yml"]!).replace(
+        /^  welcome:.*$/mu,
+        `  welcome: ${JSON.stringify("<hover:show_text:'Welcome'>Second</hover>")}`,
+      ),
+    );
+    await writeFile(project.jarFile, zipSync(jar));
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    let target = await readFile(targetPath, "utf8");
+    target = target
+      .replace(
+        /^  greeting:.*$/mu,
+        `  greeting: ${JSON.stringify("<hover:show_text:'你好'>第一条</hover>")}`,
+      )
+      .replace(
+        /^  welcome:.*$/mu,
+        `  welcome: ${JSON.stringify("<hover:show_text:'欢迎'>第二条</hover>")}`,
+      );
+    await writeFile(targetPath, target);
+
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const group = consistencyDiagnostics(beforeReport).find(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.ok(group, before.stderr || before.stdout);
+    const exempted = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(group.diagnosticId),
+      "--reason",
+      "临时复核 hover 表面删除后的生命周期",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr || exempted.stdout);
+
+    const primaryPath = (
+      group.message as { readonly path?: readonly (string | number)[] }
+    ).path?.at(-1);
+    assert.ok(primaryPath === "greeting" || primaryPath === "welcome");
+    const nonPrimary = primaryPath === "greeting" ? "welcome" : "greeting";
+    target = await readFile(targetPath, "utf8");
+    const hoverText =
+      nonPrimary === "welcome"
+        ? "<hover:show_text:'欢迎'>第二条</hover>"
+        : "<hover:show_text:'你好'>第一条</hover>";
+    const bodyText = nonPrimary === "welcome" ? "第二条" : "第一条";
+    await writeFile(
+      targetPath,
+      target.replace(
+        new RegExp(`^  ${nonPrimary}: ${JSON.stringify(hoverText)}$`, "mu"),
+        `  ${nonPrimary}: ${JSON.stringify(bodyText)}`,
+      ),
+    );
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const exceptionDiagnostics = diagnostics.filter(
+      (diagnostic) => diagnostic.ruleId === "exceptions",
+    );
+    assert.ok(
+      exceptionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      checked.stderr || checked.stdout,
+    );
+    assert.equal(
+      exceptionDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "minimessage.tag-mismatch" &&
+          (
+            diagnostic.message as { readonly path?: readonly string[] }
+          )?.path?.at(-1) === nonPrimary,
+      ),
+      checked.stderr || checked.stdout,
     );
   });
 

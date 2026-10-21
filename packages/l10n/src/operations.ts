@@ -2522,6 +2522,47 @@ function isExecutionPrecondition(code: string): boolean {
   );
 }
 
+function requiredInputDependencyUnavailable(
+  project: EvaluatedSavedProject,
+  dependency: RuleInputDependency,
+): boolean {
+  const miniMessage = project.view.miniMessage;
+  if (miniMessage === undefined) return true;
+  if (
+    !project.view.messages.some(
+      (message) => message.id === dependency.messageId,
+    )
+  ) {
+    return false;
+  }
+
+  const documentsForDependency = miniMessage.documents.filter(
+    (document) =>
+      document.message.id === dependency.messageId &&
+      document.origin === dependency.origin &&
+      document.documentIndex === dependency.documentIndex &&
+      canonicalJson(document.path) === canonicalJson(dependency.path),
+  );
+  if (documentsForDependency.length > 0) {
+    return documentsForDependency.some(
+      (document) => document.status !== "parsed",
+    );
+  }
+
+  if (dependency.documentIndex === 0) return true;
+  const rootDocuments = miniMessage.documents.filter(
+    (document) =>
+      document.message.id === dependency.messageId &&
+      document.origin === dependency.origin &&
+      document.documentIndex === 0 &&
+      canonicalJson(document.path) === canonicalJson(dependency.path),
+  );
+  return (
+    rootDocuments.length === 0 ||
+    rootDocuments.some((document) => document.status !== "parsed")
+  );
+}
+
 function requiredRuleInputUnavailable(
   project: EvaluatedSavedProject,
   ruleId: string,
@@ -2542,20 +2583,9 @@ function requiredRuleInputUnavailable(
           if (requiredInputDependencies !== undefined) {
             return requiredInputDependencies
               .filter((dependency) => dependency.input === input)
-              .some((dependency) => {
-                const documents = project.view.miniMessage!.documents.filter(
-                  (document) =>
-                    document.message.id === dependency.messageId &&
-                    document.origin === dependency.origin &&
-                    document.documentIndex === dependency.documentIndex &&
-                    canonicalJson(document.path) ===
-                      canonicalJson(dependency.path),
-                );
-                return (
-                  documents.length === 0 ||
-                  documents.some((document) => document.status !== "parsed")
-                );
-              });
+              .some((dependency) =>
+                requiredInputDependencyUnavailable(project, dependency),
+              );
           }
           if (messageId === undefined)
             return project.view.miniMessage.unavailableCapabilities.length > 0;
