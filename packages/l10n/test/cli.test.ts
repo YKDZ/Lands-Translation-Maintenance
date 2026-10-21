@@ -827,7 +827,8 @@ void describe("CLI 制品", () => {
       .replace("title: Input", "title: Text Input")
       .replace("type: number-range", "type: text")
       .replace("start: 0", "start: 1")
-      .replace("material: NAME_TAG", "material: PAPER");
+      .replace("material: NAME_TAG", "material: PAPER")
+      .replace("hide-tooltip: true", "hide-tooltip: 'enabled'");
     const changedCategoriesSource = categoriesSource
       .replace("allow-auto-accept: true", "allow-auto-accept: false")
       .replace(
@@ -894,6 +895,14 @@ void describe("CLI 制品", () => {
     assert.equal(inputTypeStructure?.action, "update");
     assert.equal(inputTypeStructure?.previous, "custom");
     assert.equal(inputTypeStructure?.expected, "text");
+    const migratedStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","land_create","bodies","tag","item","hide-tooltip"]',
+    );
+    assert.equal(migratedStructure?.action, "update");
+    assert.equal(migratedStructure?.previous, true);
+    assert.equal(migratedStructure?.expected, "enabled");
     const commandStructure = changedStructures.find(
       ({ path }) =>
         JSON.stringify(path) === '["land","levels","2","commands","reached"]',
@@ -974,7 +983,12 @@ void describe("CLI 制品", () => {
         };
         readonly land_create: {
           readonly bodies: {
-            readonly tag: { readonly item: { readonly material: string } };
+            readonly tag: {
+              readonly item: {
+                readonly material: string;
+                readonly "hide-tooltip": string;
+              };
+            };
           };
         };
       };
@@ -991,6 +1005,10 @@ void describe("CLI 制品", () => {
     assert.equal(
       updatedDialog.dialogs.land_create.bodies.tag.item.material,
       "PAPER",
+    );
+    assert.equal(
+      updatedDialog.dialogs.land_create.bodies.tag.item["hide-tooltip"],
+      "enabled",
     );
     const updatedCategories = parseYaml(
       await readFile(join(directory, "zh/categories.yml"), "utf8"),
@@ -1067,6 +1085,89 @@ void describe("CLI 制品", () => {
         "local-option"
       ],
       "保留",
+    );
+
+    const roleTargetFile = join(directory, "zh/roles.yml");
+    const owner = updatedRoles.land.roles.owner as Record<string, unknown>;
+    owner["custom-flags"] = { "local-option": "保留的子项" };
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const customFlagStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(customFlagStatus.status, 0, customFlagStatus.stderr);
+
+    delete owner["custom-flags"];
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const missingCustomFlagStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(missingCustomFlagStatus.status, 1);
+    assert.ok(
+      (
+        readReport(
+          missingCustomFlagStatus.stdout || missingCustomFlagStatus.stderr,
+        ).diagnostics as readonly Record<string, unknown>[]
+      ).some(
+        ({ code, location }) =>
+          code === "structure.definition-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["land","roles","owner","custom-flags"]',
+      ),
+    );
+
+    owner["custom-flags"] = "结构类型冲突";
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const wrongTypeCustomFlagStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(wrongTypeCustomFlagStatus.status, 1);
+    assert.ok(
+      (
+        readReport(
+          wrongTypeCustomFlagStatus.stdout || wrongTypeCustomFlagStatus.stderr,
+        ).diagnostics as readonly Record<string, unknown>[]
+      ).some(
+        ({ code, location }) =>
+          code === "structure.definition-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["land","roles","owner","custom-flags"]',
+      ),
+    );
+
+    owner["custom-flags"] = { "local-option": "保留的子项" };
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const customFlagPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(customFlagPreview.status, 0, customFlagPreview.stderr);
+    const customFlagStructures = readEnvelope(customFlagPreview.stdout).data
+      ?.plan as { readonly structures: readonly Record<string, unknown>[] };
+    assert.ok(
+      customFlagStructures.structures.some(
+        ({ path, action }) =>
+          JSON.stringify(path) ===
+            '["land","roles","owner","custom-flags","local-option"]' &&
+          action === "preserve",
+      ),
     );
 
     const appliedDialogFile = join(directory, "Locale/zh-CN_dialogs.yml");
@@ -1223,6 +1324,19 @@ void describe("CLI 制品", () => {
     );
 
     const configPath = join(directory, ".l10n/config.yml");
+    const releasedTranslation = parseYaml(
+      await readFile(join(directory, "zh/categories.yml"), "utf8"),
+    ) as {
+      land: { categories: { members: { description: string[] } } };
+    };
+    releasedTranslation.land.categories.members.description = [
+      "仍在招募成员",
+      "请联系领主",
+    ];
+    await writeFile(
+      join(directory, "zh/categories.yml"),
+      stringifyYaml(releasedTranslation),
+    );
     const configWithDescription = await readFile(configPath, "utf8");
     const releasedDescriptionField = [
       '        - path: [land, categories, "*", description]',
@@ -1298,6 +1412,251 @@ void describe("CLI 制品", () => {
       descriptionAfterScopeRelease,
       descriptionBeforeScopeRelease,
     );
+    const afterScopeRelease = await snapshotProjectFiles(directory);
+    const repeatedScopeRelease = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeatedScopeRelease.status, 0, repeatedScopeRelease.stderr);
+    const descriptionAfterRepeatedRelease = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(
+      descriptionAfterRepeatedRelease,
+      descriptionBeforeScopeRelease,
+    );
+    assert.deepEqual(await snapshotProjectFiles(directory), afterScopeRelease);
+    const categoriesChangedWhileReleased = candidateCategoriesSource
+      .replace("&7New members are welcome", "&7Changed while unselected")
+      .replace("&7for new members.", "&7Updated while unselected.");
+    const releasedSourceJar = join(directory, "Lands-8.9.3.jar");
+    await writeFile(
+      releasedSourceJar,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(changedDialogSource),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(categoriesChangedWhileReleased),
+        "levels.yml": strToU8(changedLevelsSource),
+        "roles.yml": strToU8(candidateRolesSource),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    const beforeChangedReleasedPreview = await snapshotProjectFiles(directory);
+    const changedReleasedPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      changedReleasedPreview.status,
+      0,
+      changedReleasedPreview.stderr,
+    );
+    const changedReleasedPlan = readEnvelope(changedReleasedPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    assert.equal(
+      (changedReleasedPlan.messages as readonly Record<string, unknown>[]).some(
+        ({ path }) =>
+          JSON.stringify(path) ===
+          '["land","categories","members","description"]',
+      ),
+      false,
+    );
+    assert.equal(
+      (
+        changedReleasedPlan.structures as readonly Record<string, unknown>[]
+      ).some(
+        ({ path, action }) =>
+          JSON.stringify(path) ===
+            '["land","categories","members","description"]' &&
+          action !== "preserve",
+      ),
+      false,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeChangedReleasedPreview,
+    );
+    const changedReleasedApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      changedReleasedApplied.status,
+      0,
+      changedReleasedApplied.stderr,
+    );
+    const descriptionAfterReleasedSourceChange = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(
+      descriptionAfterReleasedSourceChange,
+      descriptionBeforeScopeRelease,
+    );
+    const afterChangedReleasedSync = await snapshotProjectFiles(directory);
+    const repeatedChangedReleasedSync = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      repeatedChangedReleasedSync.status,
+      0,
+      repeatedChangedReleasedSync.stderr,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      afterChangedReleasedSync,
+    );
+    const baseline = JSON.parse(
+      await readFile(
+        join(directory, ".l10n/upstream/source-baseline.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly releasedTranslationPaths?: readonly {
+        readonly sourceFile: string;
+        readonly targetFile: string;
+        readonly path: readonly string[];
+      }[];
+    };
+    assert.deepEqual(baseline.releasedTranslationPaths, [
+      {
+        sourceFile: "categories.yml",
+        targetFile: "zh/categories.yml",
+        path: ["land", "categories", "members", "description"],
+      },
+      {
+        sourceFile: "categories.yml",
+        targetFile: "zh/categories.yml",
+        path: ["land", "categories", "pvp", "description"],
+      },
+      {
+        sourceFile: "categories.yml",
+        targetFile: "zh/categories.yml",
+        path: ["land", "categories", "shop", "description"],
+      },
+    ]);
+    for (const command of ["status", "check"]) {
+      const reportResult = runCli(
+        command,
+        "--project",
+        directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(reportResult.stdout || reportResult.stderr);
+      assert.ok(
+        !(report.diagnostics as readonly Record<string, unknown>[]).some(
+          ({ code }) => code === "structure.definition-mismatch",
+        ),
+      );
+    }
+    const selectedAgainConfig = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      selectedAgainConfig.replace(
+        "    - source: levels.yml",
+        `${releasedDescriptionField}    - source: levels.yml`,
+      ),
+    );
+    const reselectedPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(reselectedPreview.status, 0, reselectedPreview.stderr);
+    const reselectedPlan = readEnvelope(reselectedPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    const reselectedDescription = (
+      reselectedPlan.messages as readonly Record<string, unknown>[]
+    ).filter(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","categories","members","description"]',
+    );
+    assert.deepEqual(
+      reselectedDescription.map(({ action, reason }) => ({ action, reason })),
+      [{ action: "seed", reason: "new-message" }],
+    );
+    const reselectedApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(reselectedApplied.status, 0, reselectedApplied.stderr);
+    const descriptionAfterReselection = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    const selectedSourceDescription = (
+      parseYaml(categoriesChangedWhileReleased) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(descriptionAfterReselection, selectedSourceDescription);
+    const reselectedBaseline = JSON.parse(
+      await readFile(
+        join(directory, ".l10n/upstream/source-baseline.json"),
+        "utf8",
+      ),
+    ) as { readonly releasedTranslationPaths?: readonly unknown[] };
+    assert.equal(reselectedBaseline.releasedTranslationPaths, undefined);
   });
 
   void it("沿显式场景选择器读取对话框并保留 GUI lore 列表译文", async (t) => {

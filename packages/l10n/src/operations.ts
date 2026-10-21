@@ -54,6 +54,7 @@ import {
   stateDirectoryName,
   transactionFileName,
   type MappingSnapshot,
+  type ReleasedTranslationPath,
   type ResourceSnapshot,
   type SameTextCandidate,
   type SourceBaseline,
@@ -622,6 +623,7 @@ function makeProjectStructures(
   mappings: readonly MappingSnapshot[],
   targets: ReadonlyMap<string, TargetFileInput>,
   messages: readonly ObservedMessage[],
+  releasedTranslationPaths: readonly ReleasedTranslationPath[],
 ): ProjectStructure[] {
   const structures: ProjectStructure[] = [];
   for (const snapshot of mappings) {
@@ -635,8 +637,21 @@ function makeProjectStructures(
       definitions,
       target: targets.get(snapshot.mapping.target)?.value,
       translationPaths: messages
-        .filter((message) => message.sourceFile === snapshot.mapping.source)
-        .map((message) => message.path),
+        .filter(
+          (message) =>
+            message.sourceFile === snapshot.mapping.source &&
+            message.targetFile === snapshot.mapping.target,
+        )
+        .map((message) => message.path)
+        .concat(
+          releasedTranslationPaths
+            .filter(
+              (released) =>
+                released.sourceFile === snapshot.mapping.source &&
+                released.targetFile === snapshot.mapping.target,
+            )
+            .map((released) => released.path),
+        ),
     });
   }
   return structures;
@@ -695,6 +710,7 @@ function projectView(
     baseline.mappings,
     targets,
     collected.messages,
+    baseline.releasedTranslationPaths ?? [],
   );
   return {
     sourceLanguage: baseline.translationScope.sourceLanguage,
@@ -743,6 +759,55 @@ function samePath(left: readonly string[], right: readonly string[]): boolean {
   return canonicalJson(left) === canonicalJson(right);
 }
 
+function makeReleasedTranslationPaths(
+  previous: readonly ReleasedTranslationPath[],
+  currentMappings: readonly MappingSnapshot[],
+  previousMessages: readonly ObservedMessage[],
+): ReleasedTranslationPath[] {
+  const mappingsByAddress = new Map(
+    currentMappings.map((snapshot) => [
+      canonicalJson([snapshot.mapping.source, snapshot.mapping.target]),
+      snapshot.mapping,
+    ]),
+  );
+  const currentMapping = (sourceFile: string, targetFile: string) =>
+    mappingsByAddress.get(canonicalJson([sourceFile, targetFile]));
+  const released = new Map<string, ReleasedTranslationPath>();
+  const retain = (candidate: ReleasedTranslationPath): void => {
+    const mapping = currentMapping(candidate.sourceFile, candidate.targetFile);
+    if (
+      mapping === undefined ||
+      mapping.fields.some((field) =>
+        fieldSelectorMatchesPath(candidate.path, field),
+      )
+    ) {
+      return;
+    }
+    released.set(canonicalJson(candidate), candidate);
+  };
+
+  for (const path of previous) retain(path);
+  for (const message of previousMessages) {
+    const mapping = currentMapping(message.sourceFile, message.targetFile);
+    if (
+      mapping !== undefined &&
+      !mapping.fields.some((field) =>
+        fieldSelectorMatchesPath(message.path, field),
+      )
+    ) {
+      retain({
+        sourceFile: message.sourceFile,
+        targetFile: message.targetFile,
+        path: message.path,
+      });
+    }
+  }
+
+  return [...released.values()].sort((left, right) =>
+    compareText(canonicalJson(left), canonicalJson(right)),
+  );
+}
+
 function sortedKeys(...values: readonly (JsonValue | undefined)[]): string[] {
   const keys = new Set<string>();
   for (const value of values) {
@@ -758,7 +823,7 @@ function planStructureChanges(
   currentMappings: readonly MappingSnapshot[],
   targets: ReadonlyMap<string, TargetFileInput>,
   currentMessages: readonly ObservedMessage[],
-  previousMessages: readonly ObservedMessage[],
+  releasedTranslationPaths: readonly ReleasedTranslationPath[],
 ): StructurePlanResult {
   const previousBySource = new Map(
     previousMappings.map((snapshot) => [snapshot.mapping.source, snapshot]),
@@ -780,21 +845,20 @@ function planStructureChanges(
     const target = targets.get(mapping.target);
     if (target === undefined) continue;
     const currentTranslationPaths = currentMessages
-      .filter((message) => message.sourceFile === mapping.source)
-      .map((message) => message.path);
-    const releasedPreviousPaths = previousMessages
       .filter(
         (message) =>
           message.sourceFile === mapping.source &&
-          !mapping.fields.some((field) =>
-            fieldSelectorMatchesPath(message.path, field),
-          ),
+          message.targetFile === mapping.target,
       )
       .map((message) => message.path);
-    const translationPaths = [
-      ...currentTranslationPaths,
-      ...releasedPreviousPaths,
-    ];
+    const releasedPaths = releasedTranslationPaths
+      .filter(
+        (released) =>
+          released.sourceFile === mapping.source &&
+          released.targetFile === mapping.target,
+      )
+      .map((released) => released.path);
+    const translationPaths = [...currentTranslationPaths, ...releasedPaths];
 
     if (!isRecord(currentDefinitions)) {
       blockers.push({
@@ -1071,6 +1135,13 @@ function structureFindingIssues(
     visit(structure.definitions, []);
     for (const { path, value } of expected.values()) {
       const actual = valueAtPath(structure.target, path);
+      if (
+        isRecord(value) &&
+        Object.keys(value).length === 0 &&
+        isRecord(actual)
+      ) {
+        continue;
+      }
       if (actual !== undefined && sameValue(actual, value)) continue;
       issues.push({
         file: structure.targetFile,
@@ -1560,12 +1631,17 @@ export async function previewSyncProject(
     targetValueMap(targets),
     state.baseline.resources,
   );
+  const releasedTranslationPaths = makeReleasedTranslationPaths(
+    state.baseline.releasedTranslationPaths ?? [],
+    mappings,
+    previousCollection.messages,
+  );
   const structurePlan = planStructureChanges(
     state.baseline.mappings,
     mappings,
     targets,
     currentCollection.messages,
-    previousCollection.messages,
+    releasedTranslationPaths,
   );
   if (structurePlan.blockers.length > 0) {
     return {
@@ -1927,6 +2003,9 @@ export async function previewSyncProject(
     jarSha256: jarInput.sha256,
     resources,
     mappings,
+    ...(releasedTranslationPaths.length === 0
+      ? {}
+      : { releasedTranslationPaths }),
     ...(miniMessageTheme === undefined ? {} : { miniMessageTheme }),
   };
   const baselineText = serializeBaseline(baseline);
