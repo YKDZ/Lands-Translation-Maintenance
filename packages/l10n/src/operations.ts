@@ -906,6 +906,16 @@ function targetAddress(file: string, path: readonly string[]): string {
   return `${file}\u0000${canonicalJson(path)}`;
 }
 
+function pathStartsWith(
+  path: readonly string[],
+  prefix: readonly string[],
+): boolean {
+  return (
+    path.length >= prefix.length &&
+    prefix.every((segment, index) => path[index] === segment)
+  );
+}
+
 function targetValueMap(
   targets: ReadonlyMap<string, TargetFileInput>,
 ): ReadonlyMap<string, JsonValue | undefined> {
@@ -1084,8 +1094,61 @@ export async function previewSyncProject(
       targetAddress(message.targetFile, message.path),
     ),
   );
+  const currentMessageIds = new Set(currentMessages.map(({ id }) => id));
+  const sourceRemovedMessages = previousCollection.messages.filter(
+    (previous) =>
+      !currentMessageIds.has(previous.id) &&
+      mappings.some(
+        ({ mapping }) =>
+          mapping.target === previous.targetFile &&
+          mapping.fields.some((field) =>
+            pathStartsWith(previous.path, field.path),
+          ),
+      ),
+  );
+  const blockedRemovedMessages = sourceRemovedMessages.filter(
+    (message) => message.targetStatus === "blocked",
+  );
+  if (blockedRemovedMessages.length > 0) {
+    const paths = blockedRemovedMessages
+      .map((message) => `${message.targetFile}:${message.path.join(".")}`)
+      .sort(compareText);
+    return {
+      ready: false,
+      blockers: [
+        {
+          code: "sync.target-path-blocked",
+          reason: `目标路径被现有结构阻断，无法安全删除已移除的原文：${paths.join("、")}`,
+        },
+      ],
+      resourceDifference,
+      resourceChanges,
+    };
+  }
+  const deletableRemovedMessages = sourceRemovedMessages.filter(
+    (message) => message.targetStatus !== "blocked",
+  );
+  const messagesUnblockedByRemoval = new Set(
+    currentMessages
+      .filter(
+        (message) =>
+          message.targetStatus === "blocked" &&
+          deletableRemovedMessages.some(
+            (previous) =>
+              previous.targetStatus === "present" &&
+              previous.targetFile === message.targetFile &&
+              pathStartsWith(message.path, previous.path),
+          ),
+      )
+      .map(({ id }) => id),
+  );
   const unsafeBlockedMessages = currentMessages.filter((message) => {
-    if (message.targetStatus !== "blocked") return false;
+    if (
+      message.targetStatus !== "blocked" ||
+      messagesUnblockedByRemoval.has(message.id)
+    ) {
+      return false;
+    }
     const previous = previousMessages.get(message.id);
     return (
       previous === undefined || !sameValue(previous.source, message.source)
@@ -1107,45 +1170,6 @@ export async function previewSyncProject(
       resourceChanges,
     };
   }
-  const removedMessagesBelowBlockedAncestor = currentCollection.targetMessages
-    .filter(
-      (targetMessage) =>
-        !currentMessageAddresses.has(
-          targetAddress(targetMessage.targetFile, targetMessage.path),
-        ),
-    )
-    .flatMap((targetMessage) =>
-      [...previousMessages.values()]
-        .filter(
-          (previous) =>
-            previous.targetFile === targetMessage.targetFile &&
-            previous.path.length > targetMessage.path.length &&
-            targetMessage.path.every(
-              (segment, index) => previous.path[index] === segment,
-            ) &&
-            !currentMessages.some((message) => message.id === previous.id),
-        )
-        .map((previous) => ({ targetMessage, previous })),
-    );
-  if (removedMessagesBelowBlockedAncestor.length > 0) {
-    const paths = removedMessagesBelowBlockedAncestor
-      .map(
-        ({ targetMessage }) =>
-          `${targetMessage.targetFile}:${targetMessage.path.join(".")}`,
-      )
-      .sort(compareText);
-    return {
-      ready: false,
-      blockers: [
-        {
-          code: "sync.target-path-blocked",
-          reason: `目标路径被现有结构阻断，无法安全删除已移除的原文：${paths.join("、")}`,
-        },
-      ],
-      resourceDifference,
-      resourceChanges,
-    };
-  }
   const currentMappingsByTarget = new Map(
     mappings.map(({ mapping }) => [mapping.target, mapping]),
   );
@@ -1158,9 +1182,37 @@ export async function previewSyncProject(
   const plannedMessages: SyncMessageChange[] = [];
   const targetAfter = new Map<string, JsonValue>();
   const requiresTranslation = new Set<string>();
+  for (const previous of deletableRemovedMessages) {
+    const target = targets.get(previous.targetFile);
+    if (previous.targetStatus === "present") {
+      if (target === undefined || previous.target === undefined) {
+        throw new ProjectOperationError(
+          `无法准备目标文件：${previous.targetFile}`,
+        );
+      }
+      target.document.deleteIn(previous.path);
+      changedTargetPaths.add(previous.targetFile);
+    }
+    plannedMessages.push({
+      id: previous.id,
+      action: "delete",
+      reason: "source-removed",
+      sourceFile: previous.sourceFile,
+      targetFile: previous.targetFile,
+      path: previous.path,
+      category: previous.category,
+      previousSource: previous.source,
+      ...(previous.target === undefined
+        ? {}
+        : { previousTarget: previous.target }),
+    });
+  }
   for (const message of currentMessages) {
     const previous = previousMessages.get(message.id);
-    if (message.targetStatus === "blocked") {
+    if (
+      message.targetStatus === "blocked" &&
+      !messagesUnblockedByRemoval.has(message.id)
+    ) {
       plannedMessages.push({
         id: message.id,
         action: "preserve",
@@ -1255,6 +1307,15 @@ export async function previewSyncProject(
   for (const targetMessage of currentCollection.targetMessages) {
     const address = targetAddress(targetMessage.targetFile, targetMessage.path);
     if (currentMessageAddresses.has(address)) continue;
+    if (
+      deletableRemovedMessages.some(
+        (previous) =>
+          previous.targetFile === targetMessage.targetFile &&
+          pathStartsWith(targetMessage.path, previous.path),
+      )
+    ) {
+      continue;
+    }
     if (
       currentMessages.some(
         (message) =>
