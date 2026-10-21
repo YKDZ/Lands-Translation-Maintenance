@@ -318,27 +318,14 @@ function appendMappedProjection(
 }
 
 function fallbackSourceOffsets(
-  document: ParsedMiniMessageDocument,
   node: Extract<MiniMessageSourceNode, { readonly kind: "tag" }>,
   value: string,
 ): readonly number[] {
-  const position = node.parameterPositions[1];
-  if (
-    position === undefined ||
-    position.start < 0 ||
-    position.end < position.start
-  ) {
+  const offsets = node.parameterSourceOffsets[1];
+  if (offsets === undefined || offsets.length !== value.length + 1) {
     return Array.from({ length: value.length + 1 }, () => -1);
   }
-  const raw = document.input.slice(position.start, position.end);
-  const offset = raw.indexOf(value);
-  if (offset < 0) {
-    return Array.from({ length: value.length + 1 }, () => -1);
-  }
-  return Array.from(
-    { length: value.length + 1 },
-    (_unused, index) => position.start + offset + index,
-  );
+  return offsets;
 }
 
 function projectionMarker(
@@ -381,7 +368,7 @@ function projectionFor(document: ParsedMiniMessageDocument): Projection {
         MiniMessageSourceNode,
         { readonly kind: "tag" }
       >;
-      const offsets = fallbackSourceOffsets(document, nodeTag, fallback.value);
+      const offsets = fallbackSourceOffsets(nodeTag, fallback.value);
       const fallbackStart = offsets[0] ?? -1;
       const fallbackEnd = offsets[offsets.length - 1] ?? -1;
       const structureMarker = projectionMarker(markerIndex, markers, {

@@ -390,6 +390,72 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
   });
 
+  void it("映射 fallback 转义引号和反斜线后的 HTML 原文位置", async (t) => {
+    const source = String.raw`<div><lang_or:lands.key:"<a href=\"/keep\" title=\"Old\\Path\">Land</a>"></div>`;
+    const target = String.raw`<div><lang_or:lands.key:"<a href=\"/drop\" title=\"新\\路径\">城镇</a>"></div>`;
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: source,
+      targetMapDescription: target,
+    });
+    const { checked, report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const finding = diagnostics(report).find(
+      (entry) => entry.code === "map-html.behavior-attribute-mismatch",
+    );
+    const actual = finding?.actual as
+      | { readonly position?: { readonly start: number; readonly end: number } }
+      | undefined;
+    const expected = finding?.expected as
+      | { readonly position?: { readonly start: number; readonly end: number } }
+      | undefined;
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" &&
+        entry.path.join(".").includes("dynmap.land.description") &&
+        entry.documentIndex === 0,
+    );
+    const body = targetDocument?.segments.find(
+      (segment) => segment.kind === "text" && segment.value === "城镇",
+    );
+    const title = targetDocument?.segments.find(
+      (segment) =>
+        segment.kind === "text" &&
+        segment.value === "新\\路径" &&
+        segment.context.some(
+          (frame) => frame.kind === "html-attribute" && frame.name === "title",
+        ),
+    );
+    const anchor = body?.context.find(
+      (frame) => frame.kind === "html-element" && frame.name === "a",
+    );
+
+    assert.equal(checked.status, 1);
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.ok(actual?.position);
+    assert.ok(expected?.position);
+    assert.equal(
+      target.slice(actual.position.start, actual.position.end),
+      String.raw`href=\"/drop\"`,
+    );
+    assert.equal(
+      source.slice(expected.position.start, expected.position.end),
+      String.raw`href=\"/keep\"`,
+    );
+    assert.ok(body);
+    assert.ok(title);
+    assert.ok(anchor);
+    assert.equal(target.slice(body.position.start, body.position.end), "城镇");
+    assert.equal(
+      target.slice(title.position.start, title.position.end),
+      String.raw`title=\"新\\路径\"`,
+    );
+    assert.deepEqual(anchor.position, {
+      start: target.indexOf(String.raw`<a href=\"/drop\"`),
+      end: target.indexOf("</a>") + "</a>".length,
+    });
+  });
+
   void it("保留旧地图模板的属性占位符并报告 8.0.1 未供值限制", async (t) => {
     const template = '<div style="color: <v:land_color>;"><v:land></div>';
     const project = await createFormatProject(t, {
@@ -480,6 +546,87 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       false,
       checked.stderr || checked.stdout,
     );
+  });
+
+  void it("把旧标题 fallback 纳入可译文本并连接跨样式变量", async (t) => {
+    const source = "Owned by %own<green><lang_or:lands.key:'er% and property'>";
+    const target = "属于%owner%及属性";
+    const project = await createFormatProject(t, {
+      legacyTitle: source,
+      targetLegacyTitle: target,
+    });
+    const { checked, report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const sourceDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.path.join(".").includes("land.title.land.normal"),
+    );
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" &&
+        entry.path.join(".").includes("land.title.land.normal"),
+    );
+    const sourceVariable = sourceDocument?.segments.find(
+      (segment) => segment.kind === "variable" && segment.value === "owner",
+    );
+
+    assert.equal(
+      diagnostics(report).some((finding) =>
+        String(finding.code).startsWith("legacy-variable."),
+      ),
+      false,
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(sourceVariable);
+    assert.equal(
+      source.slice(sourceVariable.position.start, sourceVariable.position.end),
+      sourceVariable.raw,
+    );
+    assert.ok(
+      sourceDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === " and property" &&
+          segment.context.some(
+            (frame) =>
+              frame.kind === "tag-argument" &&
+              frame.name === "translate_or:fallback",
+          ),
+      ),
+    );
+    assert.ok(
+      targetDocument?.segments.some(
+        (segment) => segment.kind === "variable" && segment.value === "owner",
+      ),
+    );
+  });
+
+  void it("在旧标题 fallback 遗漏运行时变量时报告准确位置", async (t) => {
+    const source = "<lang_or:lands.key:'Owned by %owner%'>";
+    const project = await createFormatProject(t, {
+      legacyTitle: source,
+      targetLegacyTitle: "<lang_or:lands.key:'属于某人'>",
+    });
+    const { checked, report } = initAndCheck(project);
+    const finding = diagnostics(report).find(
+      (entry) => entry.code === "legacy-variable.missing",
+    );
+    const expected = finding?.expected as
+      | {
+          readonly positions?: readonly {
+            readonly start: number;
+            readonly end: number;
+          }[];
+        }
+      | undefined;
+
+    assert.equal(checked.status, 1);
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.equal(expected?.positions?.length, 1);
+    const position = expected?.positions?.[0];
+    assert.ok(position);
+    assert.equal(source.slice(position.start, position.end), "%owner%");
   });
 
   void it("只在已验证的旧标题字段比较占位符且复用变量身份诊断", async (t) => {

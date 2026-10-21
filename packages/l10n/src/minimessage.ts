@@ -844,7 +844,7 @@ async function runOfficialParser(
       const closing = fields[8];
       const selfClosing = fields[9];
       const parameterCount = Number(fields[10]);
-      const paramsEnd = 11 + parameterCount * 3;
+      const paramsEnd = 11 + parameterCount * 4;
       const context = readContextFrames(fields, paramsEnd);
       if (
         !Number.isSafeInteger(messageIndex) ||
@@ -868,21 +868,32 @@ async function runOfficialParser(
       }
       const parameters: string[] = [];
       const parameterPositions: MiniMessagePosition[] = [];
-      for (let index = 11; index < paramsEnd; index += 3) {
+      const parameterSourceOffsets: number[][] = [];
+      for (let index = 11; index < paramsEnd; index += 4) {
         const value = fields[index];
         const parameterStart = Number(fields[index + 1]);
         const parameterEnd = Number(fields[index + 2]);
+        const sourceOffsetField = fields[index + 3];
+        const decodedValue = value === undefined ? undefined : decode(value);
+        const sourceOffsets =
+          sourceOffsetField === undefined
+            ? undefined
+            : sourceOffsetField.split(",").map(Number);
         if (
-          value === undefined ||
+          decodedValue === undefined ||
           !Number.isSafeInteger(parameterStart) ||
-          !Number.isSafeInteger(parameterEnd)
+          !Number.isSafeInteger(parameterEnd) ||
+          sourceOffsets === undefined ||
+          sourceOffsets.length !== decodedValue.length + 1 ||
+          sourceOffsets.some((offset) => !Number.isSafeInteger(offset))
         ) {
           return javaUnavailable(
             "官方 MiniMessage 辅助程序返回无效标签参数；完整检查未完成",
           );
         }
-        parameters.push(decode(value));
+        parameters.push(decodedValue);
         parameterPositions.push({ start: parameterStart, end: parameterEnd });
+        parameterSourceOffsets.push(sourceOffsets);
       }
       let node: MiniMessageSourceNode;
       if (kind === "text") {
@@ -900,6 +911,7 @@ async function runOfficialParser(
           name: tagName,
           parameters,
           parameterPositions,
+          parameterSourceOffsets,
           closing: closing === "true",
           selfClosing: selfClosing === "true",
           semanticKind: styleKind(tagName),
@@ -1240,7 +1252,9 @@ function legacyVariableSegments(
   document: ParsedMiniMessageDocument,
 ): readonly TranslatableTextSegment[] {
   interface TextChunk {
-    readonly node: Extract<MiniMessageSourceNode, { readonly kind: "text" }>;
+    readonly value: string;
+    readonly sourceOffsets: readonly number[];
+    readonly context: readonly MiniMessageContextFrame[];
     readonly start: number;
     readonly end: number;
   }
@@ -1257,13 +1271,13 @@ function legacyVariableSegments(
           (end && chunk.start < offset && offset <= chunk.end) ||
           (!end && chunk.start <= offset && offset < chunk.end)
         ) {
-          return chunk.node.position.start + offset - chunk.start;
+          return chunk.sourceOffsets[offset - chunk.start] ?? -1;
         }
       }
       const last = chunks.at(-1)!;
       return offset <= 0
-        ? chunks[0]!.node.position.start
-        : last.node.position.end;
+        ? (chunks[0]!.sourceOffsets[0] ?? -1)
+        : (last.sourceOffsets.at(-1) ?? -1);
     };
 
     const appendVisibleRange = (start: number, end: number): void => {
@@ -1273,17 +1287,15 @@ function legacyVariableSegments(
         if (overlapStart >= overlapEnd) continue;
         const localStart = overlapStart - chunk.start;
         const localEnd = overlapEnd - chunk.start;
-        const raw = chunk.node.raw.slice(localStart, localEnd);
-        appendTextSegment(
-          segments,
-          raw,
-          raw,
-          {
-            start: chunk.node.position.start + localStart,
-            end: chunk.node.position.start + localEnd,
-          },
-          chunk.node.context,
-        );
+        const value = chunk.value.slice(localStart, localEnd);
+        const sourceStart = chunk.sourceOffsets[localStart] ?? -1;
+        const sourceEnd = chunk.sourceOffsets[localEnd] ?? -1;
+        const position = { start: sourceStart, end: sourceEnd };
+        const raw =
+          sourceStart >= 0 && sourceEnd >= sourceStart
+            ? document.input.slice(sourceStart, sourceEnd)
+            : value;
+        appendTextSegment(segments, value, raw, position, chunk.context);
       }
     };
 
@@ -1299,12 +1311,15 @@ function legacyVariableSegments(
         end: positionAt(start + raw.length, true),
       };
       const context =
-        chunks.find((chunk) => chunk.start <= start && start < chunk.end)?.node
-          .context ?? [];
+        chunks.find((chunk) => chunk.start <= start && start < chunk.end)
+          ?.context ?? [];
       segments.push({
         kind: "variable",
         value: name,
-        raw: document.input.slice(position.start, position.end),
+        raw:
+          position.start >= 0 && position.end >= position.start
+            ? document.input.slice(position.start, position.end)
+            : raw,
         position,
         context,
       });
@@ -1319,10 +1334,38 @@ function legacyVariableSegments(
     if (node.kind === "text") {
       const start = visibleText.length;
       visibleText += node.raw;
-      chunks.push({ node, start, end: visibleText.length });
+      chunks.push({
+        value: node.raw,
+        sourceOffsets: Array.from(
+          { length: node.raw.length + 1 },
+          (_, index) => node.position.start + index,
+        ),
+        context: node.context,
+        start,
+        end: visibleText.length,
+      });
       continue;
     }
     if (node.semanticKind === "style") continue;
+    const fallback = translationFallbackSegment(document, node);
+    if (fallback !== undefined) {
+      const sourceOffsets = node.parameterSourceOffsets[1];
+      if (
+        sourceOffsets !== undefined &&
+        sourceOffsets.length === fallback.value.length + 1
+      ) {
+        const start = visibleText.length;
+        visibleText += fallback.value;
+        chunks.push({
+          value: fallback.value,
+          sourceOffsets,
+          context: fallback.context,
+          start,
+          end: visibleText.length,
+        });
+      }
+      continue;
+    }
     flush();
   }
   flush();
