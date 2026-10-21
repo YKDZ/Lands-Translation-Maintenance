@@ -685,6 +685,253 @@ void describe("CLI 制品", () => {
     }
   });
 
+  void it("移除旧字符串消息时按旧身份删除完整错误对象值", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting:",
+        "    text: 旧中文",
+        "  keep: 保留",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    const sourceBefore = [
+      "messages:",
+      "  greeting: Hello",
+      "  keep: Keep",
+      "list:",
+      "  entries: [first, second]",
+      "",
+    ].join("\n");
+    await writeJar(project.jarFile, { source: sourceBefore });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const greeting = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(greeting?.action, "delete");
+    assert.equal(greeting?.reason, "source-removed");
+    assert.equal(greeting?.previousSource, "Hello");
+    assert.deepEqual(greeting?.previousTarget, { text: "旧中文" });
+    assert.equal(
+      (plan.messages as readonly Record<string, unknown>[]).some(
+        ({ path, reason }) =>
+          JSON.stringify(path) === '["messages","greeting","text"]' &&
+          reason === "orphaned-translation",
+      ),
+      false,
+    );
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /keep: 保留/);
+    assert.doesNotMatch(targetWrite?.content as string, /greeting|text/);
+  });
+
+  void it("旧标量消息变为分支时先删除旧身份再新增子消息", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting: 你好",
+        "  keep: 保留",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Hello",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting:",
+        "    child: New",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldGreeting = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    const child = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting","child"]',
+    );
+    assert.equal(oldGreeting?.action, "delete");
+    assert.equal(oldGreeting?.reason, "source-removed");
+    assert.equal(oldGreeting?.previousTarget, "你好");
+    assert.equal(child?.action, "seed");
+    assert.equal(child?.reason, "new-message");
+    assert.equal(child?.target, "New");
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /child: New/);
+    assert.doesNotMatch(targetWrite?.content as string, /greeting: 你好/);
+  });
+
+  void it("旧分支消息变为标量时列出旧删除和新消息", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting:",
+        "    child: 你好",
+        "  keep: 保留",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting:",
+        "    child: Hello",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: New",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldChild = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting","child"]',
+    );
+    const greeting = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(oldChild?.action, "delete");
+    assert.equal(oldChild?.reason, "source-removed");
+    assert.equal(oldChild?.previousTarget, "你好");
+    assert.equal(greeting?.action, "seed");
+    assert.equal(greeting?.reason, "new-message");
+    assert.equal(greeting?.target, "New");
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /greeting: New/);
+    assert.doesNotMatch(targetWrite?.content as string, /child: 你好/);
+  });
+
   void it("映射字段类型变化沿用身份并重置整条消息", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
