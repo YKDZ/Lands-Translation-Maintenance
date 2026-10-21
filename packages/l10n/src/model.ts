@@ -322,6 +322,10 @@ export interface ObservedMessage extends MessageIdentity {
   readonly source: JsonValue;
   readonly target: JsonValue | undefined;
   readonly targetStatus: "present" | "missing" | "blocked";
+  readonly translationReview?: {
+    readonly pendingReason?: "translation-seed" | "same-text-candidate";
+    readonly confirmedSameText: boolean;
+  };
 }
 
 export interface ProjectView {
@@ -392,10 +396,14 @@ export interface Diagnostic {
 
 export interface RuleFinding {
   readonly code: string;
+  /** 单条诊断的默认严重级别；规则配置中的严重级别仍可统一覆盖。 */
+  readonly severity?: Severity;
   /** 用于区分同一规则、消息和路径下的不同问题对象；不要包含可变内容。 */
   readonly identity?: JsonValue;
   /** 此诊断实际依赖的规则配置或外部内容。 */
   readonly fingerprint?: JsonValue;
+  /** 此诊断评估所需的局部输入文档，用于例外判断输入是否仍可用。 */
+  readonly requiredInputDependencies?: readonly RuleInputDependency[];
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;
   readonly location: DiagnosticLocation;
@@ -410,6 +418,14 @@ export interface RuleContext {
 }
 
 export type RuleInput = "minimessage-parse";
+
+export interface RuleInputDependency {
+  readonly input: RuleInput;
+  readonly messageId: string;
+  readonly origin: MiniMessageOrigin;
+  readonly documentIndex: number;
+  readonly path: readonly (string | number)[];
+}
 
 export interface CheckRule {
   readonly id: string;
