@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.StorageNBTComponent;
 import net.kyori.adventure.text.flattener.ComponentFlattener;
 import net.kyori.adventure.text.flattener.FlattenerListener;
 import net.kyori.adventure.text.format.Style;
@@ -434,9 +435,16 @@ public final class MiniMessageBridge {
       return List.of(parts.get(1).value());
     }
     if (canonicalName.equals("nbt") && argumentIndex == 4 && parts.size() >= 4) {
+      String type = parts.get(1).lowerValue();
+      String target = parts.get(2).value();
+      if (type.equals("storage")
+          && tag.tag() instanceof Inserting inserting
+          && inserting.value() instanceof StorageNBTComponent storage) {
+        target = storage.storage().asString();
+      }
       return List.of(
-          parts.get(1).lowerValue(),
-          parts.get(2).value(),
+          type,
+          target,
           parts.get(3).value());
     }
     return List.of();
