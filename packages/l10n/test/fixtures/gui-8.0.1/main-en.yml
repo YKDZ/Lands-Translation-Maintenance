@@ -1,0 +1,14 @@
+general:
+  all: <green>All</green>
+physical:
+  selection:
+    name: <t:regular_heading>Selection Tool
+    lore: "<t:regular>Use this tool to create a selection.<newline>Selections can be used for:<newline> <t:decoration>• </t><t:regular>Claiming<newline> <t:decoration>• </t><t:regular>Unclaiming<newline> <t:decoration>• </t><t:regular>Resizing areas"
+gui:
+  main:
+    title: <t:menu_title>Main Menu
+    items:
+      default:
+        lands:
+          name: <t:entity_land><b>Your Lands</t>
+          lore: "<t:decoration>✖ </t><t:regular>Manage lands that you're part of.<newline>    <t:decoration>• </t><t:regular>Own: <t:regular_value><v:own></t><newline>    <t:decoration>• </t><t:regular>Trusted: <t:regular_value><v:trusted></t>"

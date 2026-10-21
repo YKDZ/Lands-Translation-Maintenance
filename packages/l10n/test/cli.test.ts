@@ -19,10 +19,66 @@ import { fileURLToPath } from "node:url";
 
 import { applySyncProject, initializeProject } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
+const guiFixtureDirectory = resolve(
+  packageDirectory,
+  "test/fixtures/gui-8.0.1",
+);
+const landsFixtureDirectory = resolve(
+  packageDirectory,
+  "test/fixtures/lands-8.0.1",
+);
+
+const guiModules = [
+  {
+    source: "Locale/en-US_gui.yml",
+    definitions: "Locale/definitions_gui.yml",
+    target: "Locale/zh-CN_gui.yml",
+    sourceFixture: "main-en.yml",
+    definitionsFixture: "main-definitions.yml",
+    targetFixture: "main-zh.yml",
+  },
+  {
+    source: "Locale/Nations/en-US_gui.yml",
+    definitions: "Locale/Nations/definitions_gui.yml",
+    target: "Locale/Nations/zh-CN_gui.yml",
+    sourceFixture: "nations-en.yml",
+    definitionsFixture: "nations-definitions.yml",
+    targetFixture: "nations-zh.yml",
+  },
+  {
+    source: "Locale/Wars/en-US_gui.yml",
+    definitions: "Locale/Wars/definitions_gui.yml",
+    target: "Locale/Wars/zh-CN_gui.yml",
+    sourceFixture: "wars-en.yml",
+    definitionsFixture: "wars-definitions.yml",
+    targetFixture: "wars-zh.yml",
+  },
+] as const;
+
+const guiFieldDeclarations = [
+  '        - path: [general, "**"]',
+  "          category: gui-string",
+  "          scene: gui-general",
+  '        - path: [physical, "*", name]',
+  "          category: gui-string",
+  "          scene: gui-item-name",
+  '        - path: [physical, "*", lore]',
+  "          category: gui-lore",
+  "          scene: gui-item-lore",
+  '        - path: [gui, "*", title]',
+  "          category: gui-string",
+  "          scene: gui-title",
+  '        - path: [gui, "*", items, "*", "*", name]',
+  "          category: gui-string",
+  "          scene: gui-item-name",
+  '        - path: [gui, "*", items, "*", "*", lore]',
+  "          category: gui-lore",
+  "          scene: gui-item-lore",
+];
 
 function runCli(...args: string[]) {
   return spawnSync(process.execPath, [cliFile, ...args], {
@@ -169,6 +225,86 @@ async function createProject(t: TestContext) {
   );
 
   return { directory, jarFile };
+}
+
+async function createGuiProject(t: TestContext) {
+  const directory = await mkdtemp(join(tmpdir(), "lands-l10n-gui-"));
+  t.after(async () => rm(directory, { force: true, recursive: true }));
+  await mkdir(join(directory, ".l10n"), { recursive: true });
+
+  const resources = [
+    { path: "plugin.yml", purpose: "metadata" },
+    ...guiModules.flatMap(({ source, definitions }) => [
+      { path: source, purpose: "gui-language" },
+      { path: definitions, purpose: "configuration" },
+    ]),
+  ];
+  const mappings = guiModules.flatMap(({ source, definitions, target }) => [
+    `    - source: ${source}`,
+    `      target: ${target}`,
+    `      definitionsSource: ${definitions}`,
+    "      fields:",
+    ...guiFieldDeclarations,
+  ]);
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.0.1"',
+      '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+      "resources:",
+      ...resources.flatMap(({ path, purpose }) => [
+        `  - path: ${path}`,
+        `    purpose: ${purpose}`,
+      ]),
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      ...mappings,
+      "",
+    ].join("\n"),
+  );
+
+  for (const module of guiModules) {
+    const targetPath = join(directory, module.target);
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(
+      targetPath,
+      await readFile(join(guiFixtureDirectory, module.targetFixture), "utf8"),
+    );
+  }
+  const jarFile = join(directory, "Lands.jar");
+  await writeGuiJar(jarFile);
+  return { directory, jarFile };
+}
+
+async function writeGuiJar(
+  jarFile: string,
+  sourceOverrides: Readonly<Record<string, string>> = {},
+  definitionsOverrides: Readonly<Record<string, string>> = {},
+): Promise<void> {
+  const jarEntries: Record<string, Uint8Array> = {
+    "plugin.yml": strToU8("name: Lands\n"),
+  };
+  for (const module of guiModules) {
+    jarEntries[module.source] = strToU8(
+      sourceOverrides[module.source] ??
+        (await readFile(
+          join(guiFixtureDirectory, module.sourceFixture),
+          "utf8",
+        )),
+    );
+    jarEntries[module.definitions] = strToU8(
+      definitionsOverrides[module.definitions] ??
+        (await readFile(
+          join(guiFixtureDirectory, module.definitionsFixture),
+          "utf8",
+        )),
+    );
+  }
+  await writeFile(jarFile, zipSync(jarEntries));
 }
 
 async function createInterruptedProject(t: TestContext, resourceCount = 150) {
@@ -328,6 +464,1896 @@ void describe("CLI 制品", () => {
     await readFile(
       join(stateDirectory, "upstream/source-baseline.json"),
       "utf8",
+    );
+  });
+
+  void it("初始化对话框和混合配置时只收录声明字段并保留已有中文", async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "lands-l10n-dialogs-"));
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    await mkdir(join(directory, "Locale"), { recursive: true });
+    await mkdir(join(directory, "Locale/Nations"), { recursive: true });
+    await mkdir(join(directory, "zh"), { recursive: true });
+
+    const [
+      dialogSource,
+      nationDialogSource,
+      categoriesSource,
+      levelsSource,
+      rolesSource,
+    ] = await Promise.all([
+      readFile(join(landsFixtureDirectory, "en-US_dialogs.fixture"), "utf8"),
+      readFile(
+        join(landsFixtureDirectory, "nations-en-US_dialogs.fixture"),
+        "utf8",
+      ),
+      readFile(join(landsFixtureDirectory, "categories.fixture"), "utf8"),
+      readFile(join(landsFixtureDirectory, "levels.fixture"), "utf8"),
+      readFile(join(landsFixtureDirectory, "roles.fixture"), "utf8"),
+    ]);
+    const jarFile = join(directory, "Lands.jar");
+    await writeFile(
+      jarFile,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(dialogSource),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(categoriesSource),
+        "levels.yml": strToU8(levelsSource),
+        "roles.yml": strToU8(rolesSource),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+        "resources:",
+        "  - path: Locale/en-US_dialogs.yml",
+        "    purpose: dialog-language",
+        "  - path: Locale/Nations/en-US_dialogs.yml",
+        "    purpose: dialog-language",
+        "  - path: categories.yml",
+        "    purpose: configuration",
+        "  - path: levels.yml",
+        "    purpose: configuration",
+        "  - path: roles.yml",
+        "    purpose: configuration",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: Locale/en-US_dialogs.yml",
+        "      target: Locale/zh-CN_dialogs.yml",
+        "      definitionsSource: Locale/en-US_dialogs.yml",
+        "      fields:",
+        '        - path: [dialogs, "*", title]',
+        "          category: dialog-string",
+        "          scene: dialog-title",
+        '        - path: [dialogs, "*", buttons, "*", label]',
+        "          category: dialog-string",
+        "          scene: dialog-button-label",
+        '        - path: [dialogs, "*", buttons, "*", tooltip]',
+        "          category: dialog-string",
+        "          scene: dialog-button-tooltip",
+        '        - path: [dialogs, "*", inputs, "*", label]',
+        "          category: dialog-string",
+        "          scene: dialog-input-label",
+        '        - path: [dialogs, "*", inputs, "*", label-format]',
+        "          category: dialog-label-format",
+        "          scene: dialog-label-format",
+        '        - path: [dialogs, "*", bodies, "*", text]',
+        "          category: dialog-string",
+        "          scene: dialog-body-text",
+        '        - path: [dialogs, "*", bodies, "*", item, name]',
+        "          category: gui-string",
+        "          scene: gui-item-name",
+        '        - path: [dialogs, "*", bodies, "*", item, lore]',
+        "          category: gui-lore",
+        "          scene: gui-item-lore",
+        "    - source: Locale/Nations/en-US_dialogs.yml",
+        "      target: Locale/Nations/zh-CN_dialogs.yml",
+        "      definitionsSource: Locale/Nations/en-US_dialogs.yml",
+        "      fields:",
+        '        - path: [dialogs, "*", title]',
+        "          category: dialog-string",
+        "          scene: dialog-title",
+        "    - source: categories.yml",
+        "      target: zh/categories.yml",
+        "      definitionsSource: categories.yml",
+        "      fields:",
+        '        - path: [land, categories, "*", name]',
+        "          category: configuration-string",
+        "          scene: category-name",
+        '        - path: [land, categories, "*", description]',
+        "          category: configuration-string-list",
+        "          scene: category-description",
+        "    - source: levels.yml",
+        "      target: zh/levels.yml",
+        "      definitionsSource: levels.yml",
+        "      fields:",
+        '        - path: [land, levels, "*", title]',
+        "          category: configuration-string",
+        "          scene: level-title",
+        '        - path: [land, levels, "*", attributes, "*", description]',
+        "          category: configuration-string",
+        "          scene: level-attribute-description",
+        '        - path: [land, levels, "*", requirements, "*", title]',
+        "          category: configuration-string",
+        "          scene: level-requirement-title",
+        '        - path: [land, levels, "*", requirements, "*", description]',
+        "          category: configuration-string-list",
+        "          scene: level-requirement-description",
+        "    - source: roles.yml",
+        "      target: zh/roles.yml",
+        "      definitionsSource: roles.yml",
+        "      fields:",
+        '        - path: [land, roles, "*", name]',
+        "          category: configuration-string",
+        "          scene: role-name",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      "dialogs:\n  input:\n    title: 输入\n",
+    );
+    await writeFile(
+      join(directory, "Locale/Nations/zh-CN_dialogs.yml"),
+      "dialogs:\n  nation_create:\n    title: 创建国家\n",
+    );
+    await writeFile(
+      join(directory, "zh/categories.yml"),
+      "land:\n  categories:\n    members:\n      name: 招募成员\n      description: [正在招募, 请联系领主]\n",
+    );
+    await writeFile(
+      join(directory, "zh/levels.yml"),
+      "land:\n  levels:\n    '2':\n      title: 村庄\n      requirements:\n        members:\n          title: 信任玩家\n          description: [信任四位玩家, 输入命令]\n",
+    );
+    await writeFile(
+      join(directory, "zh/roles.yml"),
+      "land:\n  roles:\n    owner:\n      name: 主人\n",
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal((report.summary as Record<string, unknown>).messages, 94);
+    assert.match(
+      await readFile(join(directory, "Locale/zh-CN_dialogs.yml"), "utf8"),
+      /title: 输入/,
+    );
+    assert.match(
+      await readFile(
+        join(directory, "Locale/Nations/zh-CN_dialogs.yml"),
+        "utf8",
+      ),
+      /title: 创建国家/,
+    );
+    assert.match(
+      await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      /name: 招募成员/,
+    );
+    assert.match(
+      await readFile(join(directory, "zh/levels.yml"), "utf8"),
+      /title: 村庄/,
+    );
+    assert.match(
+      await readFile(join(directory, "zh/roles.yml"), "utf8"),
+      /name: 主人/,
+    );
+    const seededDialog = parseYaml(
+      await readFile(join(directory, "Locale/zh-CN_dialogs.yml"), "utf8"),
+    ) as {
+      dialogs: {
+        add_member_duration: {
+          inputs: { days: { type: string; start: number } };
+        };
+        land_create: { bodies: { tag: { item: { material: string } } } };
+      };
+    };
+    assert.equal(
+      seededDialog.dialogs.add_member_duration.inputs.days.type,
+      "number-range",
+    );
+    assert.equal(seededDialog.dialogs.add_member_duration.inputs.days.start, 0);
+    assert.equal(
+      seededDialog.dialogs.land_create.bodies.tag.item.material,
+      "NAME_TAG",
+    );
+    const status = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    assert.equal(
+      (readReport(status.stdout).summary as Record<string, unknown>)
+        .pendingTranslations,
+      86,
+    );
+
+    seededDialog.dialogs.add_member_duration.inputs.days.type = "custom";
+    await writeFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      stringifyYaml(seededDialog),
+    );
+    const seededRoles = parseYaml(
+      await readFile(join(directory, "zh/roles.yml"), "utf8"),
+    ) as {
+      land: { roles: { owner: { default: string; [key: string]: unknown } } };
+    };
+    seededRoles.land.roles.owner.default = "local-default";
+    seededRoles.land.roles.owner["local-option"] = "保留";
+    await writeFile(
+      join(directory, "zh/roles.yml"),
+      stringifyYaml(seededRoles),
+    );
+
+    const beforePreview = await snapshotProjectFiles(directory);
+    const preview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const plannedMessages = plan.messages as readonly Record<string, unknown>[];
+    const inputFormat = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","add_member_duration","inputs","days","label-format"]',
+    );
+    assert.equal(inputFormat?.category, "dialog-label-format");
+    assert.equal(inputFormat?.scene, "dialog-label-format");
+    assert.equal(inputFormat?.format, "label-format");
+    const buttonLabel = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","input","buttons","confirm","label"]',
+    );
+    assert.equal(buttonLabel?.category, "dialog-string");
+    assert.equal(buttonLabel?.scene, "dialog-button-label");
+    assert.equal(buttonLabel?.format, "minimessage");
+    const buttonTooltip = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","input","buttons","confirm","tooltip"]',
+    );
+    assert.equal(buttonTooltip?.scene, "dialog-button-tooltip");
+    assert.equal(buttonTooltip?.format, "minimessage");
+    const inputLabel = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","add_member_duration","inputs","days","label"]',
+    );
+    assert.equal(inputLabel?.scene, "dialog-input-label");
+    assert.equal(inputLabel?.format, "minimessage");
+    const bodyText = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","add_member_duration","bodies","info","text"]',
+    );
+    assert.equal(bodyText?.scene, "dialog-body-text");
+    assert.equal(bodyText?.format, "minimessage");
+    const dialogTitle = plannedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["dialogs","input","title"]',
+    );
+    assert.equal(dialogTitle?.category, "dialog-string");
+    assert.equal(dialogTitle?.format, "minimessage");
+    assert.equal(
+      plannedMessages.some(({ path }) =>
+        JSON.stringify(path).includes("material"),
+      ),
+      false,
+    );
+    const categoryDescription = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","categories","members","description"]',
+    );
+    assert.equal(categoryDescription?.category, "configuration-string-list");
+    assert.equal(categoryDescription?.scene, "category-description");
+    assert.equal(categoryDescription?.format, "legacy-color-minimessage");
+    const categoryName = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","categories","members","name"]',
+    );
+    assert.equal(categoryName?.scene, "category-name");
+    assert.equal(categoryName?.format, "legacy-color-minimessage");
+    const levelTitle = plannedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["land","levels","2","title"]',
+    );
+    assert.equal(levelTitle?.scene, "level-title");
+    assert.equal(levelTitle?.format, "legacy-color-minimessage");
+    const attributeDescription = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","levels","1","attributes","chunks","description"]',
+    );
+    assert.equal(attributeDescription?.scene, "level-attribute-description");
+    assert.equal(
+      attributeDescription?.format,
+      "legacy-color-variable-minimessage",
+    );
+    const requirementTitle = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","levels","2","requirements","members","title"]',
+    );
+    assert.equal(requirementTitle?.format, "legacy-variable-minimessage");
+    const roleName = plannedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["land","roles","owner","name"]',
+    );
+    assert.equal(roleName?.scene, "role-name");
+    assert.equal(roleName?.format, "legacy-color-minimessage");
+    const requirementDescription = plannedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","levels","2","requirements","members","description"]',
+    );
+    assert.equal(requirementDescription?.category, "configuration-string-list");
+    assert.equal(
+      requirementDescription?.format,
+      "legacy-color-variable-minimessage",
+    );
+    assert.deepEqual(await snapshotProjectFiles(directory), beforePreview);
+
+    const candidateJar = join(directory, "Lands-8.9.2.jar");
+    const changedDialogSource = dialogSource
+      .replace("title: Input", "title: Text Input")
+      .replace("type: number-range", "type: text")
+      .replace("start: 0", "start: 1")
+      .replace("material: NAME_TAG", "material: PAPER")
+      .replace("hide-tooltip: true", "hide-tooltip: 'enabled'");
+    const changedCategoriesSource = categoriesSource
+      .replace("allow-auto-accept: true", "allow-auto-accept: false")
+      .replace(
+        "&7This land is actively searching",
+        "&7New members are welcome",
+      );
+    const changedCategories = parseYaml(changedCategoriesSource) as {
+      land: { categories: Record<string, unknown> };
+    };
+    delete changedCategories.land.categories.mobfarm;
+    const candidateCategoriesSource = stringifyYaml(changedCategories);
+    const changedLevelsSource = levelsSource
+      .replace("value: 0", "value: 5")
+      .replace(
+        "&7Trust {req} players in this land.",
+        "&7Trust {req} residents in this land.",
+      )
+      .replace("reached: [ ]", "reached: ['say updated']");
+    const changedRolesSource = rolesSource
+      .replace(
+        "skin:83f642814fa2551e7763d04060c532adea51015cbfe030cbb78e82c92092a6fb",
+        "DIAMOND",
+      )
+      .replace("      default: 'ALL'", "");
+    const changedRoles = parseYaml(changedRolesSource) as {
+      land: { roles: { owner: Record<string, unknown> } };
+    };
+    changedRoles.land.roles.owner["custom-flags"] = {};
+    const candidateRolesSource = stringifyYaml(changedRoles);
+    await writeFile(
+      candidateJar,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(changedDialogSource),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(candidateCategoriesSource),
+        "levels.yml": strToU8(changedLevelsSource),
+        "roles.yml": strToU8(candidateRolesSource),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    const beforeChangedPreview = await snapshotProjectFiles(directory);
+    const changedPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(changedPreview.status, 0, changedPreview.stderr);
+    const changedPlan = readEnvelope(changedPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    const changedStructures = changedPlan.structures as readonly Record<
+      string,
+      unknown
+    >[];
+    const inputTypeStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","add_member_duration","inputs","days","type"]',
+    );
+    assert.equal(inputTypeStructure?.action, "update");
+    assert.equal(inputTypeStructure?.previous, "custom");
+    assert.equal(inputTypeStructure?.expected, "text");
+    const migratedStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","land_create","bodies","tag","item","hide-tooltip"]',
+    );
+    assert.equal(migratedStructure?.action, "update");
+    assert.equal(migratedStructure?.previous, true);
+    assert.equal(migratedStructure?.expected, "enabled");
+    const commandStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","levels","2","commands","reached"]',
+    );
+    assert.equal(commandStructure?.action, "update");
+    assert.deepEqual(commandStructure?.expected, ["say updated"]);
+    const removedRoleStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","roles","owner","default"]',
+    );
+    assert.equal(removedRoleStructure?.action, "delete");
+    assert.equal(removedRoleStructure?.previous, "local-default");
+    const targetOnlyRoleOption = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","roles","owner","local-option"]',
+    );
+    assert.equal(targetOnlyRoleOption?.action, "preserve");
+    assert.equal(targetOnlyRoleOption?.previous, "保留");
+    const deletedCategoryStructure = changedStructures.find(
+      ({ path }) => JSON.stringify(path) === '["land","categories","mobfarm"]',
+    );
+    assert.equal(deletedCategoryStructure?.action, "delete");
+    const emptyMapStructure = changedStructures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["land","roles","owner","custom-flags"]',
+    );
+    assert.equal(emptyMapStructure?.action, "update");
+    assert.deepEqual(emptyMapStructure?.expected, {});
+    assert.equal(
+      changedStructures.some(
+        ({ path }) => JSON.stringify(path) === '["dialogs","input","title"]',
+      ),
+      false,
+    );
+    const changedMessages = changedPlan.messages as readonly Record<
+      string,
+      unknown
+    >[];
+    const resetDialogTitle = changedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["dialogs","input","title"]',
+    );
+    assert.equal(resetDialogTitle?.action, "reset");
+    assert.equal(resetDialogTitle?.previousTarget, "输入");
+    const resetDescription = changedMessages.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","categories","members","description"]',
+    );
+    assert.equal(resetDescription?.action, "reset");
+    assert.deepEqual(resetDescription?.previousTarget, [
+      "正在招募",
+      "请联系领主",
+    ]);
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeChangedPreview,
+    );
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const updatedDialog = parseYaml(
+      await readFile(join(directory, "Locale/zh-CN_dialogs.yml"), "utf8"),
+    ) as {
+      readonly dialogs: {
+        readonly input: { readonly title: string };
+        readonly add_member_duration: {
+          readonly inputs: {
+            readonly days: { readonly type: string; readonly start: number };
+          };
+        };
+        readonly land_create: {
+          readonly bodies: {
+            readonly tag: {
+              readonly item: {
+                readonly material: string;
+                readonly "hide-tooltip": string;
+              };
+            };
+          };
+        };
+      };
+    };
+    assert.equal(updatedDialog.dialogs.input.title, "Text Input");
+    assert.equal(
+      updatedDialog.dialogs.add_member_duration.inputs.days.type,
+      "text",
+    );
+    assert.equal(
+      updatedDialog.dialogs.add_member_duration.inputs.days.start,
+      1,
+    );
+    assert.equal(
+      updatedDialog.dialogs.land_create.bodies.tag.item.material,
+      "PAPER",
+    );
+    assert.equal(
+      updatedDialog.dialogs.land_create.bodies.tag.item["hide-tooltip"],
+      "enabled",
+    );
+    const updatedCategories = parseYaml(
+      await readFile(join(directory, "zh/categories.yml"), "utf8"),
+    ) as {
+      readonly land: {
+        readonly categories: {
+          readonly members: {
+            readonly name: string;
+            readonly enabled: boolean;
+            readonly "allow-auto-accept": boolean;
+            readonly description: readonly string[];
+          };
+          readonly [key: string]: unknown;
+        };
+      };
+    };
+    assert.equal(updatedCategories.land.categories.members.name, "招募成员");
+    assert.equal("mobfarm" in updatedCategories.land.categories, false);
+    assert.equal(updatedCategories.land.categories.members.enabled, true);
+    assert.equal(
+      updatedCategories.land.categories.members["allow-auto-accept"],
+      false,
+    );
+    assert.deepEqual(updatedCategories.land.categories.members.description, [
+      "&7New members are welcome",
+      "&7for new members.",
+    ]);
+    const updatedLevels = parseYaml(
+      await readFile(join(directory, "zh/levels.yml"), "utf8"),
+    ) as {
+      readonly land: {
+        readonly levels: {
+          readonly "1": {
+            readonly attributes: {
+              readonly chunks: { readonly value: number };
+            };
+          };
+          readonly "2": {
+            readonly commands: { readonly reached: readonly string[] };
+            readonly requirements: {
+              readonly members: { readonly description: readonly string[] };
+            };
+          };
+        };
+      };
+    };
+    assert.equal(updatedLevels.land.levels["1"].attributes.chunks.value, 5);
+    assert.deepEqual(updatedLevels.land.levels["2"].commands.reached, [
+      "say updated",
+    ]);
+    assert.deepEqual(
+      updatedLevels.land.levels["2"].requirements.members.description,
+      ["&7Trust {req} residents in this land.", "&7Command: &e/lands trust"],
+    );
+    const updatedRoles = parseYaml(
+      await readFile(join(directory, "zh/roles.yml"), "utf8"),
+    ) as {
+      readonly land: {
+        readonly roles: {
+          readonly owner: {
+            readonly name: string;
+            readonly icon: string;
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+    };
+    assert.equal(updatedRoles.land.roles.owner.name, "主人");
+    assert.equal(updatedRoles.land.roles.owner.icon, "DIAMOND");
+    assert.equal("default" in updatedRoles.land.roles.owner, false);
+    assert.deepEqual(updatedRoles.land.roles.owner["custom-flags"], {});
+    assert.equal(
+      (updatedRoles.land.roles.owner as Record<string, unknown>)[
+        "local-option"
+      ],
+      "保留",
+    );
+
+    const roleTargetFile = join(directory, "zh/roles.yml");
+    const owner = updatedRoles.land.roles.owner as Record<string, unknown>;
+    owner["custom-flags"] = { "local-option": "保留的子项" };
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const customFlagStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(customFlagStatus.status, 0, customFlagStatus.stderr);
+
+    delete owner["custom-flags"];
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const missingCustomFlagStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(missingCustomFlagStatus.status, 1);
+    assert.ok(
+      (
+        readReport(
+          missingCustomFlagStatus.stdout || missingCustomFlagStatus.stderr,
+        ).diagnostics as readonly Record<string, unknown>[]
+      ).some(
+        ({ code, location }) =>
+          code === "structure.definition-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["land","roles","owner","custom-flags"]',
+      ),
+    );
+
+    owner["custom-flags"] = "结构类型冲突";
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const wrongTypeCustomFlagStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(wrongTypeCustomFlagStatus.status, 1);
+    assert.ok(
+      (
+        readReport(
+          wrongTypeCustomFlagStatus.stdout || wrongTypeCustomFlagStatus.stderr,
+        ).diagnostics as readonly Record<string, unknown>[]
+      ).some(
+        ({ code, location }) =>
+          code === "structure.definition-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["land","roles","owner","custom-flags"]',
+      ),
+    );
+
+    owner["custom-flags"] = { "local-option": "保留的子项" };
+    await writeFile(roleTargetFile, stringifyYaml(updatedRoles));
+    const customFlagPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(customFlagPreview.status, 0, customFlagPreview.stderr);
+    const customFlagStructures = readEnvelope(customFlagPreview.stdout).data
+      ?.plan as { readonly structures: readonly Record<string, unknown>[] };
+    assert.ok(
+      customFlagStructures.structures.some(
+        ({ path, action }) =>
+          JSON.stringify(path) ===
+            '["land","roles","owner","custom-flags","local-option"]' &&
+          action === "preserve",
+      ),
+    );
+
+    const appliedDialogFile = join(directory, "Locale/zh-CN_dialogs.yml");
+    const driftedDialog = parseYaml(
+      await readFile(appliedDialogFile, "utf8"),
+    ) as {
+      dialogs: {
+        add_member_duration: { inputs: { days: { type: string } } };
+      };
+    };
+    driftedDialog.dialogs.add_member_duration.inputs.days.type = "local-drift";
+    await writeFile(appliedDialogFile, stringifyYaml(driftedDialog));
+    const driftStatus = runCli(
+      "status",
+      "--project",
+      directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(driftStatus.status, 1);
+    const driftDiagnostics = readReport(
+      driftStatus.stdout || driftStatus.stderr,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      driftDiagnostics.some(
+        ({ code, location }) =>
+          code === "structure.definition-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["dialogs","add_member_duration","inputs","days","type"]',
+      ),
+    );
+    const beforeStructureDriftPreview = await snapshotProjectFiles(directory);
+    const structureDriftPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(structureDriftPreview.status, 0, structureDriftPreview.stderr);
+    const structureDriftPlan = readEnvelope(structureDriftPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    const repairedType = (
+      structureDriftPlan.structures as readonly Record<string, unknown>[]
+    ).find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["dialogs","add_member_duration","inputs","days","type"]',
+    );
+    assert.equal(repairedType?.action, "update");
+    assert.equal(repairedType?.previous, "local-drift");
+    assert.equal(repairedType?.expected, "text");
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeStructureDriftPreview,
+    );
+    const structureDriftApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(structureDriftApplied.status, 0, structureDriftApplied.stderr);
+    const afterApply = await snapshotProjectFiles(directory);
+    const repeated = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    assert.deepEqual(await snapshotProjectFiles(directory), afterApply);
+
+    const rolesPath = join(directory, "zh/roles.yml");
+    const malformedRoles = parseYaml(await readFile(rolesPath, "utf8")) as {
+      land: { roles: { owner: { icon: unknown } } };
+    };
+    malformedRoles.land.roles.owner.icon = { material: "DIAMOND" };
+    await writeFile(rolesPath, stringifyYaml(malformedRoles));
+    const beforeMalformedStructurePreview =
+      await snapshotProjectFiles(directory);
+    const malformedStructurePreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(malformedStructurePreview.status, 1);
+    const malformedStructureEnvelope = readEnvelope(
+      malformedStructurePreview.stdout || malformedStructurePreview.stderr,
+    );
+    assert.equal(malformedStructureEnvelope.kind, "failure");
+    const malformedStructureResult = malformedStructureEnvelope.data
+      ?.preview as Record<string, unknown>;
+    assert.equal(malformedStructureResult.ready, false);
+    assert.equal(
+      (
+        malformedStructureResult.blockers as readonly Record<string, unknown>[]
+      )[0]?.code,
+      "sync.structure-target-path-type",
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeMalformedStructurePreview,
+    );
+    malformedRoles.land.roles.owner.icon = "DIAMOND";
+    await writeFile(rolesPath, stringifyYaml(malformedRoles));
+
+    const badJar = join(directory, "Lands-invalid-description.jar");
+    const malformedCategories = parseYaml(candidateCategoriesSource) as {
+      land: { categories: { members: { description: string | string[] } } };
+    };
+    malformedCategories.land.categories.members.description = "&7Market";
+    await writeFile(
+      badJar,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(changedDialogSource),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(stringifyYaml(malformedCategories)),
+        "levels.yml": strToU8(changedLevelsSource),
+        "roles.yml": strToU8(candidateRolesSource),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    const beforeInvalidPreview = await snapshotProjectFiles(directory);
+    const invalidPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      badJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.notEqual(invalidPreview.status, 0);
+    assert.match(invalidPreview.stdout + invalidPreview.stderr, /type|类型/i);
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeInvalidPreview,
+    );
+
+    const configPath = join(directory, ".l10n/config.yml");
+    const releasedTranslation = parseYaml(
+      await readFile(join(directory, "zh/categories.yml"), "utf8"),
+    ) as {
+      land: { categories: { members: { description: string[] } } };
+    };
+    releasedTranslation.land.categories.members.description = [
+      "仍在招募成员",
+      "请联系领主",
+    ];
+    await writeFile(
+      join(directory, "zh/categories.yml"),
+      stringifyYaml(releasedTranslation),
+    );
+    const configWithDescription = await readFile(configPath, "utf8");
+    const releasedDescriptionField = [
+      '        - path: [land, categories, "*", description]',
+      "          category: configuration-string-list",
+      "          scene: category-description",
+      "",
+    ].join("\n");
+    assert.ok(configWithDescription.includes(releasedDescriptionField));
+    await writeFile(
+      configPath,
+      configWithDescription.replace(releasedDescriptionField, ""),
+    );
+    const descriptionBeforeScopeRelease = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    const beforeScopeReleasePreview = await snapshotProjectFiles(directory);
+    const scopeReleasePreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(scopeReleasePreview.status, 0, scopeReleasePreview.stderr);
+    const scopeReleasePlan = readEnvelope(scopeReleasePreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    assert.equal(
+      (scopeReleasePlan.messages as readonly Record<string, unknown>[]).some(
+        ({ path, action }) =>
+          JSON.stringify(path) ===
+            '["land","categories","members","description"]' &&
+          action === "delete",
+      ),
+      false,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeScopeReleasePreview,
+    );
+    const scopeReleaseApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(scopeReleaseApplied.status, 0, scopeReleaseApplied.stderr);
+    const descriptionAfterScopeRelease = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(
+      descriptionAfterScopeRelease,
+      descriptionBeforeScopeRelease,
+    );
+    const afterScopeRelease = await snapshotProjectFiles(directory);
+    const repeatedScopeRelease = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeatedScopeRelease.status, 0, repeatedScopeRelease.stderr);
+    const descriptionAfterRepeatedRelease = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(
+      descriptionAfterRepeatedRelease,
+      descriptionBeforeScopeRelease,
+    );
+    assert.deepEqual(await snapshotProjectFiles(directory), afterScopeRelease);
+    const categoriesChangedWhileReleased = candidateCategoriesSource
+      .replace("&7New members are welcome", "&7Changed while unselected")
+      .replace("&7for new members.", "&7Updated while unselected.");
+    const releasedSourceJar = join(directory, "Lands-8.9.3.jar");
+    await writeFile(
+      releasedSourceJar,
+      zipSync({
+        "Locale/en-US_dialogs.yml": strToU8(changedDialogSource),
+        "Locale/Nations/en-US_dialogs.yml": strToU8(nationDialogSource),
+        "categories.yml": strToU8(categoriesChangedWhileReleased),
+        "levels.yml": strToU8(changedLevelsSource),
+        "roles.yml": strToU8(candidateRolesSource),
+        "plugin.yml": strToU8("name: Lands\n"),
+      }),
+    );
+    const beforeChangedReleasedPreview = await snapshotProjectFiles(directory);
+    const changedReleasedPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      changedReleasedPreview.status,
+      0,
+      changedReleasedPreview.stderr,
+    );
+    const changedReleasedPlan = readEnvelope(changedReleasedPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    assert.equal(
+      (changedReleasedPlan.messages as readonly Record<string, unknown>[]).some(
+        ({ path }) =>
+          JSON.stringify(path) ===
+          '["land","categories","members","description"]',
+      ),
+      false,
+    );
+    assert.equal(
+      (
+        changedReleasedPlan.structures as readonly Record<string, unknown>[]
+      ).some(
+        ({ path, action }) =>
+          JSON.stringify(path) ===
+            '["land","categories","members","description"]' &&
+          action !== "preserve",
+      ),
+      false,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      beforeChangedReleasedPreview,
+    );
+    const changedReleasedApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      changedReleasedApplied.status,
+      0,
+      changedReleasedApplied.stderr,
+    );
+    const descriptionAfterReleasedSourceChange = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(
+      descriptionAfterReleasedSourceChange,
+      descriptionBeforeScopeRelease,
+    );
+    const afterChangedReleasedSync = await snapshotProjectFiles(directory);
+    const repeatedChangedReleasedSync = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      repeatedChangedReleasedSync.status,
+      0,
+      repeatedChangedReleasedSync.stderr,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(directory),
+      afterChangedReleasedSync,
+    );
+    const baseline = JSON.parse(
+      await readFile(
+        join(directory, ".l10n/upstream/source-baseline.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly releasedTranslationPaths?: readonly {
+        readonly sourceFile: string;
+        readonly targetFile: string;
+        readonly path: readonly string[];
+      }[];
+    };
+    assert.deepEqual(baseline.releasedTranslationPaths, [
+      {
+        sourceFile: "categories.yml",
+        targetFile: "zh/categories.yml",
+        path: ["land", "categories", "members", "description"],
+      },
+      {
+        sourceFile: "categories.yml",
+        targetFile: "zh/categories.yml",
+        path: ["land", "categories", "pvp", "description"],
+      },
+      {
+        sourceFile: "categories.yml",
+        targetFile: "zh/categories.yml",
+        path: ["land", "categories", "shop", "description"],
+      },
+    ]);
+    for (const command of ["status", "check"]) {
+      const reportResult = runCli(
+        command,
+        "--project",
+        directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(reportResult.stdout || reportResult.stderr);
+      assert.ok(
+        !(report.diagnostics as readonly Record<string, unknown>[]).some(
+          ({ code }) => code === "structure.definition-mismatch",
+        ),
+      );
+    }
+    const selectedAgainConfig = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      selectedAgainConfig.replace(
+        "    - source: levels.yml",
+        `${releasedDescriptionField}    - source: levels.yml`,
+      ),
+    );
+    const reselectedPreview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(reselectedPreview.status, 0, reselectedPreview.stderr);
+    const reselectedPlan = readEnvelope(reselectedPreview.stdout).data
+      ?.plan as Record<string, unknown>;
+    const reselectedDescription = (
+      reselectedPlan.messages as readonly Record<string, unknown>[]
+    ).filter(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["land","categories","members","description"]',
+    );
+    assert.deepEqual(
+      reselectedDescription.map(({ action, reason }) => ({ action, reason })),
+      [{ action: "seed", reason: "new-message" }],
+    );
+    const reselectedApplied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      releasedSourceJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(reselectedApplied.status, 0, reselectedApplied.stderr);
+    const descriptionAfterReselection = (
+      parseYaml(
+        await readFile(join(directory, "zh/categories.yml"), "utf8"),
+      ) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    const selectedSourceDescription = (
+      parseYaml(categoriesChangedWhileReleased) as {
+        readonly land: {
+          readonly categories: {
+            readonly members: { readonly description: readonly string[] };
+          };
+        };
+      }
+    ).land.categories.members.description;
+    assert.deepEqual(descriptionAfterReselection, selectedSourceDescription);
+    const reselectedBaseline = JSON.parse(
+      await readFile(
+        join(directory, ".l10n/upstream/source-baseline.json"),
+        "utf8",
+      ),
+    ) as { readonly releasedTranslationPaths?: readonly unknown[] };
+    assert.equal(reselectedBaseline.releasedTranslationPaths, undefined);
+  });
+
+  void it("沿显式场景选择器读取对话框并保留 GUI lore 列表译文", async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "lands-l10n-dialog-"));
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    await mkdir(join(directory, "Locale"), { recursive: true });
+
+    const source = [
+      "dialogs:",
+      "  announcement:",
+      "    title: <t:heading>Notice",
+      "    bodies:",
+      "      icon:",
+      "        item:",
+      "          material: STONE",
+      "          name: '&aBeacon'",
+      "          lore: '&7A useful marker'",
+      "          hide-tooltip: true",
+      "",
+    ].join("\n");
+    const target = [
+      "dialogs:",
+      "  announcement:",
+      "    title: <t:heading>通知",
+      "    bodies:",
+      "      icon:",
+      "        item:",
+      "          material: STONE",
+      "          name: <green>信标",
+      "          lore:",
+      "            - 第一行",
+      "            - 第二行",
+      "          hide-tooltip: true",
+      "",
+    ].join("\n");
+    await writeFile(join(directory, "Locale/zh-CN_dialogs.yml"), target);
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+        "resources:",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "  - path: Locale/en-US_dialogs.yml",
+        "    purpose: dialog-language",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: Locale/en-US_dialogs.yml",
+        "      target: Locale/zh-CN_dialogs.yml",
+        "      definitionsSource: Locale/en-US_dialogs.yml",
+        "      fields:",
+        '        - path: [dialogs, "*", title]',
+        "          category: dialog-string",
+        "          scene: dialog-title",
+        '        - path: [dialogs, "*", bodies, "*", item, name]',
+        "          category: gui-string",
+        "          scene: gui-item-name",
+        '        - path: [dialogs, "*", bodies, "*", item, lore]',
+        "          category: gui-lore",
+        "          scene: gui-item-lore",
+        "",
+      ].join("\n"),
+    );
+    const jarFile = join(directory, "Lands.jar");
+    await writeFile(
+      jarFile,
+      zipSync({
+        "plugin.yml": strToU8("name: Lands\n"),
+        "Locale/en-US_dialogs.yml": strToU8(source),
+      }),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.equal(
+      (readReport(initialized.stdout).summary as Record<string, unknown>)
+        .messages,
+      3,
+    );
+
+    const preview = runCli(
+      "sync",
+      "--dry-run",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const envelope = readEnvelope(preview.stdout);
+    const plan = (envelope.data as Record<string, unknown>).plan as {
+      messages: readonly {
+        action: string;
+        category: string;
+        format?: string;
+        scene?: string;
+      }[];
+    };
+    assert.equal(plan.messages.length, 3);
+    assert.deepEqual(
+      plan.messages
+        .map(({ action, category, format, scene }) => ({
+          action,
+          category,
+          format,
+          scene,
+        }))
+        .sort((left, right) => left.category.localeCompare(right.category)),
+      [
+        {
+          action: "preserve",
+          category: "dialog-string",
+          format: "minimessage",
+          scene: "dialog-title",
+        },
+        {
+          action: "preserve",
+          category: "gui-lore",
+          format: "legacy-color-minimessage",
+          scene: "gui-item-lore",
+        },
+        {
+          action: "preserve",
+          category: "gui-string",
+          format: "legacy-color-minimessage",
+          scene: "gui-item-name",
+        },
+      ],
+    );
+    const targetAfter = await readFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      "utf8",
+    );
+    assert.match(targetAfter, /material: STONE/);
+    assert.match(targetAfter, /hide-tooltip: true/);
+    assert.match(targetAfter, /- 第一行\n            - 第二行/);
+  });
+
+  void it("配置文本动态 ID 用显式 selector 进入初始化映射", async (t) => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "lands-l10n-config-fields-"),
+    );
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    const targetPath = join(directory, "Locale/zh-CN_categories.yml");
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(
+      targetPath,
+      [
+        "land:",
+        "  categories:",
+        "    peaceful:",
+        "      name: 和平",
+        "      description: [不会发生战斗]",
+        "      enabled: true",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+        "resources:",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "  - path: categories.yml",
+        "    purpose: configuration",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: categories.yml",
+        "      target: Locale/zh-CN_categories.yml",
+        "      definitionsSource: categories.yml",
+        "      fields:",
+        '        - path: [land, categories, "*", name]',
+        "          category: configuration-string",
+        "          scene: category-name",
+        '        - path: [land, categories, "*", description]',
+        "          category: configuration-string-list",
+        "          scene: category-description",
+        "",
+      ].join("\n"),
+    );
+    const jarFile = join(directory, "Lands.jar");
+    await writeFile(
+      jarFile,
+      zipSync({
+        "plugin.yml": strToU8("name: Lands\n"),
+        "categories.yml": strToU8(
+          [
+            "land:",
+            "  categories:",
+            "    peaceful:",
+            "      name: Peaceful",
+            "      description: [No combat here]",
+            "      enabled: true",
+            "",
+          ].join("\n"),
+        ),
+      }),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal((report.summary as Record<string, unknown>).messages, 2);
+  });
+
+  void it("初始化三模块 GUI 时保留中文和已合入的结构定义", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const report = readReport(initialized.stdout);
+    assert.equal((report.summary as Record<string, unknown>).messages, 14);
+    const mainTarget = await readFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      "utf8",
+    );
+    const nationTarget = await readFile(
+      join(project.directory, "Locale/Nations/zh-CN_gui.yml"),
+      "utf8",
+    );
+    const warTarget = await readFile(
+      join(project.directory, "Locale/Wars/zh-CN_gui.yml"),
+      "utf8",
+    );
+    assert.match(mainTarget, /all: <green>所有<\/green>/);
+    assert.match(mainTarget, /name: <t:regular_heading>选区工具/);
+    assert.match(mainTarget, /material: GOLDEN_HOE/);
+    assert.match(
+      mainTarget,
+      /material: skin:8449b9318e33158e64a46ab0de121c3d40000e3332c1574932b3c849d8fa0dc2/,
+    );
+    assert.match(nationTarget, /name: <t:regular_heading>联邦职位/);
+    assert.match(nationTarget, /material: INHERIT/);
+    assert.match(warTarget, /name: <t:negative_heading>攻方/);
+    assert.match(warTarget, /material: IRON_SWORD/);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const checkReport = readReport(checked.stdout || checked.stderr);
+    const diagnostics = checkReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.equal(
+      diagnostics.some(({ code }) =>
+        ["message.extra", "message.type-mismatch"].includes(String(code)),
+      ),
+      false,
+    );
+    const coverage = checkReport.coverage as Record<string, unknown>;
+    assert.equal(
+      (coverage.unavailableCapabilities as string[]).some((capability) =>
+        capability.includes("GUI 语言资源"),
+      ),
+      false,
+    );
+
+    const invalidMainTarget = mainTarget.replace(
+      /    lore:\n(?:      - [^\n]*\n)+(?=    material: GOLDEN_HOE)/u,
+      "    lore: 7\n",
+    );
+    assert.notEqual(invalidMainTarget, mainTarget);
+    await writeFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      invalidMainTarget,
+    );
+    const invalidCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const invalidReport = readReport(
+      invalidCheck.stdout || invalidCheck.stderr,
+    );
+    const invalidDiagnostics = invalidReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      invalidDiagnostics.some(
+        ({ code, location }) =>
+          code === "message.type-mismatch" &&
+          JSON.stringify((location as Record<string, unknown>).path) ===
+            '["physical","selection","lore"]',
+      ),
+    );
+  });
+
+  void it("同步 GUI 外部 definitions 的结构改动并保留已译文本", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    const originalTarget = await readFile(targetPath);
+    const definitions = await readFile(
+      join(guiFixtureDirectory, "main-definitions.yml"),
+      "utf8",
+    );
+    const changedDefinitions = definitions
+      .replace("material: GOLDEN_HOE", "material: IRON_HOE")
+      .replace("slots: 11", "slots: 12");
+    assert.notEqual(changedDefinitions, definitions);
+    const candidateJar = join(project.directory, "candidate.jar");
+    await writeGuiJar(
+      candidateJar,
+      {},
+      {
+        "Locale/definitions_gui.yml": changedDefinitions,
+      },
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const structures = plan.structures as readonly Record<string, unknown>[];
+    const material = structures.find(
+      ({ path }) =>
+        JSON.stringify(path) === '["physical","selection","material"]',
+    );
+    const slots = structures.find(
+      ({ path }) =>
+        JSON.stringify(path) ===
+        '["gui","main","items","default","lands","slots"]',
+    );
+    assert.equal(material?.action, "update");
+    assert.equal(material?.expected, "IRON_HOE");
+    assert.equal(slots?.action, "update");
+    assert.equal(slots?.expected, 12);
+    assert.ok(
+      (plan.inputSnapshots as readonly Record<string, unknown>[]).some(
+        ({ path }) => path === candidateJar,
+      ),
+    );
+    assert.ok(
+      (plan.messages as readonly Record<string, unknown>[]).every(
+        ({ action }) => action === "preserve",
+      ),
+    );
+    assert.deepEqual(await readFile(targetPath), originalTarget);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const updatedTarget = await readFile(targetPath, "utf8");
+    assert.match(updatedTarget, /material: IRON_HOE/);
+    assert.match(updatedTarget, /slots: 12/);
+    assert.match(updatedTarget, /name: <t:regular_heading>选区工具/);
+    assert.match(updatedTarget, /all: <green>所有<\/green>/);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const checkReport = readReport(checked.stdout || checked.stderr);
+    const diagnostics = checkReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.equal(
+      diagnostics.some(({ code }) => code === "structure.definition-mismatch"),
+      false,
+    );
+
+    const repeated = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    const repeatedPlan = readEnvelope(repeated.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(repeatedPlan.structures, []);
+    assert.equal(
+      (repeatedPlan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+  });
+
+  void it("递归 GUI selector 的前缀叶变分支时删除旧消息并新增子消息", async (t) => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "lands-l10n-gui-recursive-"),
+    );
+    t.after(async () => rm(directory, { force: true, recursive: true }));
+    await mkdir(join(directory, ".l10n"), { recursive: true });
+    await mkdir(join(directory, "Locale"), { recursive: true });
+
+    const targetPath = join(directory, "Locale/zh-CN_gui.yml");
+    await writeFile(targetPath, "general:\n  all: 全部\n");
+    await writeFile(
+      join(directory, ".l10n/config.yml"),
+      [
+        "schemaVersion: 1",
+        "source:",
+        '  version: "8.0.1"',
+        '  translationHistory: "review"',
+        "resources:",
+        "  - path: plugin.yml",
+        "    purpose: metadata",
+        "  - path: Locale/en-US_gui.yml",
+        "    purpose: gui-language",
+        "  - path: Locale/definitions_gui.yml",
+        "    purpose: configuration",
+        "translationScope:",
+        '  sourceLanguage: "en-US"',
+        '  targetLanguage: "zh-CN"',
+        "  mappings:",
+        "    - source: Locale/en-US_gui.yml",
+        "      target: Locale/zh-CN_gui.yml",
+        "      definitionsSource: Locale/definitions_gui.yml",
+        "      fields:",
+        '        - path: [general, all, "**"]',
+        "          category: gui-string",
+        "          scene: gui-general",
+        "",
+      ].join("\n"),
+    );
+
+    const jarFile = join(directory, "Lands.jar");
+    const writeSourceJar = async (source: string): Promise<void> =>
+      writeFile(
+        jarFile,
+        zipSync({
+          "plugin.yml": strToU8("name: Lands\n"),
+          "Locale/en-US_gui.yml": strToU8(source),
+          "Locale/definitions_gui.yml": strToU8("settings:\n  enabled: true\n"),
+        }),
+      );
+    await writeSourceJar("general:\n  all: All\n");
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.match(await readFile(targetPath, "utf8"), /all: 全部/);
+
+    await writeSourceJar("general:\n  all:\n    child: New\n");
+    const beforePreview = await snapshotProjectFiles(directory);
+    const preview = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldMessage = messages.find(
+      ({ path }) => JSON.stringify(path) === '["general","all"]',
+    );
+    assert.equal(oldMessage?.action, "delete");
+    assert.equal(oldMessage?.reason, "source-removed");
+    assert.equal(oldMessage?.previousTarget, "全部");
+    const newMessage = messages.find(
+      ({ path }) => JSON.stringify(path) === '["general","all","child"]',
+    );
+    assert.equal(newMessage?.action, "seed");
+    assert.equal(newMessage?.reason, "new-message");
+    assert.equal(newMessage?.target, "New");
+    assert.deepEqual(await snapshotProjectFiles(directory), beforePreview);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      directory,
+      "--jar",
+      jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedTarget = parseYaml(await readFile(targetPath, "utf8")) as {
+      readonly general: { readonly all: { readonly child: string } };
+      readonly settings: { readonly enabled: boolean };
+    };
+    assert.deepEqual(appliedTarget.general.all, { child: "New" });
+    assert.equal(appliedTarget.settings.enabled, true);
+  });
+
+  void it("GUI lore 从含换行标签的串改为列表时仍按严格原文重置", async (t) => {
+    const project = await createGuiProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const originalTarget = await readFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+    );
+    const mainSource = await readFile(
+      join(guiFixtureDirectory, "main-en.yml"),
+      "utf8",
+    );
+    const changedMainSource = mainSource.replace(
+      '    lore: "<t:regular>Use this tool to create a selection.<newline>Selections can be used for:<newline> <t:decoration>• </t><t:regular>Claiming<newline> <t:decoration>• </t><t:regular>Unclaiming<newline> <t:decoration>• </t><t:regular>Resizing areas"',
+      [
+        "    lore:",
+        "      - <t:regular>Use this tool to create a selection.",
+        "      - 'Selections can be used for:'",
+        "      - ' <t:decoration>• </t><t:regular>Claiming'",
+        "      - ' <t:decoration>• </t><t:regular>Unclaiming'",
+        "      - ' <t:decoration>• </t><t:regular>Resizing areas'",
+      ].join("\n"),
+    );
+    assert.notEqual(changedMainSource, mainSource);
+    const candidateJar = join(project.directory, "candidate.jar");
+    await writeGuiJar(candidateJar, {
+      "Locale/en-US_gui.yml": changedMainSource,
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const lore = messages.find(
+      ({ path }) => JSON.stringify(path) === '["physical","selection","lore"]',
+    );
+    const changedLore = [
+      "<t:regular>Use this tool to create a selection.",
+      "Selections can be used for:",
+      " <t:decoration>• </t><t:regular>Claiming",
+      " <t:decoration>• </t><t:regular>Unclaiming",
+      " <t:decoration>• </t><t:regular>Resizing areas",
+    ];
+    assert.equal(lore?.action, "reset");
+    assert.equal(lore?.reason, "source-changed");
+    assert.equal(typeof lore?.previousSource, "string");
+    assert.deepEqual(lore?.source, changedLore);
+    assert.deepEqual(lore?.target, changedLore);
+    assert.deepEqual(
+      await readFile(join(project.directory, "Locale/zh-CN_gui.yml")),
+      originalTarget,
+    );
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const updatedTarget = await readFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      "utf8",
+    );
+    assert.match(updatedTarget, /Use this tool to create a selection/);
+    assert.doesNotMatch(updatedTarget, /使用此工具创建选区/);
+
+    const repeated = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    const repeatedPlan = readEnvelope(repeated.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const repeatedMessages = repeatedPlan.messages as readonly Record<
+      string,
+      unknown
+    >[];
+    const preservedLore = repeatedMessages.find(
+      ({ path }) => JSON.stringify(path) === '["physical","selection","lore"]',
+    );
+    assert.equal(preservedLore?.action, "preserve");
+    assert.equal(preservedLore?.reason, "unchanged");
+    assert.equal(
+      (repeatedPlan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
     );
   });
 
@@ -1021,6 +3047,91 @@ void describe("CLI 制品", () => {
     assert.equal(appliedEnvelope.variant, "applied");
     assert.deepEqual(appliedEnvelope.data?.plan, plan);
     assert.doesNotMatch(await readFile(targetPath, "utf8"), /greeting|text/);
+  });
+
+  void it("通配聊天列表中的旧类型路径可由新子列表替换", async (t) => {
+    const project = await createProject(t);
+    await writeFile(
+      join(project.directory, ".l10n/config.yml"),
+      (
+        await readFile(join(project.directory, ".l10n/config.yml"), "utf8")
+      ).replace("[list, entries]", '[list, "**"]'),
+    );
+    await writeFile(
+      join(project.directory, "lang/zh.yml"),
+      [
+        "messages:",
+        "  greeting: 你好",
+        "list:",
+        "  greeting: [旧译文]",
+        "",
+      ].join("\n"),
+    );
+    const oldSource = [
+      "messages:",
+      "  greeting: Hello",
+      "  welcome: Welcome",
+      "  commands:",
+      "    registered: Run",
+      "list:",
+      "  greeting: [Hello]",
+      "",
+    ].join("\n");
+    await writeJar(project.jarFile, { source: oldSource });
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const newSource = [
+      "messages:",
+      "  greeting: Hello",
+      "  welcome: Welcome",
+      "  commands:",
+      "    registered: Run",
+      "list:",
+      "  greeting:",
+      "    child: [New]",
+      "",
+    ].join("\n");
+    await writeJar(project.jarFile, { source: newSource });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldList = messages.find(
+      ({ path }) => JSON.stringify(path) === '["list","greeting"]',
+    );
+    const newList = messages.find(
+      ({ path }) => JSON.stringify(path) === '["list","greeting","child"]',
+    );
+    assert.equal(oldList?.action, "delete");
+    assert.equal(oldList?.reason, "source-removed");
+    assert.deepEqual(oldList?.previousTarget, ["旧译文"]);
+    assert.equal(newList?.action, "seed");
+    assert.equal(newList?.reason, "new-message");
+    assert.deepEqual(newList?.target, ["New"]);
   });
 
   void it("旧标量消息变为分支时先删除旧身份再新增子消息", async (t) => {
