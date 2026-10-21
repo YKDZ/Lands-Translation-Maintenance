@@ -253,8 +253,18 @@ export interface ProjectView {
   readonly resources: readonly ResourceInventoryEntry[];
   readonly messages: readonly ObservedMessage[];
   readonly targetMessages: readonly TargetMessage[];
+  readonly structures: readonly ProjectStructure[];
   readonly fileIssues: readonly ProjectFileIssue[];
   readonly miniMessage?: MiniMessageParseProject;
+}
+
+export interface ProjectStructure {
+  readonly sourceFile: string;
+  readonly definitionsSource: string;
+  readonly targetFile: string;
+  readonly definitions: JsonValue;
+  readonly target: JsonValue | undefined;
+  readonly translationPaths: readonly (readonly string[])[];
 }
 
 export interface TargetMessage extends Omit<MessageIdentity, "id"> {
@@ -381,6 +391,16 @@ export interface SyncMessageChange {
   readonly target?: JsonValue;
 }
 
+export interface SyncStructureChange {
+  readonly sourceFile: string;
+  readonly definitionsSource: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
+  readonly action: "preserve" | "update" | "delete";
+  readonly previous?: JsonValue;
+  readonly expected?: JsonValue;
+}
+
 export interface SyncResourceChanges {
   readonly added: readonly string[];
   readonly removed: readonly string[];
@@ -428,6 +448,7 @@ export interface SyncPlan {
   readonly jarSha256: string;
   readonly resourceChanges: SyncResourceChanges;
   readonly messages: readonly SyncMessageChange[];
+  readonly structures: readonly SyncStructureChange[];
   readonly targetFiles: readonly SyncTargetFilePlan[];
   readonly unmanagedTargets: readonly string[];
   readonly pendingTranslations: readonly string[];

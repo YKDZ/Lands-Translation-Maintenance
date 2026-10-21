@@ -114,6 +114,17 @@ const syncPlanSchema = z.object({
       target: jsonValueSchema.optional(),
     }),
   ),
+  structures: z.array(
+    z.object({
+      sourceFile: z.string(),
+      definitionsSource: z.string(),
+      targetFile: z.string(),
+      path: z.array(z.string()),
+      action: z.enum(["preserve", "update", "delete"]),
+      previous: jsonValueSchema.optional(),
+      expected: jsonValueSchema.optional(),
+    }),
+  ),
   targetFiles: z.array(
     z.object({
       path: z.string(),

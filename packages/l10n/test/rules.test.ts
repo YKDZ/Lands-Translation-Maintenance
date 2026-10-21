@@ -24,6 +24,7 @@ const sampleProject: ProjectView = {
     },
   ],
   targetMessages: [],
+  structures: [],
   fileIssues: [],
 };
 
