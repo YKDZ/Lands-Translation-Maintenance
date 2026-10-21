@@ -258,6 +258,175 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
   });
 
+  void it("按实际 Nations 资源路径检查地图描述与首都 spawn", async (t) => {
+    for (const sourceVersion of ["8.0.1", "8.9.2"]) {
+      const nationDescription =
+        '<div><a href=/keep title="Nation"><v:land></a> <v:level></div>';
+      const targetNationDescription =
+        '<div><a href=/drop title="联邦"><v:land></a> <v:level></div>';
+      const capitalSpawn =
+        "<div><a href=/spawn>Capital <v:public> /<v:cmd></a></div>";
+      const targetCapitalSpawn =
+        "<div><a href=/spawn>首都 <v:public> /<v:cmd></a></div>";
+      const rootNationDescription = "<div><a href=/root-keep>Nation</a></div>";
+      const targetRootNationDescription =
+        "<div><a href=/root-drop>联邦</a></div>";
+      const rootCapitalSpawn = "<div><a href=/root-spawn>Capital</a></div>";
+      const targetRootCapitalSpawn = "<div><a href=/root-spawn>首都</a></div>";
+      const project = await createFormatProject(t, {
+        sourceVersion,
+        nationsMapDescription: nationDescription,
+        targetNationsMapDescription: targetNationDescription,
+        nationsCapitalSpawn: capitalSpawn,
+        targetNationsCapitalSpawn: targetCapitalSpawn,
+        rootNationsMapDescription: rootNationDescription,
+        targetRootNationsMapDescription: targetRootNationDescription,
+        rootNationsCapitalSpawn: rootCapitalSpawn,
+        targetRootNationsCapitalSpawn: targetRootCapitalSpawn,
+      });
+      const { checked, report } = initAndCheck(project);
+      const view = await inspectTranslatableView(project.directory);
+      const findings = diagnostics(report);
+      const nationsMapFindings = findings.filter((finding) => {
+        const message = finding.message as
+          | {
+              readonly sourceFile?: string;
+              readonly path?: readonly string[];
+            }
+          | undefined;
+        return (
+          message?.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path?.[0] === "general" &&
+          message.path?.[1] === "integration"
+        );
+      });
+      const unknownHtmlTags = nationsMapFindings.filter(
+        (finding) => finding.code === "minimessage.tag-unknown",
+      );
+      const hrefFinding = nationsMapFindings.find((finding) => {
+        const message = finding.message as
+          | { readonly path?: readonly string[] }
+          | undefined;
+        return (
+          finding.code === "map-html.behavior-attribute-mismatch" &&
+          JSON.stringify(message?.path) ===
+            JSON.stringify([
+              "general",
+              "integration",
+              "dynmap",
+              "nation",
+              "description",
+            ])
+        );
+      });
+      const rootNationMessage = view.messages.find(
+        (message) =>
+          message.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path.join(".") === "integration.dynmap.nation.description",
+      );
+      const rootCapitalMessage = view.messages.find(
+        (message) =>
+          message.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path.join(".") === "integration.dynmap.capital.spawn",
+      );
+      const rootFindings = findings.filter((finding) => {
+        const message = finding.message as
+          | {
+              readonly sourceFile?: string;
+              readonly path?: readonly string[];
+            }
+          | undefined;
+        return (
+          message?.sourceFile === "Locale/Nations/en-US.yml" &&
+          message.path?.[0] === "integration"
+        );
+      });
+
+      assert.deepEqual(unknownHtmlTags, [], checked.stderr || checked.stdout);
+      assert.ok(hrefFinding, checked.stderr || checked.stdout);
+      assert.equal(
+        rootNationMessage?.format,
+        undefined,
+        "根级四段 Nations 路径不属于实际地图字段",
+      );
+      assert.equal(
+        rootCapitalMessage?.format,
+        undefined,
+        "根级四段首都路径不属于实际地图字段",
+      );
+      assert.ok(
+        rootFindings.some(
+          (finding) => finding.code === "minimessage.tag-unknown",
+        ),
+        "根级四段 HTML 应回到普通 MiniMessage 检查",
+      );
+      assert.ok(
+        rootFindings.every(
+          (finding) => !String(finding.code).startsWith("map-html."),
+        ),
+        "根级四段 HTML 不应进入地图检查",
+      );
+    }
+  });
+
+  void it("只接受地图调用实际提供的基础变量", async (t) => {
+    const suppliedByBaseResolver = [
+      "owner",
+      "world",
+      "x",
+      "z",
+      "level",
+      "nation",
+      "chunks",
+      "chunks_max",
+      "members",
+      "members_max",
+      "balance",
+      "upkeep",
+      "upkeep_next",
+      "created_at",
+      "taxes_next",
+    ];
+    const requiresPlayer = [
+      "balance_player",
+      "chunk_cost",
+      "taxes",
+      "player_chunks_used",
+      "player_chunks",
+    ];
+    const variables = [...suppliedByBaseResolver, ...requiresPlayer];
+    const source = `<div>${variables.map((name) => `<v:${name}>`).join(" ")}</div>`;
+
+    for (const sourceVersion of ["8.0.1", "8.9.2"]) {
+      const project = await createFormatProject(t, {
+        sourceVersion,
+        nationsMapDescription: source,
+        targetNationsMapDescription: source,
+      });
+      const { checked, report } = initAndCheck(project);
+      const findings = diagnostics(report).filter(
+        (finding) => finding.code === "map-html.variable-unknown",
+      );
+      const unknownVariables = new Set(
+        findings.map((finding) => {
+          const actual = finding.actual as
+            | { readonly variable?: string }
+            | undefined;
+          return actual?.variable;
+        }),
+      );
+
+      assert.ok(
+        suppliedByBaseResolver.every((name) => !unknownVariables.has(name)),
+        checked.stderr || checked.stdout,
+      );
+      assert.ok(
+        requiresPlayer.every((name) => unknownVariables.has(name)),
+        checked.stderr || checked.stdout,
+      );
+    }
+  });
+
   void it("诊断地图 HTML 中行为属性变化并定位到对应消息", async (t) => {
     const project = await createFormatProject(t, {
       targetMapDescription:
