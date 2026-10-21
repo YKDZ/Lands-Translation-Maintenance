@@ -18,11 +18,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json --pretty false",
+    "build:minimessage": "node --conditions=source scripts/build-minimessage.ts",
     "format:check": "oxfmt --list-different .",
     "format:write": "oxfmt --write .",
     "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
     "lint:fix": "oxlint --format=unix . --fix",
-    "test": "node --conditions=source --test --test-reporter=spec --test-reporter=./scripts/node-test-count-reporter.ts --test-reporter-destination=stdout --test-reporter-destination=stderr 'test/**/*.test.ts'",
+    "test": "node --conditions=source --test --test-reporter=spec --test-reporter=./scripts/node-test-count-reporter.ts --test-reporter-destination=stdout --test-reporter-destination=stderr 'test/*.test.ts'",
+    "test:minimessage": "node --conditions=source --test --test-reporter=spec --test-reporter=./scripts/node-test-count-reporter.ts --test-reporter-destination=stdout --test-reporter-destination=stderr test/minimessage/cli.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {

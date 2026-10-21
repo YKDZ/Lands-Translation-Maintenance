@@ -1,133 +1,18 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { describe, it, type TestContext } from "node:test";
-import { fileURLToPath } from "node:url";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { describe, it } from "node:test";
 
 import { initializeProject } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
 
-const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cliFile = resolve(packageDirectory, "dist/cli.js");
-
-function runCli(...args: string[]) {
-  return spawnSync(process.execPath, [cliFile, ...args], {
-    encoding: "utf8",
-  });
-}
-
-async function createProject(
-  t: TestContext,
-  options: { readonly bedrockTheme?: string } = {},
-) {
-  const directory = await mkdtemp(join(tmpdir(), "lands-l10n-cli-"));
-  t.after(async () => rm(directory, { force: true, recursive: true }));
-
-  const jarFile = join(directory, "Lands.jar");
-  await mkdir(join(directory, "lang"), { recursive: true });
-  await writeFile(
-    jarFile,
-    zipSync({
-      "lang/en.yml": strToU8(
-        [
-          "messages:",
-          "  greeting: Hello",
-          "  welcome: Welcome",
-          "  commands:",
-          "    registered: Run",
-          "list:",
-          "  entries: [first, second]",
-          "",
-        ].join("\n"),
-      ),
-      "plugin.yml": strToU8("name: Lands\n"),
-      "settings.yml": strToU8("enabled: true\n"),
-      "Locale/theme.yml": strToU8(
-        'theme:\n  tokens:\n    regular: "<gray>"\n',
-      ),
-      "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
-      ...(options.bedrockTheme === undefined
-        ? {}
-        : { "bedrock/theme.yml": strToU8(options.bedrockTheme) }),
-      "me/lands/Plugin.class": strToU8("class bytes"),
-    }),
-  );
-  await writeFile(
-    join(directory, "lands-l10n.yaml"),
-    [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.0.1"',
-      '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
-      "resources:",
-      "  - path: lang/en.yml",
-      "    purpose: chat-language",
-      "  - path: plugin.yml",
-      "    purpose: metadata",
-      "  - path: settings.yml",
-      "    purpose: configuration",
-      "  - path: Locale/theme.yml",
-      "    purpose: configuration",
-      "  - path: bedrock/lang/en_us.json",
-      "    purpose: bedrock-excluded",
-      ...(options.bedrockTheme === undefined
-        ? []
-        : [
-            "  - path: bedrock/theme.yml",
-            "    purpose: bedrock-excluded",
-          ]),
-      "translationScope:",
-      '  sourceLanguage: "en-US"',
-      '  targetLanguage: "zh-CN"',
-      "  mappings:",
-      "    - source: lang/en.yml",
-      "      target: lang/zh.yml",
-      "      fields:",
-      "        - path: [messages]",
-      "          category: chat-string",
-      "        - path: [list, entries]",
-      "          category: chat-string-list",
-      "",
-    ].join("\n"),
-  );
-  await writeFile(
-    join(directory, "lang/zh.yml"),
-    [
-      "messages:",
-      "  greeting: 你好",
-      "  commands:",
-      "    registered: 已注册",
-      "list:",
-      "  entries:",
-      "    - 第一项",
-      "    - 第二项",
-      "",
-    ].join("\n"),
-  );
-
-  return { directory, jarFile };
-}
-
-function readEnvelope(stdout: string) {
-  return JSON.parse(stdout) as {
-    readonly kind?: unknown;
-    readonly variant?: unknown;
-    readonly data?: Record<string, unknown>;
-  };
-}
-
-function readReport(output: string) {
-  return readEnvelope(output).data?.report as Record<string, unknown>;
-}
+import {
+  createProject,
+  readEnvelope,
+  readReport,
+  runCli,
+  runCliWithoutJava,
+} from "./cli-fixtures.ts";
 
 void describe("CLI 制品", () => {
   void it("通过同一契约提供简体中文帮助和正式命令", () => {
@@ -247,6 +132,12 @@ void describe("CLI 制品", () => {
       join(project.directory, ".lands-l10n/sync-lock.json"),
     ];
     const before = await Promise.all(files.map((file) => readFile(file)));
+    const configurationPath = join(project.directory, "lands-l10n.yaml");
+    const configuration = await readFile(configurationPath, "utf8");
+    await writeFile(
+      configurationPath,
+      `${configuration}\nrules:\n  minimessage-syntax:\n    enabled: false\n`,
+    );
     const checked = runCli(
       "check",
       "--project",
@@ -319,6 +210,7 @@ void describe("CLI 制品", () => {
       "structured",
     );
     assert.equal(initialized.status, 0, initialized.stderr);
+    await rename(project.jarFile, `${project.jarFile}.unavailable`);
 
     const targetPath = join(project.directory, "lang/zh.yml");
     const target = await readFile(targetPath, "utf8");
@@ -328,6 +220,12 @@ void describe("CLI 制品", () => {
         "  welcome: Welcome",
         "  welcome: Welcome\n  obsolete: 旧键",
       ),
+    );
+    const configurationPath = join(project.directory, "lands-l10n.yaml");
+    const configuration = await readFile(configurationPath, "utf8");
+    await writeFile(
+      configurationPath,
+      `${configuration}\nrules:\n  minimessage-syntax:\n    enabled: false\n`,
     );
     const files = [
       targetPath,
@@ -429,37 +327,6 @@ void describe("CLI 制品", () => {
     );
   });
 
-  void it("只把配置用途的主题作为主题输入，Bedrock 同名资源保持排除", async (t) => {
-    const project = await createProject(t, {
-      bedrockTheme:
-        "theme:\n  tokens:\n    regular: '<gray>'\n    regular: '<red>'\n",
-    });
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-
-    assert.equal(initialized.status, 0, initialized.stderr);
-    const baseline = JSON.parse(
-      await readFile(
-        join(project.directory, ".lands-l10n/source-baseline.json"),
-        "utf8",
-      ),
-    ) as {
-      readonly miniMessageTheme?: {
-        readonly file: string;
-        readonly source: string;
-      };
-    };
-    assert.equal(baseline.miniMessageTheme?.file, "Locale/theme.yml");
-    assert.match(baseline.miniMessageTheme?.source ?? "", /regular/u);
-  });
-
   void it("初始化提交前发现并行编辑并保留编辑者内容", async (t) => {
     const project = await createProject(t);
     const targetPath = join(project.directory, "lang/zh.yml");
@@ -503,7 +370,7 @@ void describe("CLI 制品", () => {
     const config = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${config}\nrules:\n  structure:\n    enabled: false\n  future-check:\n    enabled: true\n    severity: warning\n    parameters:\n      mode: strict\n`,
+      `${config}\nrules:\n  structure:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  future-check:\n    enabled: true\n    severity: warning\n    parameters:\n      mode: strict\n`,
     );
     const status = runCli(
       "status",
@@ -524,7 +391,10 @@ void describe("CLI 制品", () => {
     assert.equal(check.status, 1);
     const report = readReport(check.stdout || check.stderr);
     const coverage = report.coverage as Record<string, unknown>;
-    assert.deepEqual(coverage.disabledRuleIds, ["structure"]);
+    assert.deepEqual(coverage.disabledRuleIds, [
+      "minimessage-syntax",
+      "structure",
+    ]);
     assert.deepEqual(coverage.unsupportedRuleIds, ["future-check"]);
     assert.equal(coverage.complete, false);
   });
@@ -567,7 +437,7 @@ void describe("CLI 制品", () => {
     const target = await readFile(targetPath, "utf8");
     await writeFile(
       targetPath,
-      target.replace("greeting: 你好", "greeting: Hello"),
+      target.replace("greeting: 你好", 'greeting: "<t:regular>Hello</t>"'),
     );
 
     const initialized = runCli(
@@ -600,5 +470,98 @@ void describe("CLI 制品", () => {
       unknown
     >;
     assert.equal(statusSummary.sameTextCandidates, 1);
+  });
+
+  void it("只把配置用途的主题作为主题输入，Bedrock 同名资源保持排除", async (t) => {
+    const project = await createProject(t, {
+      bedrockTheme:
+        "theme:\n  tokens:\n    regular: '<gray>'\n    regular: '<red>'\n",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const baseline = JSON.parse(
+      await readFile(
+        join(project.directory, ".lands-l10n/source-baseline.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly miniMessageTheme?: {
+        readonly file: string;
+        readonly source: string;
+      };
+    };
+    assert.equal(baseline.miniMessageTheme?.file, "Locale/theme.yml");
+    assert.match(baseline.miniMessageTheme?.source ?? "", /regular/u);
+  });
+
+  void it("初始化阻断有重复键的主题 YAML", async (t) => {
+    const project = await createProject(t, {
+      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n    regular: "<red>"\n',
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 1, initialized.stderr);
+    assert.match(
+      initialized.stderr || initialized.stdout,
+      /主题 YAML 无法安全读取/u,
+    );
+    await assert.rejects(
+      readFile(join(project.directory, ".lands-l10n/source-baseline.json")),
+    );
+  });
+
+  void it("Java 缺失时仅完整检查未完成，初始化和状态仍使用 Node", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCliWithoutJava(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const status = runCliWithoutJava(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    const check = runCliWithoutJava(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(check.status, 1, check.stderr);
+    const report = readReport(check.stderr || check.stdout);
+    const coverage = report.coverage as Record<string, unknown>;
+    assert.equal(coverage.complete, false);
+    assert.match(
+      JSON.stringify(coverage.unavailableCapabilities),
+      /Java 运行环境/u,
+    );
   });
 });

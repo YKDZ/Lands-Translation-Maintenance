@@ -9,6 +9,7 @@ import {
 } from "#/configuration";
 import { readJarResources } from "#/jar";
 import { collectMessages } from "#/messages";
+import { parseMiniMessages } from "#/minimessage";
 import {
   captureMiniMessageTheme,
   validateMiniMessageThemeYaml,
@@ -528,9 +529,10 @@ function projectView(
 
 function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable = [
-    "MiniMessage 语法、标签与交互检查尚未实现",
+    "MiniMessage 变量、交互、标签对等及 Lands 控制语义检查尚未实现",
     "变量、术语、风格和译文一致性检查尚未实现",
   ];
+  unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   if (
     view.resources.some((resource) => resource.purpose === "bedrock-excluded")
   ) {
@@ -893,7 +895,18 @@ export async function inspectProject(
   if (operation === "status") {
     return makeReport(operation, loaded.view, loaded.lock, loaded.diagnostics);
   }
-  const evaluation = evaluateProject(loaded.view, loaded.configuration);
+  const view =
+    loaded.configuration.rules?.["minimessage-syntax"]?.enabled === false
+      ? loaded.view
+      : {
+          ...loaded.view,
+          miniMessage: await parseMiniMessages(
+            loaded.view.messages,
+            loaded.view.resources,
+            loaded.baseline.miniMessageTheme,
+          ),
+        };
+  const evaluation = evaluateProject(view, loaded.configuration);
   const diagnostics = [
     ...loaded.diagnostics,
     ...evaluation.diagnostics.filter(
@@ -905,7 +918,7 @@ export async function inspectProject(
   ];
   return makeReport(
     operation,
-    loaded.view,
+    view,
     loaded.lock,
     diagnostics,
     evaluation.coverage,

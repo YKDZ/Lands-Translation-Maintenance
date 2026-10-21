@@ -31,6 +31,7 @@ const diagnosticSchema = z.object({
   severity: z.enum(["error", "warning", "info"]),
   code: z.string(),
   message: messageIdentitySchema.optional(),
+  origin: z.enum(["source", "target", "theme"]).optional(),
   location: z.object({
     file: z.string(),
     path: z.array(z.union([z.string(), z.number()])),
@@ -107,8 +108,17 @@ function renderReport(report: ReportPayload) {
   } else {
     for (const diagnostic of report.diagnostics) {
       const location = `${diagnostic.location.file}${diagnostic.location.path.length === 0 ? "" : `:${diagnostic.location.path.join(".")}`}`;
+      const origins = {
+        source: "原文",
+        target: "译文",
+        theme: "主题",
+      } as const;
+      const origin =
+        diagnostic.origin === undefined
+          ? ""
+          : `（来源：${origins[diagnostic.origin]}）`;
       lines.push(
-        `[${diagnostic.severity}] ${location} ${diagnostic.code}：${diagnostic.reason}；期望 ${jsonLine(diagnostic.expected)}，实际 ${jsonLine(diagnostic.actual)}。`,
+        `[${diagnostic.severity}] ${location}${origin} ${diagnostic.code}：${diagnostic.reason}；期望 ${jsonLine(diagnostic.expected)}，实际 ${jsonLine(diagnostic.actual)}。`,
       );
     }
   }
