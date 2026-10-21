@@ -30,6 +30,7 @@ import type {
 import { builtInRules, evaluateRules } from "#/rules";
 import {
   baselineFileName,
+  baselineDirectoryName,
   configurationFileName,
   lockFileName,
   loadConfiguration,
@@ -39,6 +40,7 @@ import {
   serializeBaseline,
   serializeLock,
   stateDirectoryName,
+  transactionFileName,
   type MappingSnapshot,
   type ResourceSnapshot,
   type SameTextCandidate,
@@ -50,6 +52,7 @@ import {
   assertFileSnapshots,
   captureFileSnapshots,
   ConcurrentEditError,
+  recoverInterruptedTransaction,
   writeFilesAtomically,
   type FileSnapshot,
   type FileWrite,
@@ -285,13 +288,6 @@ function updateDocumentValue(
   path: readonly string[],
   value: JsonValue,
 ): void {
-  for (let length = 1; length < path.length; length += 1) {
-    const prefix = path.slice(0, length);
-    const existing = document.getIn(prefix);
-    if (existing !== undefined && existing !== null && !isMap(existing)) {
-      setDocumentPath(document, prefix, {});
-    }
-  }
   setDocumentPath(document, path, value);
 }
 
@@ -378,11 +374,16 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
   let missingTranslations = 0;
 
   for (const message of project.messages) {
-    if (message.target === undefined) missingTranslations += 1;
+    if (message.targetStatus === "missing") missingTranslations += 1;
   }
   for (const seed of lock.translationSeeds) {
     const message = messages.get(seed.id);
-    if (message === undefined || message.target === undefined) continue;
+    if (
+      message === undefined ||
+      message.targetStatus !== "present" ||
+      message.target === undefined
+    )
+      continue;
     if (sameValue(message.target, message.source)) pendingTranslations += 1;
     else modifiedTranslations += 1;
   }
@@ -390,6 +391,7 @@ function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
     const message = messages.get(candidate.id);
     if (
       message !== undefined &&
+      message.targetStatus === "present" &&
       message.target !== undefined &&
       sameValue(message.target, message.source)
     ) {
@@ -566,6 +568,17 @@ export async function initializeProject(
   const project = await realpath(resolve(projectDirectory));
   const configFile = join(project, configurationFileName);
   await assertNoSymlinkPath(project, configurationFileName);
+  const transactionRelativePath = `${stateDirectoryName}/${transactionFileName}`;
+  await assertNoSymlinkPath(project, transactionRelativePath);
+  try {
+    await recoverInterruptedTransaction(project, transactionRelativePath);
+  } catch (error) {
+    throw new ProjectOperationError(
+      `发现未完成的初始化事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
+      "transaction.recovery-failed",
+      { file: transactionRelativePath, path: [] },
+    );
+  }
   const jarFile = resolve(jarPath);
   const [configInput, jarInput] = await Promise.all([
     readBytes(configFile, "维护清单"),
@@ -573,7 +586,11 @@ export async function initializeProject(
   ]);
   const configuration = requireConfiguration(configInput.text);
   const resourcesDir = join(project, stateDirectoryName);
-  const baselinePath = join(resourcesDir, baselineFileName);
+  const baselinePath = join(
+    resourcesDir,
+    baselineDirectoryName,
+    baselineFileName,
+  );
   const lockPath = join(resourcesDir, lockFileName);
   const stateSnapshots = await captureFileSnapshots([baselinePath, lockPath]);
   if (stateSnapshots.some((snapshot) => snapshot.sha256 !== undefined)) {
@@ -696,16 +713,15 @@ export async function initializeProject(
   const sameTextCandidates: SameTextCandidate[] = [];
   const messagesNeedingSeed = new Set<string>();
   for (const message of initialCollection.messages) {
-    if (
-      message.target === undefined ||
-      !isValidTargetValue(message.source, message.target)
-    ) {
+    if (message.targetStatus === "missing") {
       seeds.push({
         id: message.id,
         sourceSha256: sha256(canonicalJson(message.source)),
         reason: "missing",
       });
       messagesNeedingSeed.add(message.id);
+    } else if (!isValidTargetValue(message.source, message.target)) {
+      continue;
     } else if (sameValue(message.target, message.source)) {
       sameTextCandidates.push({
         id: message.id,
@@ -786,10 +802,15 @@ export async function initializeProject(
     { path: lockPath, content: lockText, expectedSha256: undefined },
   ];
   try {
-    await writeFilesAtomically(writes, async () => {
-      await options.beforeApply?.();
-      await assertFileSnapshots(inputSnapshots);
-    });
+    await writeFilesAtomically(
+      project,
+      transactionRelativePath,
+      writes,
+      async () => {
+        await options.beforeApply?.();
+        await assertFileSnapshots(inputSnapshots);
+      },
+    );
   } catch (error) {
     if (error instanceof ConcurrentEditError) {
       throw new ProjectOperationError(error.message);
@@ -816,15 +837,25 @@ async function loadSavedProject(projectDirectory: string): Promise<{
   await assertNoSymlinkPath(project, configurationFileName);
   await assertNoSymlinkPath(
     project,
-    `${stateDirectoryName}/${baselineFileName}`,
+    `${stateDirectoryName}/${baselineDirectoryName}/${baselineFileName}`,
   );
   await assertNoSymlinkPath(project, `${stateDirectoryName}/${lockFileName}`);
+  await assertNoSymlinkPath(
+    project,
+    `${stateDirectoryName}/${transactionFileName}`,
+  );
   const state = await readState(project);
   if (!state.ok) {
-    throw new ProjectOperationError(state.message, "state.invalid", {
-      file: stateDirectoryName,
-      path: [],
-    });
+    throw new ProjectOperationError(
+      state.message,
+      state.code ?? "state.invalid",
+      {
+        file: state.code?.startsWith("transaction.")
+          ? `${stateDirectoryName}/${transactionFileName}`
+          : stateDirectoryName,
+        path: [],
+      },
+    );
   }
   const config = await loadConfiguration(project);
   if (!config.ok) {

@@ -3,7 +3,12 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { createProject, readReport, runCli } from "../cli-fixtures.ts";
+import {
+  createProject,
+  readReport,
+  runCli,
+  snapshotProjectFiles,
+} from "../cli-fixtures.ts";
 
 void describe("MiniMessage 官方检查制品", () => {
   void it("正式检查用官方 MiniMessage 解析器定位非法译文语法", async (t) => {
@@ -27,8 +32,8 @@ void describe("MiniMessage 官方检查制品", () => {
     );
     const protectedFiles = [
       targetPath,
-      join(project.directory, ".lands-l10n/source-baseline.json"),
-      join(project.directory, ".lands-l10n/sync-lock.json"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
     ];
     const beforeCheck = await Promise.all(
       protectedFiles.map((file) => readFile(file)),
@@ -133,7 +138,9 @@ void describe("MiniMessage 官方检查制品", () => {
   });
 
   void it("按主题基线解析 token，并区分非法主题定义与未定义引用", async (t) => {
-    const project = await createProject(t);
+    const project = await createProject(t, {
+      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n',
+    });
     const initialized = runCli(
       "init",
       "--project",
@@ -146,7 +153,7 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.equal(initialized.status, 0, initialized.stderr);
 
     const baseline = await readFile(
-      join(project.directory, ".lands-l10n/source-baseline.json"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
       "utf8",
     );
     assert.match(baseline, /Locale\/theme\.yml/u);
@@ -189,6 +196,7 @@ void describe("MiniMessage 官方检查制品", () => {
 
   void it("正式 CLI 接受嵌套 hover、引号参数、转义和默认宽松闭合", async (t) => {
     const project = await createProject(t, {
+      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n',
       sourceGreeting:
         "<hover:show_text:'<t:regular>提示</t>'><red>正文 \\<字面></red></hover> <red>未显式闭合",
     });
@@ -264,6 +272,7 @@ void describe("MiniMessage 官方检查制品", () => {
     const ambiguous = await createProject(t, {
       theme: 'theme:\n  tokens:\n    regular: "<gray>"\n    regular: "<red>"\n',
     });
+    const beforeRejection = await snapshotProjectFiles(ambiguous.directory);
     const rejected = runCli(
       "init",
       "--project",
@@ -275,8 +284,9 @@ void describe("MiniMessage 官方检查制品", () => {
     );
     assert.equal(rejected.status, 1, rejected.stderr);
     assert.match(rejected.stderr || rejected.stdout, /主题 YAML 无法安全读取/u);
-    await assert.rejects(
-      readFile(join(ambiguous.directory, ".lands-l10n/source-baseline.json")),
+    assert.deepEqual(
+      await snapshotProjectFiles(ambiguous.directory),
+      beforeRejection,
     );
 
     const invalid = await createProject(t, {

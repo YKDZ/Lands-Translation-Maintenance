@@ -27,6 +27,50 @@ function pathKey(path: readonly string[]): string {
   return canonicalJson(path);
 }
 
+function isRecord(
+  value: JsonValue,
+): value is { readonly [key: string]: JsonValue } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inspectPath(
+  root: JsonValue | undefined,
+  path: readonly string[],
+):
+  | { readonly status: "present"; readonly value: JsonValue }
+  | { readonly status: "missing" }
+  | {
+      readonly status: "blocked";
+      readonly path: readonly string[];
+      readonly value: JsonValue;
+    } {
+  if (root === undefined) return { status: "missing" };
+  let current: JsonValue = root;
+  for (let index = 0; index < path.length; index += 1) {
+    if (!isRecord(current)) {
+      return {
+        status: "blocked",
+        path: path.slice(0, index),
+        value: current,
+      };
+    }
+    const segment = path[index]!;
+    if (!Object.hasOwn(current, segment)) return { status: "missing" };
+    current = current[segment]!;
+  }
+  return { status: "present", value: current };
+}
+
+function isValidTargetValue(
+  category: ChatFieldCategory,
+  target: JsonValue,
+): boolean {
+  if (category === "chat-string") return typeof target === "string";
+  return (
+    Array.isArray(target) && target.every((item) => typeof item === "string")
+  );
+}
+
 function messageIdentity(
   mapping: TranslationMapping,
   path: readonly string[],
@@ -34,17 +78,20 @@ function messageIdentity(
 ) {
   const identity = {
     sourceFile: mapping.source,
-    targetFile: mapping.target,
     path,
-    category,
   };
-  return { ...identity, id: sha256(canonicalJson(identity)) };
+  return {
+    ...identity,
+    targetFile: mapping.target,
+    category,
+    id: sha256(canonicalJson(identity)),
+  };
 }
 
 function walkStrings(
   value: JsonValue,
   path: readonly string[],
-  output: Map<string, { path: readonly string[]; value: string }>,
+  output: Map<string, { path: readonly string[]; value: JsonValue }>,
   file: string,
   issues: ProjectFileIssue[],
 ): void {
@@ -67,6 +114,7 @@ function walkStrings(
     expected: "字符串或映射",
     actual: value,
   });
+  output.set(pathKey(path), { path, value });
 }
 
 function collectField(
@@ -104,7 +152,7 @@ function collectField(
   if (field.category === "chat-string") {
     const stringValues = new Map<
       string,
-      { path: readonly string[]; value: string }
+      { path: readonly string[]; value: JsonValue }
     >();
     walkStrings(
       selected,
@@ -128,6 +176,10 @@ function collectField(
       path: field.path,
       expected: "字符串列表",
       actual: selected,
+    });
+    values.set(pathKey(field.path), {
+      path: field.path,
+      value: selected,
     });
     return { values, issues };
   }
@@ -175,11 +227,52 @@ export function collectMessages(
           sourceEntry.path,
           field.category,
         );
-        const targetEntry = targetByPath.get(key);
+        const targetValue = inspectPath(targetRoot, sourceEntry.path);
+        if (
+          targetValue.status === "present" &&
+          !isValidTargetValue(field.category, targetValue.value) &&
+          !target.issues.some(
+            (issue) =>
+              issue.code === "message.type-mismatch" &&
+              pathKey(issue.path.map(String)) === key,
+          )
+        ) {
+          issues.push({
+            file: saved.mapping.target,
+            code: "message.type-mismatch",
+            reason:
+              field.category === "chat-string"
+                ? "聊天字符串消息必须是字符串"
+                : "聊天列表消息必须是只含字符串的列表",
+            path: sourceEntry.path,
+            expected:
+              field.category === "chat-string" ? "字符串" : "字符串列表",
+            actual: targetValue.value,
+          });
+        }
+        if (
+          targetValue.status === "blocked" &&
+          !target.issues.some(
+            (issue) =>
+              issue.code === "message.type-mismatch" &&
+              pathKey(issue.path.map(String)) === pathKey(targetValue.path),
+          )
+        ) {
+          issues.push({
+            file: saved.mapping.target,
+            code: "message.type-mismatch",
+            reason: "聊天字段路径的祖先必须是映射",
+            path: targetValue.path,
+            expected: "映射",
+            actual: targetValue.value,
+          });
+        }
         messages.push({
           ...identity,
           source: sourceEntry.value,
-          target: targetEntry?.value,
+          target:
+            targetValue.status === "present" ? targetValue.value : undefined,
+          targetStatus: targetValue.status,
         });
       }
 

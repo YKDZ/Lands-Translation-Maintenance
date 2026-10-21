@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { TestContext } from "node:test";
@@ -23,6 +30,27 @@ export function runCliWithoutJava(...args: string[]) {
   });
 }
 
+export async function snapshotProjectFiles(projectDirectory: string) {
+  const paths: string[] = [];
+  async function collect(directory: string, prefix: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const relativePath = prefix ? join(prefix, entry.name) : entry.name;
+      const absolutePath = join(directory, entry.name);
+      if (entry.isDirectory()) await collect(absolutePath, relativePath);
+      else if (entry.isFile()) paths.push(relativePath);
+    }
+  }
+  await collect(projectDirectory, "");
+  return Promise.all(
+    paths
+      .sort()
+      .map(
+        async (path) =>
+          [path, await readFile(join(projectDirectory, path))] as const,
+      ),
+  );
+}
+
 export async function createProject(
   t: TestContext,
   options: {
@@ -36,13 +64,14 @@ export async function createProject(
 
   const jarFile = join(directory, "Lands.jar");
   await mkdir(join(directory, "lang"), { recursive: true });
+  await mkdir(join(directory, ".l10n"), { recursive: true });
   await writeFile(
     jarFile,
     zipSync({
       "lang/en.yml": strToU8(
         [
           "messages:",
-          `  greeting: ${JSON.stringify(options.sourceGreeting ?? "<t:regular>Hello</t>")}`,
+          `  greeting: ${JSON.stringify(options.sourceGreeting ?? "Hello")}`,
           "  welcome: Welcome",
           "  commands:",
           "    registered: Run",
@@ -53,11 +82,10 @@ export async function createProject(
       ),
       "plugin.yml": strToU8("name: Lands\n"),
       "settings.yml": strToU8("enabled: true\n"),
-      "Locale/theme.yml": strToU8(
-        options.theme ??
-          'theme:\n  tokens:\n    regular: "<gray>"\n  custom:\n    highlight: "<gold>"\n',
-      ),
       "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
+      ...(options.theme === undefined
+        ? {}
+        : { "Locale/theme.yml": strToU8(options.theme) }),
       ...(options.bedrockTheme === undefined
         ? {}
         : { "bedrock/theme.yml": strToU8(options.bedrockTheme) }),
@@ -65,7 +93,7 @@ export async function createProject(
     }),
   );
   await writeFile(
-    join(directory, "lands-l10n.yaml"),
+    join(directory, ".l10n/config.yml"),
     [
       "schemaVersion: 1",
       "source:",
@@ -78,8 +106,9 @@ export async function createProject(
       "    purpose: metadata",
       "  - path: settings.yml",
       "    purpose: configuration",
-      "  - path: Locale/theme.yml",
-      "    purpose: configuration",
+      ...(options.theme === undefined
+        ? []
+        : ["  - path: Locale/theme.yml", "    purpose: configuration"]),
       "  - path: bedrock/lang/en_us.json",
       "    purpose: bedrock-excluded",
       ...(options.bedrockTheme === undefined

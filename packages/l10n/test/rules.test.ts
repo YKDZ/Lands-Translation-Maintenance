@@ -20,6 +20,7 @@ const sampleProject: ProjectView = {
       category: "chat-string",
       source: "Hello",
       target: "你好",
+      targetStatus: "present",
     },
   ],
   targetMessages: [],

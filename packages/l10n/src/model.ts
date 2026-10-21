@@ -160,6 +160,7 @@ export interface MessageIdentity {
 export interface ObservedMessage extends MessageIdentity {
   readonly source: JsonValue;
   readonly target: JsonValue | undefined;
+  readonly targetStatus: "present" | "missing" | "blocked";
 }
 
 export interface ProjectView {
