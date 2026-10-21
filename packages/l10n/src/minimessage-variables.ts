@@ -362,7 +362,7 @@ function interactionContext(
     } else if (frame.kind === "tag-argument") {
       result.push({
         kind: "tag-argument",
-        identity: frame.name.toLowerCase(),
+        identity: frame.name,
       });
     }
   }

@@ -1427,7 +1427,7 @@ function tagContext(
   const context: JsonValue[] = [];
   for (const frame of node.context) {
     if (frame.kind === "hover-text" || frame.kind === "tag-argument") {
-      context.push({ kind: frame.kind, name: frame.name.toLowerCase() });
+      context.push({ kind: frame.kind, name: frame.name });
       if (frame.kind === "hover-text") {
         const parent = semantic.nodesByPosition.get(
           `${frame.position.start}:${frame.position.end}`,

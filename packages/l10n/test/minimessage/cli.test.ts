@@ -182,6 +182,138 @@ void describe("MiniMessage 官方检查制品", () => {
     );
   });
 
+  void it("NBT 的 nbt/data 别名保留同一个官方 separator 上下文", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting:
+        "<nbt:storage:lands:data:'<red>word</red>'> <nbt:storage:lands:owner:'<v:x>'>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(
+          "<data:storage:lands:data:'<red>字</red>'> <data:storage:lands:owner:'<v:x>'>",
+        )}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const diagnostics = readReport(checked.stderr || checked.stdout)
+      .diagnostics as readonly Record<string, unknown>[];
+    assert.deepEqual(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" ||
+          diagnostic.ruleId === "minimessage-variables",
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("翻译组件参数绑定所属 key，完整对象仍可换序", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting:
+        "<lang:key1:'<red><v:x></red>'><lang:key2:'<bold><v:y></bold>'>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const initializedTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      initializedTarget.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(
+          "<lang:key1:'<bold><v:y></bold>'><lang:key2:'<red><v:x></red>'>",
+        )}`,
+      ),
+    );
+    const swappedArguments = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const swappedDiagnostics = readReport(
+      swappedArguments.stderr || swappedArguments.stdout,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      swappedDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      swappedArguments.stderr || swappedArguments.stdout,
+    );
+    assert.ok(
+      swappedDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-variables" &&
+          String(diagnostic.code).startsWith("minimessage.variable-"),
+      ),
+      swappedArguments.stderr || swappedArguments.stdout,
+    );
+
+    const currentTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      currentTarget.replace(
+        /^  greeting:.*$/mu,
+        `  greeting: ${JSON.stringify(
+          "<lang:key2:'<bold><v:y></bold>'><lang:key1:'<red><v:x></red>'>",
+        )}`,
+      ),
+    );
+    const reorderedObjects = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const reorderedDiagnostics = readReport(
+      reorderedObjects.stderr || reorderedObjects.stdout,
+    ).diagnostics as readonly Record<string, unknown>[];
+    assert.deepEqual(
+      reorderedDiagnostics.filter(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" ||
+          diagnostic.ruleId === "minimessage-variables",
+      ),
+      [],
+      reorderedObjects.stderr || reorderedObjects.stdout,
+    );
+  });
+
   void it("标签豁免遇到语法无效译文时报告无法评估，语法诊断仍可用", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "<red>Hello</red>",
