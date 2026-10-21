@@ -4743,7 +4743,10 @@ void describe("CLI 制品", () => {
       "structured",
     );
     assert.equal(stale.status, 1);
-    assert.match(stale.stdout || stale.stderr, /需重新初始化/);
+    assert.match(
+      stale.stdout || stale.stderr,
+      /lands-l10n sync --project <项目目录> --jar <候选 JAR>/,
+    );
   });
 
   void it("允许 JAR 原文路径与本地中文目标路径同名", async (t) => {

@@ -837,7 +837,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
     assert.match(
       changedDeclarationText.stdout || changedDeclarationText.stderr,
-      /需重新初始化/u,
+      /lands-l10n sync --project <项目目录> --jar <候选 JAR>/u,
     );
     assert.deepEqual(
       await snapshotProjectFiles(declarationProject),

@@ -542,14 +542,12 @@ public final class MiniMessageBridge {
     }
     if (name.equals("translate_or") || name.equals("tr_or") || name.equals("lang_or")) {
       List<Integer> indexes = new ArrayList<>();
-      // The official resolver consumes the key and fallback with value(), then
-      // deserializes only the remaining component arguments.
+      // 官方解析器通过 value() 读取键和回退内容，随后才反序列化剩余的组件参数。
       for (int index = 3; index < parts.size(); index++) indexes.add(index);
       return indexes;
     }
     if (name.equals("nbt") || name.equals("data")) {
-      // NbtTag consumes at most parts[4] as the optional separator. A later
-      // part is only the optional "interpret" flag; excess arguments are ignored.
+      // NbtTag 最多将 parts[4] 作为可选分隔符。后续部分仅可能是可选的 "interpret" 标志；多余参数会被忽略。
       if (parts.size() > 4 && !parts.get(4).value().equalsIgnoreCase("interpret")) {
         return List.of(4);
       }
@@ -679,8 +677,7 @@ public final class MiniMessageBridge {
     Set<String> seenUnresolved = new HashSet<>();
     List<TagNode> openTags = new ArrayList<>();
 
-    // The official tree supplies resolved nodes and child-acceptance semantics; tokenize adds explicit close tokens,
-    // which the 4.26.1 tree intentionally omits. Apply its tagCloses rule to retain those source occurrences.
+    // 官方语法树提供已解析节点和子节点接纳语义；tokenize 会补充 4.26.1 语法树刻意省略的显式闭合标记。按其 tagCloses 规则保留这些源文本出现项。
     for (Token token : tokens) {
       if (token.type() == TokenType.TEXT) {
         Position position = sourceMap.range(token.startIndex(), token.endIndex());
@@ -948,7 +945,7 @@ public final class MiniMessageBridge {
         try {
           plain = PlainTextComponentSerializer.plainText().serialize(component);
         } catch (RuntimeException ignored) {
-          // Some valid content components (such as NBT) cannot be rendered without a game runtime.
+          // 有些有效内容组件（例如 NBT）无法在没有游戏运行时的情况下渲染。
           plain = "";
         }
         System.out.println("M\t" + message.index() + "\tok\t" + encode(plain) + "\t-1\t-1\t");
@@ -969,7 +966,7 @@ public final class MiniMessageBridge {
           new Position(0, 0));
       int[] nextDocumentIndex = {1};
       List<String> structureOutput = new ArrayList<>();
-      // Structure collection must use the runtime resolver: a fallback Tag would hide official resolver failures.
+      // 结构收集必须使用运行时解析器：回退用的 Tag 会掩盖官方解析器的失败。
       TagResolver structuralResolver = messageResolver(theme);
       outputDocument(structuralResolver, theme, message.index(), 0, -1, message.input(), sourceMap,
           message.requiresRenderedProjection(), List.of(), nextDocumentIndex, structureOutput);
