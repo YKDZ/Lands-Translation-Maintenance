@@ -134,7 +134,7 @@ export interface VariableCountDifference {
 }
 
 export interface MiniMessageContextFrame {
-  readonly kind: "tag" | "hover-text";
+  readonly kind: "tag" | "hover-text" | "tag-argument";
   readonly name: string;
   readonly position: MiniMessagePosition;
 }
@@ -167,6 +167,7 @@ export interface MiniMessageTagNode {
 export type MiniMessageSourceNode = MiniMessageTextNode | MiniMessageTagNode;
 
 export interface ParsedMiniMessageDocument {
+  readonly documentIndex: number;
   readonly message: MessageIdentity;
   readonly origin: "source" | "target";
   readonly file: string;
@@ -268,6 +269,7 @@ export interface ObservedMessage extends MessageIdentity {
 }
 
 export interface ProjectView {
+  readonly sourceVersion?: string;
   readonly sourceLanguage: string;
   readonly targetLanguage: string;
   readonly resources: readonly ResourceInventoryEntry[];
@@ -325,6 +327,8 @@ export interface Diagnostic {
 
 export interface RuleFinding {
   readonly code: string;
+  readonly identity?: JsonValue;
+  readonly fingerprint?: JsonValue;
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;
   readonly location: DiagnosticLocation;

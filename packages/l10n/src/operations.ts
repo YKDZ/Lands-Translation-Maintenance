@@ -10,6 +10,7 @@ import {
 import { readJarResources } from "#/jar";
 import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
 import { parseMiniMessages } from "#/minimessage";
+import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
 import {
   captureMiniMessageTheme,
   validateMiniMessageThemeYaml,
@@ -713,6 +714,7 @@ function projectView(
     baseline.releasedTranslationPaths ?? [],
   );
   return {
+    sourceVersion: baseline.source.version,
     sourceLanguage: baseline.translationScope.sourceLanguage,
     targetLanguage: baseline.translationScope.targetLanguage,
     resources: baseline.resources.map(({ path, purpose }) => ({
@@ -1156,12 +1158,15 @@ function structureFindingIssues(
   return issues;
 }
 
-function coverageUnavailable(view: ProjectView): readonly string[] {
-  const unavailable = [
-    "MiniMessage 标签对等及 Lands 控制语义检查尚未实现",
-    "术语、风格和译文一致性检查尚未实现",
-  ];
+function coverageUnavailable(
+  view: ProjectView,
+  configuration: ConsumerConfiguration,
+): readonly string[] {
+  const unavailable = ["术语、风格和译文一致性检查尚未实现"];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
+  if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
+    unavailable.push(...miniMessageTagCoverageUnavailable(view));
+  }
   if (
     view.resources.some((resource) => resource.purpose === "bedrock-excluded")
   ) {
@@ -1176,7 +1181,7 @@ function evaluateProject(
 ) {
   return evaluateRules(view, builtInRules, {
     configuration: configuration.rules,
-    unavailableCapabilities: coverageUnavailable(view),
+    unavailableCapabilities: coverageUnavailable(view, configuration),
   });
 }
 
@@ -2295,7 +2300,8 @@ export async function inspectProject(
   }
   const miniMessageChecksEnabled =
     loaded.configuration.rules?.["minimessage-syntax"]?.enabled !== false ||
-    loaded.configuration.rules?.["minimessage-variables"]?.enabled !== false;
+    loaded.configuration.rules?.["minimessage-variables"]?.enabled !== false ||
+    loaded.configuration.rules?.["minimessage-tags"]?.enabled !== false;
   const view = miniMessageChecksEnabled
     ? {
         ...loaded.view,

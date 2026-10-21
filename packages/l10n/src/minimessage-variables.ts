@@ -359,6 +359,11 @@ function interactionContext(
         kind: "hover-text",
         identity: hoverIdentity(tag.node, parent),
       });
+    } else if (frame.kind === "tag-argument") {
+      result.push({
+        kind: "tag-argument",
+        identity: frame.name.toLowerCase(),
+      });
     }
   }
   return result;

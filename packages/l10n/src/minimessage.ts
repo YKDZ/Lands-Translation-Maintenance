@@ -576,7 +576,7 @@ function readContextFrames(
     const start = Number(fields[index + 2]);
     const end = Number(fields[index + 3]);
     if (
-      (kind !== "tag" && kind !== "hover-text") ||
+      (kind !== "tag" && kind !== "hover-text" && kind !== "tag-argument") ||
       name === undefined ||
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(end)
@@ -1044,15 +1044,6 @@ function appendParserFindings(
       continue;
     }
     if (landsControls.has(name) || landsPreprocessors.has(name)) {
-      const finding = findingForMessage(
-        input,
-        "minimessage.extension-unsupported",
-        `Lands 扩展 <${name}> 的预处理语义尚未实现；本次检查没有判定该扩展正确`,
-        { state: "Lands extension semantics checked" },
-        actualTag,
-      );
-      findings.push(finding);
-      unavailable.add("Lands 控制和预处理语义尚未完成");
       continue;
     }
     if (name === "t") {
@@ -1167,6 +1158,7 @@ export async function parseMiniMessages(
             .reverse()
             .find((frame) => frame.kind === "hover-text");
     documentResults.push({
+      documentIndex: parsed.documentIndex,
       message: input.message,
       origin: input.origin,
       file: input.file,
@@ -1188,6 +1180,7 @@ export async function parseMiniMessages(
     if (rootDocuments.has(input.index)) continue;
     const result = java.messages.get(input.index);
     documentResults.push({
+      documentIndex: 0,
       message: input.message,
       origin: input.origin,
       file: input.file,

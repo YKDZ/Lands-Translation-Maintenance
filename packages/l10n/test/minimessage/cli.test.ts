@@ -12,6 +12,1009 @@ import {
 } from "../cli-fixtures.ts";
 
 void describe("MiniMessage 官方检查制品", () => {
+  void it("默认检查要求译文保留颜色标签及出现次数", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red>Hello</red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("greeting: 你好", 'greeting: "<blue>你好</blue>"'),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(checked.status, 1, checked.stderr);
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const mismatches = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    assert.equal(mismatches.length, 2, checked.stderr || checked.stdout);
+    const missingRed = mismatches.find((diagnostic) =>
+      JSON.stringify(diagnostic.expected).includes("#ff5555"),
+    );
+    const addedBlue = mismatches.find((diagnostic) =>
+      JSON.stringify(diagnostic.expected).includes("#5555ff"),
+    );
+    assert.ok(missingRed, checked.stderr || checked.stdout);
+    assert.ok(addedBlue, checked.stderr || checked.stdout);
+    assert.equal(missingRed?.severity, "error");
+    assert.match(JSON.stringify(missingRed?.expected), /expectedCount/u);
+    assert.match(JSON.stringify(missingRed?.actual), /actualCount/u);
+    assert.match(JSON.stringify(addedBlue?.expected), /expectedCount/u);
+    assert.match(JSON.stringify(addedBlue?.actual), /actualCount/u);
+  });
+
+  void it("标签数量与颜色相同也不能省略原文显式结束标签", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red>Hello</red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace("greeting: 你好", 'greeting: "<red>你好"'),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const missingClose = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).find(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch" &&
+        (diagnostic.expected as Record<string, unknown>).closing === true,
+    );
+    assert.ok(missingClose, checked.stderr || checked.stdout);
+    assert.equal(
+      (missingClose?.expected as Record<string, unknown>).expectedCount,
+      1,
+    );
+    assert.equal(
+      (missingClose?.actual as Record<string, unknown>).actualCount,
+      0,
+    );
+    assert.equal(
+      (
+        (missingClose?.expected as Record<string, unknown>)
+          .positions as readonly unknown[]
+      ).length,
+      1,
+    );
+  });
+
+  void it("同类颜色标签的嵌套次序改变时仍报告实际样式变化", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red><blue>Hello</blue></red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("<blue><red>你好</red></blue>")}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("允许官方颜色、装饰和换行别名并允许样式标签换序", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red><bold>Hello</bold></red><newline>Next",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        'greeting: "<b><c:RED>你好</c></b><br>下一个"',
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(
+      diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "minimessage-tags",
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("按官方 resolver 参数语义规范化标签并递归保留可译参数", async (t) => {
+    const source = [
+      "<gradient:red:blue:-0.25>gradient</gradient>",
+      "<transition:red:blue:-0.25>transition</transition>",
+      "<click:run_command:'/lands claim'>点击</click>",
+      "<hover:show_text:'Owner <bold>online</bold>'>hover</hover>",
+      "<translate:lands.welcome:'Hello <red>land</red>'>",
+      "<translate_or:lands.key:'Fallback':'argument'>",
+      "<font:default>font</font>",
+      "<selector:@a>",
+      "<nbt:storage:lands:data:time>",
+      "<pride>pride</pride>",
+      "<shadow:red:0.5>shadow</shadow>",
+      "<sprite:atlas:key>",
+      "<head:123e4567-e89b-42d3-a456-426614174000>",
+      "<rainbow:!2>rainbow</rainbow>",
+      "<newline><reset>",
+    ].join(" ");
+    const equivalent = [
+      "<gradient:#5555ff:#ff5555:0.75>渐变</gradient>",
+      "<transition:#5555ff:#ff5555:0.75>切换</transition>",
+      "<click:run_command:'/lands claim'>占领</click>",
+      "<hover:show_text:'所有者 <b>在线</b>'>悬停</hover>",
+      "<tr:lands.welcome:'你好 <c:#f55>领地</c>'>",
+      "<tr_or:lands.key:'后备':'参数'>",
+      "<font:minecraft:default>字体</font>",
+      "<sel:@a>",
+      "<data:storage:lands:data:time>",
+      "<pride:pride>彩虹</pride>",
+      "<shadow:#ff55557f>阴影</shadow>",
+      "<sprite:minecraft:atlas:minecraft:key>",
+      "<head:123e4567-e89b-42d3-a456-426614174000:true>",
+      "<rainbow:!2>彩虹</rainbow>",
+      "<br><reset>",
+    ].join(" ");
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(equivalent)}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(
+      diagnostics.filter((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("minimessage."),
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("对官方 StandardTags 的全部 resolver 家族比较标签并定位遗漏", async (t) => {
+    const source = [
+      "<hover:show_text:'Owner <bold>online</bold>'>owner</hover>",
+      '<click:run_command:"/lands claim">Claim</click>',
+      "<red>color</red>",
+      "<key:key.jump>",
+      "<translate:chat.type.text:'Hello <red>land</red>'>",
+      "<translate_or:lands.key:'Fallback <bold>text</bold>':'argument'>",
+      "<insert:land-name>",
+      "<font:default>font</font>",
+      "<bold>decoration</bold>",
+      "<gradient:red:blue>gradient</gradient>",
+      "<rainbow:1>rainbow</rainbow>",
+      "<reset>",
+      "<newline>",
+      "<transition:red:blue>",
+      "<selector:@a>",
+      "<score:owner:objective>",
+      "<nbt:storage:lands:data:time>",
+      "<pride:bi>pride</pride>",
+      "<shadow:red:0.5>shadow</shadow>",
+      "<sprite:atlas:key>",
+      "<head:123e4567-e89b-42d3-a456-426614174000>",
+    ].join(" ");
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("greeting: 你好", `greeting: ${JSON.stringify(source)}`),
+    );
+    const preserved = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const preservedReport = readReport(preserved.stderr || preserved.stdout);
+    const preservedDiagnostics = preservedReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(
+      preservedDiagnostics.filter((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("minimessage."),
+      ),
+      [],
+      preserved.stderr || preserved.stdout,
+    );
+
+    const currentTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      currentTarget.replace(/^  greeting:.*$/mu, '  greeting: "翻译"'),
+    );
+    const omitted = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(omitted.status, 1, omitted.stderr);
+    const omittedReport = readReport(omitted.stderr || omitted.stdout);
+    const omissions = (
+      omittedReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    const omittedNames = new Set(
+      omissions.map((diagnostic) =>
+        String((diagnostic.expected as Record<string, unknown>).tag),
+      ),
+    );
+    assert.deepEqual(
+      [...omittedNames].sort(),
+      [
+        "bold",
+        "click",
+        "color",
+        "font",
+        "gradient",
+        "head",
+        "hover",
+        "insert",
+        "key",
+        "nbt",
+        "newline",
+        "pride",
+        "rainbow",
+        "reset",
+        "score",
+        "selector",
+        "shadow",
+        "sprite",
+        "transition",
+        "translate",
+        "translate_or",
+      ].sort(),
+      omitted.stderr || omitted.stdout,
+    );
+
+    const additionProject = await createProject(t, { sourceGreeting: "Text" });
+    const additionInitialized = runCli(
+      "init",
+      "--project",
+      additionProject.directory,
+      "--jar",
+      additionProject.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(additionInitialized.status, 0, additionInitialized.stderr);
+    const additionTargetPath = join(additionProject.directory, "lang/zh.yml");
+    const additionTarget = await readFile(additionTargetPath, "utf8");
+    await writeFile(
+      additionTargetPath,
+      additionTarget.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(source)}`,
+      ),
+    );
+    const added = runCli(
+      "check",
+      "--project",
+      additionProject.directory,
+      "--output-format",
+      "structured",
+    );
+    const addedReport = readReport(added.stderr || added.stdout);
+    const additions = (
+      addedReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    const addedNames = new Set(
+      additions.map((diagnostic) =>
+        String((diagnostic.expected as Record<string, unknown>).tag),
+      ),
+    );
+    assert.deepEqual(
+      [...addedNames].sort(),
+      [...omittedNames].sort(),
+      added.stderr || added.stdout,
+    );
+    assert.ok(
+      additions.every(
+        (diagnostic) =>
+          (diagnostic.expected as Record<string, unknown>).expectedCount ===
+            0 && (diagnostic.actual as Record<string, unknown>).actualCount > 0,
+      ),
+      added.stderr || added.stdout,
+    );
+  });
+
+  void it("保留 Lands 条件块的聊天范围与内部标签上下文", async (t) => {
+    const source =
+      "<verbose><red>Verbose</red></verbose> <ingame><bold>Player</bold></ingame> <java><italic>Java</italic></java>";
+    const target =
+      "<verbose><c:#f55>详细</c></verbose> <ingame><b>玩家</b></ingame> <java><i>Java</i></java>";
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(target)}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(
+      diagnostics.filter((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("minimessage."),
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+    assert.equal(
+      (
+        (report.coverage as Record<string, unknown>)
+          .unavailableCapabilities as readonly string[]
+      ).some((capability) => capability.includes("Lands 控制")),
+      false,
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("检测标签在不同 Lands 条件块之间移动", async (t) => {
+    const source =
+      "<verbose><red>verbose</red></verbose> <ingame>ingame</ingame>";
+    const target = "<verbose>日志</verbose> <ingame><red>游戏</red></ingame>";
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(target)}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const movedColor = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch" &&
+        JSON.stringify(diagnostic.expected).includes("#ff5555"),
+    );
+    assert.equal(movedColor.length, 2, checked.stderr || checked.stdout);
+    assert.ok(
+      movedColor.some((diagnostic) =>
+        JSON.stringify(diagnostic.expected).includes('"name":"verbose"'),
+      ),
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      movedColor.some((diagnostic) =>
+        JSON.stringify(diagnostic.actual).includes('"name":"ingame"'),
+      ),
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("只接受 Lands 消息起始的 title/actionbar/bossbar/noprefix 控制", async (t) => {
+    const source =
+      "<title:5:40:2><red>标题</red><subtitle><blue>副标题</blue><actionbar><bold>操作栏</bold>";
+    const target =
+      "<title><c:#f55>标题</c><subtitle><c:#55f>副标题</c><actionbar><b>操作栏</b>";
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(target)}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(
+      diagnostics.filter((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("minimessage."),
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("标题<actionbar><red>移位</red>")}`,
+      ),
+    );
+    const moved = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const movedReport = readReport(moved.stderr || moved.stdout);
+    assert.ok(
+      (movedReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.lands-control-invalid" &&
+          diagnostic.origin === "target",
+      ),
+      moved.stderr || moved.stdout,
+    );
+  });
+
+  void it("按消息前缀保留 actionbar、bossbar 和 noprefix 控制", async (t) => {
+    const cases = [
+      {
+        source: "<actionbar><red>Operation</red>",
+        target: "<actionbar><c:#f55>操作</c>",
+      },
+      {
+        source: "<noprefix><bossbar:blue:segmented_10:12>Welcome",
+        target: "<noprefix><bossbar:blue:segmented_10:12>欢迎",
+      },
+    ];
+    for (const { source, target } of cases) {
+      const project = await createProject(t, { sourceGreeting: source });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+
+      const targetPath = join(project.directory, "lang/zh.yml");
+      const targetYaml = await readFile(targetPath, "utf8");
+      await writeFile(
+        targetPath,
+        targetYaml.replace(
+          "greeting: 你好",
+          `greeting: ${JSON.stringify(target)}`,
+        ),
+      );
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(checked.stderr || checked.stdout);
+      assert.deepEqual(
+        (report.diagnostics as readonly Record<string, unknown>[]).filter(
+          (diagnostic) =>
+            String(diagnostic.ruleId).startsWith("minimessage.") &&
+            diagnostic.ruleId !== "minimessage-syntax",
+        ),
+        [],
+        checked.stderr || checked.stdout,
+      );
+    }
+
+    const project = await createProject(t, {
+      sourceGreeting: "<noprefix><bossbar:blue:segmented_10:12>Welcome",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("欢迎<noprefix><bossbar:purple:segmented_10:12>")}`,
+      ),
+    );
+    const changed = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const changedReport = readReport(changed.stderr || changed.stdout);
+    assert.ok(
+      (changedReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.lands-control-invalid" &&
+          diagnostic.origin === "target",
+      ),
+      changed.stderr || changed.stdout,
+    );
+  });
+
+  void it("按 Lands 8.9.2 GUI lore action、label、desc 和 indent 语义比较", async (t) => {
+    const sourceLore = [
+      "<action:claim><label><red>Claim</red></label></action>",
+      "<action:bank><label><bold>Bank</bold></label><desc><gray>Details</gray></desc></action>",
+      "<indent>Next",
+    ];
+    const equivalentLore = [
+      "<action:claim><label><c:#f55>占领</c></label></action>",
+      "<action:bank><label><b>银行</b></label><desc><gray>详情</gray></desc></action>",
+      "<indent>下一项",
+    ];
+    const project = await createGuiProject(t, {
+      name: "Selection",
+      lore: sourceLore,
+    });
+    const configPath = join(project.directory, ".l10n/config.yml");
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace(
+        'version: "8.0.1"',
+        'version: "8.9.2"',
+      ),
+    );
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    const writeTarget = async (lore: readonly string[]) => {
+      await writeFile(
+        targetPath,
+        [
+          "physical:",
+          "  selection:",
+          '    name: "选择"',
+          "    lore:",
+          ...lore.map((line) => `      - ${JSON.stringify(line)}`),
+          "",
+        ].join("\n"),
+      );
+    };
+    await writeTarget(equivalentLore);
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(
+      diagnostics.filter((diagnostic) =>
+        String(diagnostic.ruleId).startsWith("minimessage."),
+      ),
+      [],
+      checked.stderr || checked.stdout,
+    );
+
+    await writeTarget([
+      "<action:claim><label>占领</label></action>",
+      "<action:bank><label><red>银行</red></label><desc><gray>详情</gray></desc></action>",
+      "<indent>下一项",
+    ]);
+    const moved = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const movedReport = readReport(moved.stderr || moved.stdout);
+    const movedColors = (
+      movedReport.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch" &&
+        JSON.stringify(diagnostic.expected).includes("#ff5555"),
+    );
+    assert.equal(movedColors.length, 2, moved.stderr || moved.stdout);
+    assert.ok(
+      movedColors.some((diagnostic) =>
+        JSON.stringify(diagnostic.expected).includes('"action":"claim"'),
+      ),
+      moved.stderr || moved.stdout,
+    );
+    assert.ok(
+      movedColors.some((diagnostic) =>
+        JSON.stringify(diagnostic.actual).includes('"action":"bank"'),
+      ),
+      moved.stderr || moved.stdout,
+    );
+  });
+
+  void it("GUI lore 的空行和重复行保留整体拼接的 newline 次数", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "Selection",
+      lore: ["<red>First</red>", "", "<red>First</red>"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeFile(
+      join(project.directory, "Locale/zh-CN_gui.yml"),
+      [
+        "physical:",
+        "  selection:",
+        '    name: "选择"',
+        "    lore:",
+        `      - ${JSON.stringify("<red>第一</red>")}`,
+        `      - ${JSON.stringify("<red>第一</red>")}`,
+        "",
+      ].join("\n"),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    assert.ok(
+      (report.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch" &&
+          JSON.stringify(diagnostic.expected).includes('"tag":"newline"') &&
+          JSON.stringify(diagnostic.expected).includes('"expectedCount":2') &&
+          JSON.stringify(diagnostic.actual).includes('"actualCount":1'),
+      ),
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("Lands 8.0.1 GUI lore desc 语义明确报告覆盖限制", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "Selection",
+      lore: ["<action:bank><desc>Details</desc></action>"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const coverage = report.coverage as Record<string, unknown>;
+    assert.equal(coverage.complete, false);
+    assert.match(
+      JSON.stringify(coverage.unavailableCapabilities),
+      /8\.0\.1 GUI lore action 没有 desc 模板语义/u,
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("在标签数量相同但结束标签交叉时报告无效嵌套", async (t) => {
+    const source = "<red><bold>Hello</red></bold>";
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("greeting: 你好", `greeting: ${JSON.stringify(source)}`),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-nesting-invalid",
+      ),
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("递归检查 translate 参数中的标签并允许翻译参数正文", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<translate:chat.type.text:'Hello <red>land</red>'>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("<tr:chat.type.text:'你好 <blue>土地</blue>'>")}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch" &&
+          JSON.stringify(diagnostic.expected).includes("#ff5555") &&
+          JSON.stringify(diagnostic.actual).includes("actualCount"),
+      ),
+      checked.stderr || checked.stdout,
+    );
+  });
+
   void it("正式检查发现正文变量遗漏，即使译文句子可正常解析", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "Hello, <v:player>!",
@@ -101,6 +1104,67 @@ void describe("MiniMessage 官方检查制品", () => {
     );
     assert.ok(
       (coverage.disabledRuleIds as string[]).includes("minimessage-syntax"),
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("语法和变量规则关闭时标签规则仍驱动共享解析", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "<red>Hello</red>",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const configurationPath = join(project.directory, ".l10n/config.yml");
+    const configuration = await readFile(configurationPath, "utf8");
+    await writeFile(
+      configurationPath,
+      `${configuration}\nrules:\n  minimessage-syntax:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n`,
+    );
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("greeting: 你好", 'greeting: "翻译"'),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const coverage = report.coverage as Record<string, unknown>;
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      (coverage.enabledRuleIds as string[]).includes("minimessage-tags"),
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      (coverage.disabledRuleIds as string[]).includes("minimessage-syntax") &&
+        (coverage.disabledRuleIds as string[]).includes(
+          "minimessage-variables",
+        ),
       checked.stderr || checked.stdout,
     );
   });
@@ -1110,7 +2174,7 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.deepEqual(afterCheck, beforeCheck);
   });
 
-  void it("未支持的 Lands 扩展会定位原文并显示覆盖限制", async (t) => {
+  void it("支持的 Lands 条件不会被误报为扩展，未知 MiniMessage 标签仍显示限制", async (t) => {
     const project = await createProject(t, {
       sourceGreeting:
         "<verbose>需要日志权限</verbose> <future>未知扩展</future>",
@@ -1139,12 +2203,15 @@ void describe("MiniMessage 官方检查制品", () => {
       string,
       unknown
     >[];
-    const extension = diagnostics.find(
-      (diagnostic) =>
-        diagnostic.code === "minimessage.extension-unsupported" &&
-        diagnostic.origin === "source",
+    assert.equal(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.lands-control-invalid",
+      ),
+      false,
+      structured.stderr || structured.stdout,
     );
-    assert.ok(extension, structured.stderr || structured.stdout);
     const unknownTag = diagnostics.find(
       (diagnostic) =>
         diagnostic.code === "minimessage.tag-unknown" &&
@@ -1164,7 +2231,7 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.equal(coverage.complete, false);
     assert.match(
       JSON.stringify(coverage.unavailableCapabilities),
-      /Lands 控制/u,
+      /自定义 MiniMessage 标签/u,
     );
 
     const text = runCli("check", "--project", project.directory);
@@ -1280,11 +2347,10 @@ void describe("MiniMessage 官方检查制品", () => {
     }
   });
 
-  void it("正式 CLI 接受嵌套 hover、引号参数、转义和默认宽松闭合", async (t) => {
+  void it("主题 token 与同样式颜色标签仍按不同标签种类比较", async (t) => {
     const project = await createProject(t, {
-      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n',
-      sourceGreeting:
-        "<hover:show_text:'<t:regular>提示</t>'><red>正文 \\<字面></red></hover> <red>未显式闭合",
+      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n    accent: "<red>"\n',
+      sourceGreeting: "<t:regular>Neutral</t> <t:accent>Accent</t>",
     });
     const initialized = runCli(
       "init",
@@ -1296,6 +2362,72 @@ void describe("MiniMessage 官方检查制品", () => {
       "structured",
     );
     assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify("<gray>中性</gray> <red>强调</red>")}`,
+      ),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stderr || checked.stdout);
+    const mismatches = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "minimessage-tags" &&
+        diagnostic.code === "minimessage.tag-mismatch",
+    );
+    assert.ok(
+      mismatches.some((diagnostic) =>
+        JSON.stringify(diagnostic.expected).includes('"tag":"t"'),
+      ),
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(
+      mismatches.some((diagnostic) =>
+        JSON.stringify(diagnostic.expected).includes('"tag":"color"'),
+      ),
+      checked.stderr || checked.stdout,
+    );
+  });
+
+  void it("正式 CLI 接受嵌套 hover、引号参数、转义和默认宽松闭合", async (t) => {
+    const sourceGreeting =
+      "<hover:show_text:'<t:regular>提示</t>'><red>正文 \\<字面></red></hover> <red>未显式闭合";
+    const project = await createProject(t, {
+      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n',
+      sourceGreeting,
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(sourceGreeting)}`,
+      ),
+    );
 
     const checked = runCli(
       "check",
@@ -1796,6 +2928,16 @@ void describe("MiniMessage 官方检查制品", () => {
       "structured",
     );
     assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        'greeting: "<color:red><gray><#00ff88><!b>正文"',
+      ),
+    );
 
     const checked = runCli(
       "check",

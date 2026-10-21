@@ -1,3 +1,4 @@
+import { miniMessageTagsRule } from "#/minimessage-tags";
 import { miniMessageVariablesRule } from "#/minimessage-variables";
 import type {
   CheckCoverage,
@@ -68,6 +69,7 @@ const miniMessageSyntaxRule: CheckRule = {
 export const builtInRules: readonly CheckRule[] = [
   structureRule,
   miniMessageSyntaxRule,
+  miniMessageTagsRule,
   miniMessageVariablesRule,
 ];
 
@@ -96,6 +98,8 @@ function diagnosticFromFinding(
       messageId: message?.id,
       origin: finding.origin,
       location: finding.location,
+      identity: finding.identity ?? null,
+      fingerprint: finding.fingerprint ?? null,
       expected: finding.expected,
       actual: finding.actual,
     }),
