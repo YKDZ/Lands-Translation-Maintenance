@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { watch } from "node:fs";
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rename,
   rm,
@@ -17,17 +18,154 @@ import { fileURLToPath } from "node:url";
 import { initializeProject } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
 
-import {
-  createProject,
-  readEnvelope,
-  readReport,
-  runCli,
-  runCliWithoutJava,
-  snapshotProjectFiles,
-} from "./cli-fixtures.ts";
-
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
+
+function runCli(...args: string[]) {
+  return spawnSync(process.execPath, [cliFile, ...args], {
+    encoding: "utf8",
+  });
+}
+
+function runCliWithoutPath(...args: string[]) {
+  return spawnSync(process.execPath, [cliFile, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: "" },
+  });
+}
+
+async function writeJar(
+  jarFile: string,
+  options: {
+    readonly source?: string;
+    readonly settings?: string;
+    readonly includeSettings?: boolean;
+    readonly extra?: Readonly<Record<string, string>>;
+  } = {},
+) {
+  const resources: Record<string, Uint8Array> = {
+    "lang/en.yml": strToU8(
+      options.source ??
+        [
+          "messages:",
+          "  greeting: Hello",
+          "  welcome: Welcome",
+          "  commands:",
+          "    registered: Run",
+          "list:",
+          "  entries: [first, second]",
+          "",
+        ].join("\n"),
+    ),
+    "plugin.yml": strToU8("name: Lands\n"),
+    "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
+    "me/lands/Plugin.class": strToU8("class bytes"),
+  };
+  if (options.includeSettings !== false) {
+    resources["settings.yml"] = strToU8(options.settings ?? "enabled: true\n");
+  }
+  for (const [path, content] of Object.entries(options.extra ?? {})) {
+    resources[path] = strToU8(content);
+  }
+  await writeFile(jarFile, zipSync(resources));
+}
+
+async function snapshotProjectFiles(projectDirectory: string) {
+  const paths: string[] = [];
+  async function collect(directory: string, prefix: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const relativePath = prefix ? join(prefix, entry.name) : entry.name;
+      const absolutePath = join(directory, entry.name);
+      if (entry.isDirectory()) await collect(absolutePath, relativePath);
+      else if (entry.isFile()) paths.push(relativePath);
+    }
+  }
+  await collect(projectDirectory, "");
+  return Promise.all(
+    paths
+      .sort()
+      .map(
+        async (path) =>
+          [path, await readFile(join(projectDirectory, path))] as const,
+      ),
+  );
+}
+
+async function createProject(t: TestContext) {
+  const directory = await mkdtemp(join(tmpdir(), "lands-l10n-cli-"));
+  t.after(async () => rm(directory, { force: true, recursive: true }));
+
+  const jarFile = join(directory, "Lands.jar");
+  await mkdir(join(directory, "lang"), { recursive: true });
+  await mkdir(join(directory, ".l10n"), { recursive: true });
+  await writeFile(
+    jarFile,
+    zipSync({
+      "lang/en.yml": strToU8(
+        [
+          "messages:",
+          "  greeting: Hello",
+          "  welcome: Welcome",
+          "  commands:",
+          "    registered: Run",
+          "list:",
+          "  entries: [first, second]",
+          "",
+        ].join("\n"),
+      ),
+      "plugin.yml": strToU8("name: Lands\n"),
+      "settings.yml": strToU8("enabled: true\n"),
+      "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
+      "me/lands/Plugin.class": strToU8("class bytes"),
+    }),
+  );
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.0.1"',
+      '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
+      "resources:",
+      "  - path: lang/en.yml",
+      "    purpose: chat-language",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: settings.yml",
+      "    purpose: configuration",
+      "  - path: bedrock/lang/en_us.json",
+      "    purpose: bedrock-excluded",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      "    - source: lang/en.yml",
+      "      target: lang/zh.yml",
+      "      fields:",
+      "        - path: [messages]",
+      "          category: chat-string",
+      "        - path: [list, entries]",
+      "          category: chat-string-list",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(directory, "lang/zh.yml"),
+    [
+      "messages:",
+      "  greeting: 你好",
+      "  commands:",
+      "    registered: 已注册",
+      "list:",
+      "  entries:",
+      "    - 第一项",
+      "    - 第二项",
+      "",
+    ].join("\n"),
+  );
+
+  return { directory, jarFile };
+}
 
 async function createInterruptedProject(t: TestContext, resourceCount = 150) {
   const directory = await mkdtemp(join(tmpdir(), "lands-l10n-interrupted-"));
@@ -71,9 +209,6 @@ async function createInterruptedProject(t: TestContext, resourceCount = 150) {
       '  targetLanguage: "zh-CN"',
       "  mappings:",
       ...mappings,
-      "rules:",
-      "  minimessage-syntax:",
-      "    enabled: false",
       "",
     ].join("\n"),
   );
@@ -145,6 +280,18 @@ function killInitWhenFileAppears(
   });
 }
 
+function readEnvelope(stdout: string) {
+  return JSON.parse(stdout) as {
+    readonly kind?: unknown;
+    readonly variant?: unknown;
+    readonly data?: Record<string, unknown>;
+  };
+}
+
+function readReport(output: string) {
+  return readEnvelope(output).data?.report as Record<string, unknown>;
+}
+
 void describe("CLI 制品", () => {
   void it("通过同一契约提供简体中文帮助和正式命令", () => {
     const result = runCli("--help");
@@ -153,6 +300,7 @@ void describe("CLI 制品", () => {
     assert.match(result.stdout, /初始化/);
     assert.match(result.stdout, /状态/);
     assert.match(result.stdout, /检查/);
+    assert.match(result.stdout, /sync/);
     assert.match(result.stdout, /schema/);
   });
 
@@ -188,6 +336,1452 @@ void describe("CLI 制品", () => {
     assert.equal((envelope as { readonly kind?: unknown }).kind, "data");
     assert.match(result.stdout, /schemaVersion/);
     assert.match(result.stdout, /status/);
+  });
+
+  void it("sync --dry-run 返回可应用的结构化计划且不写入项目", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetBeforeFormatting = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetBeforeFormatting.replace(/^ {2}/gm, "    "),
+    );
+    const files = [
+      targetPath,
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const before = await Promise.all(files.map((file) => readFile(file)));
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const envelope = readEnvelope(preview.stdout);
+    assert.equal(envelope.kind, "data");
+    const plan = envelope.data?.plan as Record<string, unknown>;
+    assert.equal(typeof plan?.sourceVersion, "string");
+    assert.equal(Array.isArray(plan?.messages), true);
+    assert.equal(Array.isArray(plan?.writes), true);
+    assert.equal(Array.isArray(plan?.inputSnapshots), true);
+    const targetPlan = (
+      plan.targetFiles as readonly Record<string, unknown>[]
+    ).find(({ path }) => path === "lang/zh.yml");
+    assert.equal(targetPlan?.action, "unchanged");
+    assert.equal(targetPlan?.contentSha256, targetPlan?.expectedSha256);
+    const inputSnapshots = plan.inputSnapshots as readonly Record<
+      string,
+      unknown
+    >[];
+    const snapshotPaths = new Set(inputSnapshots.map(({ path }) => path));
+    for (const path of [
+      join(project.directory, ".l10n/config.yml"),
+      project.jarFile,
+      join(project.directory, "lang/zh.yml"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ]) {
+      assert.ok(
+        snapshotPaths.has(path),
+        `${path} 不在计划输入快照中：${JSON.stringify([...snapshotPaths])}`,
+      );
+    }
+    assert.ok(
+      inputSnapshots.every(({ sha256: digest }) =>
+        /^[0-9a-f]{64}$/.test(digest as string),
+      ),
+    );
+    const welcome = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","welcome"]',
+    );
+    assert.ok(
+      (plan.pendingTranslations as readonly string[]).includes(
+        welcome?.id as string,
+      ),
+    );
+    const readable = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+    );
+    assert.equal(readable.status, 0, readable.stderr);
+    assert.match(readable.stdout, /待翻译总数 1 条/);
+    assert.match(readable.stdout, /保留译文（原文未变）/);
+    assert.match(readable.stdout, /保留译文（原文未变；待翻译）/);
+    assert.match(readable.stdout, /预演未写入项目/);
+    const after = await Promise.all(files.map((file) => readFile(file)));
+    for (let index = 0; index < before.length; index += 1) {
+      assert.deepEqual(after[index], before[index]);
+    }
+  });
+
+  void it("未指定 --dry-run 时明确说明实际同步尚未交付", async (t) => {
+    const project = await createProject(t);
+    const result = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout || result.stderr, /实际同步尚未交付/);
+  });
+
+  void it("完整资源差异先阻断，消费者更新清单后可预演且未维护资源只观察", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    await writeJar(project.jarFile, {
+      includeSettings: false,
+      extra: { "readme.md": "newly declared documentation\n" },
+    });
+    const paths = [
+      join(project.directory, ".l10n/config.yml"),
+      join(project.directory, "lang/zh.yml"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const beforeBlocked = await Promise.all(
+      paths.map((path) => readFile(path)),
+    );
+    const blocked = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(blocked.status, 1, blocked.stderr);
+    const blockedResult = readEnvelope(blocked.stdout || blocked.stderr);
+    assert.equal(blockedResult.kind, "failure");
+    const blockedPreview = blockedResult.data?.preview as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(
+      (blockedPreview.resourceDifference as Record<string, unknown>).undeclared,
+      ["readme.md"],
+    );
+    assert.deepEqual(
+      (blockedPreview.resourceDifference as Record<string, unknown>).missing,
+      ["settings.yml"],
+    );
+    const afterBlocked = await Promise.all(paths.map((path) => readFile(path)));
+    for (let index = 0; index < beforeBlocked.length; index += 1) {
+      assert.deepEqual(afterBlocked[index], beforeBlocked[index]);
+    }
+
+    const configPath = paths[0]!;
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "  - path: settings.yml\n    purpose: configuration\n",
+        "  - path: readme.md\n    purpose: documentation\n",
+      ),
+    );
+    const beforeAccepted = await Promise.all(
+      paths.map((path) => readFile(path)),
+    );
+    const accepted = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(accepted.status, 0, accepted.stderr);
+    const plan = readEnvelope(accepted.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const changes = plan.resourceChanges as Record<string, unknown>;
+    assert.deepEqual(changes.added, ["readme.md"]);
+    assert.deepEqual(changes.removed, ["settings.yml"]);
+    assert.deepEqual((changes.observedOnly as Record<string, unknown>).added, [
+      "readme.md",
+    ]);
+    assert.deepEqual(
+      (changes.observedOnly as Record<string, unknown>).removed,
+      ["settings.yml"],
+    );
+    const writeKinds = (plan.writes as readonly Record<string, unknown>[]).map(
+      ({ kind }) => kind,
+    );
+    assert.equal(writeKinds.length, 2);
+    assert.ok(writeKinds.includes("baseline"));
+    assert.ok(writeKinds.includes("lock"));
+    const afterAccepted = await Promise.all(
+      paths.map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforeAccepted.length; index += 1) {
+      assert.deepEqual(afterAccepted[index], beforeAccepted[index]);
+    }
+  });
+
+  void it("按解析值严格保留或重置消息，列表整体比较并计划增删", async (t) => {
+    const project = await createProject(t);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        '  greeting: "Hello"',
+        '  welcome: "Welcome"',
+        "  commands:",
+        '    registered: "Run <red>now</red>"',
+        "    multiline: Line one Line two",
+        "    leaving: Farewell",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeFile(
+      join(project.directory, "lang/zh.yml"),
+      [
+        "messages:",
+        "  greeting: 你好",
+        "  welcome: 欢迎",
+        "  commands:",
+        "    registered: 已注册",
+        "    multiline: 多行译文",
+        "    leaving: 再见",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const lockPath = join(project.directory, ".l10n/lock.json");
+    const before = await Promise.all(
+      [targetPath, baselinePath, lockPath].map((path) => readFile(path)),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "    greeting: Hello",
+        '    welcome: "Welcome "',
+        "    commands:",
+        '        registered: "Run <green>now</green>"',
+        "        multiline: |-",
+        "            Line one",
+        "            Line two",
+        "        added: New line",
+        "list:",
+        "    entries: [second, extra]",
+        "",
+      ].join("\n"),
+    });
+    const result = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const plan = readEnvelope(result.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const byPath = new Map(
+      messages.map((message) => [JSON.stringify(message.path), message]),
+    );
+    assert.equal(byPath.get('["messages","greeting"]')?.action, "preserve");
+    assert.equal(byPath.get('["messages","welcome"]')?.action, "reset");
+    assert.equal(
+      byPath.get('["messages","commands","registered"]')?.action,
+      "reset",
+    );
+    assert.equal(
+      byPath.get('["messages","commands","multiline"]')?.action,
+      "reset",
+    );
+    assert.equal(
+      byPath.get('["messages","commands","multiline"]')?.source,
+      "Line one\nLine two",
+    );
+    assert.equal(
+      byPath.get('["messages","commands","leaving"]')?.action,
+      "delete",
+    );
+    assert.equal(byPath.get('["messages","commands","added"]')?.action, "seed");
+    const list = byPath.get('["list","entries"]');
+    assert.equal(list?.action, "reset");
+    assert.deepEqual(list?.previousTarget, ["第一项", "第二项"]);
+    assert.deepEqual(list?.source, ["second", "extra"]);
+    assert.deepEqual(list?.target, ["second", "extra"]);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      true,
+    );
+    const after = await Promise.all(
+      [targetPath, baselinePath, lockPath].map((path) => readFile(path)),
+    );
+    for (let index = 0; index < before.length; index += 1) {
+      assert.deepEqual(after[index], before[index]);
+    }
+  });
+
+  void it("移除旧字符串消息时按旧身份删除完整错误对象值", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting:",
+        "    text: 旧中文",
+        "  keep: 保留",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    const sourceBefore = [
+      "messages:",
+      "  greeting: Hello",
+      "  keep: Keep",
+      "list:",
+      "  entries: [first, second]",
+      "",
+    ].join("\n");
+    await writeJar(project.jarFile, { source: sourceBefore });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const greeting = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(greeting?.action, "delete");
+    assert.equal(greeting?.reason, "source-removed");
+    assert.equal(greeting?.previousSource, "Hello");
+    assert.deepEqual(greeting?.previousTarget, { text: "旧中文" });
+    assert.equal(
+      (plan.messages as readonly Record<string, unknown>[]).some(
+        ({ path, reason }) =>
+          JSON.stringify(path) === '["messages","greeting","text"]' &&
+          reason === "orphaned-translation",
+      ),
+      false,
+    );
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /keep: 保留/);
+    assert.doesNotMatch(targetWrite?.content as string, /greeting|text/);
+  });
+
+  void it("旧标量消息变为分支时先删除旧身份再新增子消息", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting: 你好",
+        "  keep: 保留",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Hello",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting:",
+        "    child: New",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldGreeting = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    const child = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting","child"]',
+    );
+    assert.equal(oldGreeting?.action, "delete");
+    assert.equal(oldGreeting?.reason, "source-removed");
+    assert.equal(oldGreeting?.previousTarget, "你好");
+    assert.equal(child?.action, "seed");
+    assert.equal(child?.reason, "new-message");
+    assert.equal(child?.target, "New");
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /child: New/);
+    assert.doesNotMatch(targetWrite?.content as string, /greeting: 你好/);
+  });
+
+  void it("旧分支消息变为标量时列出旧删除和新消息", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      [
+        "messages:",
+        "  greeting:",
+        "    child: 你好",
+        "  keep: 保留",
+        "list:",
+        "  entries: [第一项, 第二项]",
+        "",
+      ].join("\n"),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting:",
+        "    child: Hello",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: New",
+        "  keep: Keep",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const oldChild = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting","child"]',
+    );
+    const greeting = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(oldChild?.action, "delete");
+    assert.equal(oldChild?.reason, "source-removed");
+    assert.equal(oldChild?.previousTarget, "你好");
+    assert.equal(greeting?.action, "seed");
+    assert.equal(greeting?.reason, "new-message");
+    assert.equal(greeting?.target, "New");
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /greeting: New/);
+    assert.doesNotMatch(targetWrite?.content as string, /child: 你好/);
+  });
+
+  void it("映射字段类型变化沿用身份并重置整条消息", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace("welcome: Welcome", "welcome: 欢迎"),
+    );
+
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "        - path: [messages]\n          category: chat-string\n",
+        [
+          "        - path: [messages, greeting]",
+          "          category: chat-string",
+          "        - path: [messages, welcome]",
+          "          category: chat-string-list",
+          "        - path: [messages, commands]",
+          "          category: chat-string",
+          "",
+        ].join("\n"),
+      ),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Hello",
+        "  welcome: [Welcome, again]",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const message = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","welcome"]',
+    );
+    assert.equal(message?.action, "reset");
+    assert.equal(message?.reason, "source-changed");
+    assert.equal(message?.previousSource, "Welcome");
+    assert.equal(message?.previousTarget, "欢迎");
+    assert.deepEqual(message?.source, ["Welcome", "again"]);
+    assert.deepEqual(message?.target, ["Welcome", "again"]);
+  });
+
+  void it("映射目标移动后按来源路径保留译文并计划新文件", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace("target: lang/zh.yml", "target: lang/zh-moved.yml"),
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
+    assert.ok(
+      (plan.messages as readonly Record<string, unknown>[]).every(
+        ({ action }) => action === "preserve",
+      ),
+    );
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.path as string, /lang\/zh-moved\.yml$/);
+    assert.match(targetWrite?.content as string, /greeting: 你好/);
+    assert.match(targetWrite?.content as string, /registered: 已注册/);
+    await assert.rejects(
+      readFile(join(project.directory, "lang/zh-moved.yml")),
+    );
+  });
+
+  void it("未维护资源内容变化只更新预演基线，不重置译文", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetBefore = await readFile(targetPath);
+    await writeJar(project.jarFile, { settings: "enabled: false\n" });
+
+    const result = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const plan = readEnvelope(result.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const changes = plan.resourceChanges as Record<string, unknown>;
+    assert.deepEqual(changes.changed, ["settings.yml"]);
+    assert.deepEqual(
+      (changes.observedOnly as Record<string, unknown>).changed,
+      ["settings.yml"],
+    );
+    assert.ok(
+      (plan.messages as readonly Record<string, unknown>[]).every(
+        ({ action }) => action === "preserve",
+      ),
+    );
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.deepEqual(await readFile(targetPath), targetBefore);
+  });
+
+  void it("原文未变但目标字段缺失时计划填入英文并保留待翻译状态", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(targetPath, target.replace("  welcome: Welcome\n", ""));
+    const before = await readFile(targetPath);
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const message = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","welcome"]',
+    );
+    assert.equal(message?.action, "seed");
+    assert.equal(message?.reason, "missing-translation");
+    assert.equal(message?.target, "Welcome");
+    assert.ok(
+      (plan.pendingTranslations as readonly string[]).includes(
+        message?.id as string,
+      ),
+    );
+    const targetWrite = (
+      plan.writes as readonly Record<string, unknown>[]
+    ).find(({ kind }) => kind === "target");
+    assert.match(targetWrite?.content as string, /welcome: Welcome/);
+    assert.deepEqual(await readFile(targetPath), before);
+  });
+
+  void it("移出最后一条维护映射后保留整份中文目标", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        /  mappings:\n    - source: lang\/en\.yml\n      target: lang\/zh\.yml\n      fields:\n        - path: \[messages\]\n          category: chat-string\n        - path: \[list, entries\]\n          category: chat-string-list\n/,
+        "  mappings: []\n",
+      ),
+    );
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetBefore = await readFile(targetPath);
+
+    const result = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const plan = readEnvelope(result.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
+    assert.deepEqual(plan.messages, []);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.deepEqual(await readFile(targetPath), targetBefore);
+  });
+
+  void it("目标消息路径被字符串祖先阻断时只读保留整份中文", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const original = [
+      "messages: 整份旧中文",
+      "list:",
+      "  entries: [第一项, 第二项]",
+      "",
+    ].join("\n");
+    await writeFile(targetPath, original);
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.equal(await readFile(targetPath, "utf8"), original);
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    assert.ok(messages.length > 0);
+    assert.ok(messages.every(({ action }) => action === "preserve"));
+    const blockedMessages = messages.filter(
+      ({ path }) => (path as readonly string[])[0] === "messages",
+    );
+    assert.equal(blockedMessages.length, 3);
+    assert.ok(
+      blockedMessages.every(({ reason }) => reason === "target-path-blocked"),
+    );
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.equal(await readFile(targetPath, "utf8"), original);
+
+    const statePaths = [
+      targetPath,
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const beforeChangedPreview = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: New greeting",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "    added: New message",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const changedPreview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(changedPreview.status, 1);
+    const changedResult = readEnvelope(
+      changedPreview.stdout || changedPreview.stderr,
+    );
+    const blockedPreview = changedResult.data?.preview as Record<
+      string,
+      unknown
+    >;
+    assert.equal(blockedPreview.ready, false);
+    assert.ok(
+      (blockedPreview.blockers as readonly Record<string, unknown>[]).some(
+        ({ code }) => code === "sync.target-path-blocked",
+      ),
+    );
+    const afterChangedPreview = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforeChangedPreview.length; index += 1) {
+      assert.deepEqual(afterChangedPreview[index], beforeChangedPreview[index]);
+    }
+
+    await writeJar(project.jarFile, {
+      source: ["messages: {}", "list:", "  entries: [first, second]", ""].join(
+        "\n",
+      ),
+    });
+    const removedPreview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(removedPreview.status, 1);
+    const removedResult = readEnvelope(
+      removedPreview.stdout || removedPreview.stderr,
+    );
+    const removedBlockedPreview = removedResult.data?.preview as Record<
+      string,
+      unknown
+    >;
+    assert.equal(removedBlockedPreview.ready, false);
+    assert.ok(
+      (
+        removedBlockedPreview.blockers as readonly Record<string, unknown>[]
+      ).some(({ code }) => code === "sync.target-path-blocked"),
+    );
+    const afterRemovedPreview = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforeChangedPreview.length; index += 1) {
+      assert.deepEqual(afterRemovedPreview[index], beforeChangedPreview[index]);
+    }
+  });
+
+  void it("移出范围的缺失目标不因预演而新建", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await rm(targetPath);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        /  mappings:\n    - source: lang\/en\.yml\n      target: lang\/zh\.yml\n      fields:\n        - path: \[messages\]\n          category: chat-string\n        - path: \[list, entries\]\n          category: chat-string-list\n/,
+        "  mappings: []\n",
+      ),
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    await assert.rejects(readFile(targetPath));
+  });
+
+  void it("完全移出范围的无效旧目标不参与预演解析", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const unmanagedTarget = "messages: [\n";
+    await writeFile(targetPath, unmanagedTarget);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        /  mappings:\n    - source: lang\/en\.yml\n      target: lang\/zh\.yml\n      fields:\n        - path: \[messages\]\n          category: chat-string\n        - path: \[list, entries\]\n          category: chat-string-list\n/,
+        "  mappings: []\n",
+      ),
+    );
+
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.equal(await readFile(targetPath, "utf8"), unmanagedTarget);
+  });
+
+  void it("预演更新原始主题 YAML 快照，不运行 Java MiniMessage 检查", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+        "  - path: lang/theme.yml\n    purpose: configuration\n  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+      ),
+    );
+    const initialTheme = 'theme:\n  tokens:\n    accent: "<unknown>"\n';
+    await writeJar(project.jarFile, {
+      extra: { "lang/theme.yml": initialTheme },
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const baseline = JSON.parse(await readFile(baselinePath, "utf8")) as {
+      readonly miniMessageTheme?: {
+        readonly file: string;
+        readonly source: string;
+      };
+    };
+    assert.deepEqual(baseline.miniMessageTheme, {
+      file: "lang/theme.yml",
+      source: initialTheme,
+    });
+
+    const nextTheme = 'theme:\n  tokens:\n    accent: "<still-unknown>"\n';
+    await writeJar(project.jarFile, {
+      extra: { "lang/theme.yml": nextTheme },
+    });
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const lockPath = join(project.directory, ".l10n/lock.json");
+    const beforePreview = await Promise.all(
+      [targetPath, baselinePath, lockPath].map((path) => readFile(path)),
+    );
+    const preview = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const changes = plan.resourceChanges as Record<string, unknown>;
+    assert.deepEqual(changes.changed, ["lang/theme.yml"]);
+    assert.ok(
+      (plan.messages as readonly Record<string, unknown>[]).every(
+        ({ action }) => action === "preserve",
+      ),
+    );
+    const writes = plan.writes as readonly Record<string, unknown>[];
+    const writeKinds = writes.map(({ kind }) => kind);
+    assert.equal(writeKinds.length, 2);
+    assert.ok(writeKinds.includes("baseline"));
+    assert.ok(writeKinds.includes("lock"));
+    const candidateBaseline = JSON.parse(
+      writes.find(({ kind }) => kind === "baseline")?.content as string,
+    ) as {
+      readonly miniMessageTheme?: {
+        readonly file: string;
+        readonly source: string;
+      };
+    };
+    assert.deepEqual(candidateBaseline.miniMessageTheme, {
+      file: "lang/theme.yml",
+      source: nextTheme,
+    });
+    const afterPreview = await Promise.all(
+      [targetPath, baselinePath, lockPath].map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforePreview.length; index += 1) {
+      assert.deepEqual(afterPreview[index], beforePreview[index]);
+    }
+  });
+
+  void it("主题 YAML 有重复键时阻断预演且不改写项目", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+        "  - path: lang/theme.yml\n    purpose: configuration\n  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+      ),
+    );
+    await writeJar(project.jarFile, {
+      extra: { "lang/theme.yml": "theme:\n  tokens:\n    accent: red\n" },
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      extra: {
+        "lang/theme.yml":
+          "theme:\n  tokens:\n    accent: red\n    accent: blue\n",
+      },
+    });
+    const files = [
+      join(project.directory, "lang/zh.yml"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const before = await Promise.all(files.map((path) => readFile(path)));
+
+    const result = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout || result.stderr, /lang\/theme\.yml/);
+    assert.match(result.stdout || result.stderr, /重复|duplicate|unique/i);
+    const after = await Promise.all(files.map((path) => readFile(path)));
+    for (let index = 0; index < before.length; index += 1) {
+      assert.deepEqual(after[index], before[index]);
+    }
+  });
+
+  void it("候选资源中有多个 theme.yml 时阻断预演", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+        "  - path: lang/theme.yml\n    purpose: configuration\n  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+      ),
+    );
+    await writeJar(project.jarFile, {
+      extra: { "lang/theme.yml": "theme: {}\n" },
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const acceptedConfig = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      acceptedConfig.replace(
+        "  - path: lang/theme.yml\n    purpose: configuration\n",
+        "  - path: lang/theme.yml\n    purpose: configuration\n  - path: ui/theme.yml\n    purpose: configuration\n",
+      ),
+    );
+    await writeJar(project.jarFile, {
+      extra: {
+        "lang/theme.yml": "theme: {}\n",
+        "ui/theme.yml": "theme: {}\n",
+      },
+    });
+    const files = [
+      configPath,
+      join(project.directory, "lang/zh.yml"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const before = await Promise.all(files.map((path) => readFile(path)));
+
+    const result = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout || result.stderr, /主题资源不唯一/);
+    assert.match(result.stdout || result.stderr, /lang\/theme\.yml/);
+    assert.match(result.stdout || result.stderr, /ui\/theme\.yml/);
+    const after = await Promise.all(files.map((path) => readFile(path)));
+    for (let index = 0; index < before.length; index += 1) {
+      assert.deepEqual(after[index], before[index]);
+    }
+  });
+
+  void it("仅解析已登记为 configuration 的主题资源", async (t) => {
+    const project = await createProject(t);
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace(
+        "  - path: bedrock/lang/en_us.json\n    purpose: bedrock-excluded\n",
+        [
+          "  - path: lang/theme.yml",
+          "    purpose: configuration",
+          "  - path: bedrock/theme.yml",
+          "    purpose: bedrock-excluded",
+          "  - path: bedrock/lang/en_us.json",
+          "    purpose: bedrock-excluded",
+          "",
+        ].join("\n"),
+      ),
+    );
+    const initialTheme = "theme: {}\n";
+    await writeJar(project.jarFile, {
+      extra: {
+        "lang/theme.yml": initialTheme,
+        "bedrock/theme.yml": "theme: [invalid\n",
+      },
+    });
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const baseline = JSON.parse(await readFile(baselinePath, "utf8")) as {
+      readonly miniMessageTheme?: {
+        readonly file: string;
+        readonly source: string;
+      };
+    };
+    assert.deepEqual(baseline.miniMessageTheme, {
+      file: "lang/theme.yml",
+      source: initialTheme,
+    });
+
+    await writeJar(project.jarFile, {
+      extra: {
+        "lang/theme.yml": initialTheme,
+        "bedrock/theme.yml": "theme: {broken\n",
+      },
+    });
+    const preview = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    assert.deepEqual(
+      (plan.resourceChanges as Record<string, unknown>).observedOnly,
+      {
+        added: [],
+        removed: [],
+        changed: ["bedrock/theme.yml"],
+      },
+    );
+    const candidateBaseline = JSON.parse(
+      (plan.writes as readonly Record<string, unknown>[]).find(
+        ({ kind }) => kind === "baseline",
+      )?.content as string,
+    ) as {
+      readonly miniMessageTheme?: {
+        readonly file: string;
+        readonly source: string;
+      };
+    };
+    assert.deepEqual(candidateBaseline.miniMessageTheme, {
+      file: "lang/theme.yml",
+      source: initialTheme,
+    });
   });
 
   void it("初始化保留现有译文并记录缺失消息，状态查询无需 JAR", async (t) => {
@@ -279,18 +1873,49 @@ void describe("CLI 制品", () => {
     assert.equal(editedSummary.pendingTranslations, 0);
     assert.equal(editedSummary.modifiedTranslations, 1);
 
+    await rename(`${project.jarFile}.unavailable`, project.jarFile);
+    const previewFiles = [
+      join(project.directory, "lang/zh.yml"),
+      join(project.directory, ".l10n/upstream/source-baseline.json"),
+      join(project.directory, ".l10n/lock.json"),
+    ];
+    const beforePreview = await Promise.all(
+      previewFiles.map((file) => readFile(file)),
+    );
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const welcome = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","welcome"]',
+    );
+    assert.ok(welcome);
+    assert.deepEqual(plan.pendingTranslations, []);
+    const afterPreview = await Promise.all(
+      previewFiles.map((file) => readFile(file)),
+    );
+    for (let index = 0; index < beforePreview.length; index += 1) {
+      assert.deepEqual(afterPreview[index], beforePreview[index]);
+    }
+
     const files = [
       join(project.directory, "lang/zh.yml"),
       join(project.directory, ".l10n/upstream/source-baseline.json"),
       join(project.directory, ".l10n/lock.json"),
     ];
     const before = await Promise.all(files.map((file) => readFile(file)));
-    const configPath = join(project.directory, ".l10n/config.yml");
-    const config = await readFile(configPath, "utf8");
-    await writeFile(
-      configPath,
-      `${config}\nrules:\n  minimessage-syntax:\n    enabled: false\n`,
-    );
     const checked = runCli(
       "check",
       "--project",
@@ -360,6 +1985,36 @@ void describe("CLI 制品", () => {
       await readFile(targetPath, "utf8"),
       /greeting: \[\s*旧中文一, 旧中文二\s*\]/,
     );
+
+    const beforePreview = await readFile(targetPath);
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const messages = plan.messages as readonly Record<string, unknown>[];
+    const greeting = messages.find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(greeting?.action, "preserve");
+    assert.deepEqual(greeting?.previousTarget, ["旧中文一", "旧中文二"]);
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.deepEqual(await readFile(targetPath), beforePreview);
   });
 
   void it("已有消息路径为对象时保留结构，并只补写安全缺失项", async (t) => {
@@ -435,6 +2090,35 @@ void describe("CLI 制品", () => {
     assert.equal(status.status, 1);
     assert.match(status.stdout || status.stderr, /message.type-mismatch/);
     assert.match(await readFile(targetPath, "utf8"), /text: 旧中文/);
+    const beforePreview = await readFile(targetPath);
+    const preview = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const plan = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const greeting = (plan.messages as readonly Record<string, unknown>[]).find(
+      ({ path }) => JSON.stringify(path) === '["messages","greeting"]',
+    );
+    assert.equal(greeting?.action, "preserve");
+    assert.equal(greeting?.reason, "unchanged");
+    assert.deepEqual(greeting?.previousTarget, { text: "旧中文" });
+    assert.equal(
+      (plan.writes as readonly Record<string, unknown>[]).some(
+        ({ kind }) => kind === "target",
+      ),
+      false,
+    );
+    assert.deepEqual(await readFile(targetPath), beforePreview);
   });
 
   void it("消息路径的字符串或列表祖先保持原样并建立质量基线", async (t) => {
@@ -553,12 +2237,6 @@ void describe("CLI 制品", () => {
       join(project.directory, ".l10n/lock.json"),
     ];
     const before = await Promise.all(files.map((file) => readFile(file)));
-    const configPath = join(project.directory, ".l10n/config.yml");
-    const config = await readFile(configPath, "utf8");
-    await writeFile(
-      configPath,
-      `${config}\nrules:\n  minimessage-syntax:\n    enabled: false\n`,
-    );
     const result = runCli(
       "check",
       "--project",
@@ -958,7 +2636,7 @@ void describe("CLI 制品", () => {
     const config = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${config}\nrules:\n  structure:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  future-check:\n    enabled: true\n    severity: warning\n    parameters:\n      mode: strict\n`,
+      `${config}\nrules:\n  structure:\n    enabled: false\n  future-check:\n    enabled: true\n    severity: warning\n    parameters:\n      mode: strict\n`,
     );
     const status = runCli(
       "status",
@@ -979,10 +2657,7 @@ void describe("CLI 制品", () => {
     assert.equal(check.status, 1);
     const report = readReport(check.stdout || check.stderr);
     const coverage = report.coverage as Record<string, unknown>;
-    assert.deepEqual(coverage.disabledRuleIds, [
-      "minimessage-syntax",
-      "structure",
-    ]);
+    assert.deepEqual(coverage.disabledRuleIds, ["structure"]);
     assert.deepEqual(coverage.unsupportedRuleIds, ["future-check"]);
     assert.equal(coverage.complete, false);
   });
@@ -1058,95 +2733,5 @@ void describe("CLI 制品", () => {
       unknown
     >;
     assert.equal(statusSummary.sameTextCandidates, 1);
-  });
-
-  void it("只把配置用途的主题作为主题输入，Bedrock 同名资源保持排除", async (t) => {
-    const project = await createProject(t, {
-      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n',
-      bedrockTheme:
-        "theme:\n  tokens:\n    regular: '<gray>'\n    regular: '<red>'\n",
-    });
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-
-    assert.equal(initialized.status, 0, initialized.stderr);
-    const baseline = JSON.parse(
-      await readFile(
-        join(project.directory, ".l10n/upstream/source-baseline.json"),
-        "utf8",
-      ),
-    ) as {
-      readonly miniMessageTheme?: {
-        readonly file: string;
-        readonly source: string;
-      };
-    };
-    assert.equal(baseline.miniMessageTheme?.file, "Locale/theme.yml");
-    assert.match(baseline.miniMessageTheme?.source ?? "", /regular/u);
-  });
-
-  void it("初始化阻断主题 YAML 歧义且不改写项目文件", async (t) => {
-    const project = await createProject(t, {
-      theme: 'theme:\n  tokens:\n    regular: "<gray>"\n    regular: "<red>"\n',
-    });
-    const before = await snapshotProjectFiles(project.directory);
-    const rejected = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-
-    assert.equal(rejected.status, 1, rejected.stderr);
-    assert.match(rejected.stderr || rejected.stdout, /主题 YAML 无法安全读取/u);
-    assert.deepEqual(await snapshotProjectFiles(project.directory), before);
-  });
-
-  void it("Java 缺失时完整检查未完成，初始化和状态仍使用 Node", async (t) => {
-    const project = await createProject(t);
-    const initialized = runCliWithoutJava(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(initialized.status, 0, initialized.stderr);
-
-    const status = runCliWithoutJava(
-      "status",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(status.status, 0, status.stderr);
-    const checked = runCliWithoutJava(
-      "check",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(checked.status, 1, checked.stderr);
-    const report = readReport(checked.stderr || checked.stdout);
-    const coverage = report.coverage as Record<string, unknown>;
-    assert.equal(coverage.complete, false);
-    assert.match(
-      JSON.stringify(coverage.unavailableCapabilities),
-      /Java 运行环境/u,
-    );
   });
 });

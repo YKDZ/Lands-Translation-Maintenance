@@ -194,6 +194,56 @@ void describe("MiniMessage 官方检查制品", () => {
     );
   });
 
+  void it("按 Lands 主题语义规范化 token 名并保留空样式", async (t) => {
+    const cases = [
+      {
+        theme: "theme:\n  tokens:\n    regular:\n",
+        sourceGreeting: "<t:regular>正文</t>",
+      },
+      {
+        theme: 'theme:\n  tokens:\n    regular: ""\n',
+        sourceGreeting: "<t:regular>正文</t>",
+      },
+      {
+        theme: 'theme:\n  tokens:\n    Regular: "<red>"\n',
+        sourceGreeting: "<t:regular>正文</t>",
+      },
+    ];
+
+    for (const { theme, sourceGreeting } of cases) {
+      const project = await createProject(t, { theme, sourceGreeting });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(checked.stdout || checked.stderr);
+      const diagnostics = report.diagnostics as readonly Record<
+        string,
+        unknown
+      >[];
+      assert.deepEqual(
+        diagnostics.filter((diagnostic) =>
+          String(diagnostic.code).startsWith("minimessage.theme-"),
+        ),
+        [],
+      );
+    }
+  });
+
   void it("正式 CLI 接受嵌套 hover、引号参数、转义和默认宽松闭合", async (t) => {
     const project = await createProject(t, {
       theme: 'theme:\n  tokens:\n    regular: "<gray>"\n',
@@ -230,6 +280,156 @@ void describe("MiniMessage 官方检查制品", () => {
       ),
       [],
     );
+  });
+
+  void it("为每个重复主题 token 保留各自的原文位置", async (t) => {
+    const source = "<t:missing>A</t> and <t:missing>B</t>";
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const occurrences = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.theme-unknown" &&
+        diagnostic.origin === "source",
+    );
+    assert.equal(occurrences.length, 2);
+    const positions = occurrences
+      .map((diagnostic) =>
+        Number((diagnostic.actual as Record<string, unknown>).position),
+      )
+      .sort((left, right) => left - right);
+    assert.deepEqual(positions, [
+      source.indexOf("<t:missing>"),
+      source.lastIndexOf("<t:missing>"),
+    ]);
+    assert.equal(
+      new Set(occurrences.map((diagnostic) => diagnostic.diagnosticId)).size,
+      2,
+    );
+  });
+
+  void it("保留嵌套和正文中同名未知标签的解析文档及位置", async (t) => {
+    const source =
+      "<hover:show_text:'<future:nested>n</future>'>X</hover> <future:body>b</future>";
+    const project = await createProject(t, { sourceGreeting: source });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const occurrences = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter(
+      (diagnostic) =>
+        diagnostic.code === "minimessage.tag-unknown" &&
+        diagnostic.origin === "source",
+    );
+    assert.equal(occurrences.length, 4);
+    const expectedPositions = [
+      source.indexOf("<future:nested>"),
+      source.indexOf("</future>"),
+      source.indexOf("<future:body>"),
+      source.lastIndexOf("</future>"),
+    ].sort((left, right) => left - right);
+    assert.deepEqual(
+      occurrences
+        .map((diagnostic) =>
+          Number((diagnostic.actual as Record<string, unknown>).position),
+        )
+        .sort((left, right) => left - right),
+      expectedPositions,
+    );
+    assert.equal(
+      new Set(occurrences.map((diagnostic) => diagnostic.diagnosticId)).size,
+      4,
+    );
+    const nested = occurrences.filter((diagnostic) => {
+      const actual = diagnostic.actual as Record<string, unknown>;
+      return Number(actual.position) < source.indexOf(">X</hover>");
+    });
+    assert.equal(nested.length, 2);
+    assert.ok(
+      nested.every(
+        (diagnostic) =>
+          Number((diagnostic.actual as Record<string, unknown>).documentIndex) >
+          0,
+      ),
+    );
+  });
+
+  void it("让官方宽松解析器处理 hover 参数引号与转义", async (t) => {
+    const cases = [
+      "<hover:show_text:tip>X</hover>",
+      "<hover:'show_text':'<v:x>tip'>X</hover>",
+      "<hover:show_text:'unclosed>X",
+      "<hover:show_text:'<click:run_command:\\'/x <v:x>\\'>tip</click>'>X</hover>",
+    ];
+    for (const sourceGreeting of cases) {
+      const project = await createProject(t, { sourceGreeting });
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+
+      const checked = runCli(
+        "check",
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      const report = readReport(checked.stdout || checked.stderr);
+      const miniMessageDiagnostics = (
+        report.diagnostics as readonly Record<string, unknown>[]
+      ).filter((diagnostic) =>
+        String(diagnostic.code).startsWith("minimessage."),
+      );
+      assert.deepEqual(miniMessageDiagnostics, [], sourceGreeting);
+      assert.equal(
+        JSON.stringify(report.coverage).includes("偏移无法可靠映射"),
+        false,
+        sourceGreeting,
+      );
+    }
   });
 
   void it("正式 CLI 接受 MiniMessage 4.26.1 官方别名与颜色写法", async (t) => {

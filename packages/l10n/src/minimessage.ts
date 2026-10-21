@@ -38,9 +38,6 @@ interface MessageInput {
   readonly file: string;
   readonly path: readonly (string | number)[];
   readonly input: string;
-  readonly nodes: readonly MiniMessageSourceNode[];
-  readonly documentIndex: number;
-  readonly parent?: MiniMessageContextFrame;
   readonly range: MiniMessagePosition;
 }
 
@@ -75,15 +72,32 @@ interface JavaMessageResult {
 
 interface JavaUnresolvedTag {
   readonly messageIndex: number;
+  readonly documentIndex: number;
   readonly name: string;
   readonly position: number;
   readonly detail: string;
+  readonly raw: string;
+  readonly context: readonly MiniMessageContextFrame[];
+}
+
+interface JavaSourceDocument {
+  readonly messageIndex: number;
+  readonly documentIndex: number;
+  readonly parentDocumentIndex: number;
+  readonly range: MiniMessagePosition;
+  readonly context: readonly MiniMessageContextFrame[];
+  readonly nodes: readonly MiniMessageSourceNode[];
 }
 
 interface JavaParseResult {
   readonly themes: ReadonlyMap<number, JavaThemeResult>;
   readonly messages: ReadonlyMap<number, JavaMessageResult>;
+  readonly documents: readonly JavaSourceDocument[];
   readonly unresolved: readonly JavaUnresolvedTag[];
+  readonly warnings: readonly {
+    readonly messageIndex: number;
+    readonly reason: string;
+  }[];
   readonly unavailable?: string;
 }
 
@@ -222,300 +236,6 @@ function styleKind(name: string): MiniMessageTagNode["semanticKind"] {
   return "unknown";
 }
 
-function isEscaped(input: string, index: number): boolean {
-  let slashes = 0;
-  for (
-    let cursor = index - 1;
-    cursor >= 0 && input[cursor] === "\\";
-    cursor -= 1
-  ) {
-    slashes += 1;
-  }
-  return slashes % 2 === 1;
-}
-
-interface TagSlice {
-  readonly start: number;
-  readonly end: number;
-  readonly raw: string;
-  readonly body: string;
-}
-
-function findTagEnd(input: string, start: number): TagSlice | undefined {
-  let quote: "'" | '"' | undefined;
-  for (let index = start + 1; index < input.length; index += 1) {
-    const character = input[index]!;
-    if (isEscaped(input, index)) continue;
-    if (quote !== undefined) {
-      if (character === quote) quote = undefined;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      quote = character;
-      continue;
-    }
-    if (character === ">") {
-      return {
-        start,
-        end: index + 1,
-        raw: input.slice(start, index + 1),
-        body: input.slice(start + 1, index),
-      };
-    }
-  }
-  return undefined;
-}
-
-interface ParameterSlice {
-  readonly value: string;
-  readonly position: MiniMessagePosition;
-}
-
-function splitParameters(
-  input: string,
-  contentStart: number,
-  body: string,
-): readonly ParameterSlice[] {
-  const result: ParameterSlice[] = [];
-  let quote: "'" | '"' | undefined;
-  let partStart = 0;
-  for (let index = 0; index <= body.length; index += 1) {
-    const character = body[index];
-    if (index < body.length && isEscaped(body, index)) continue;
-    if (quote !== undefined) {
-      if (character === quote) quote = undefined;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      quote = character;
-      continue;
-    }
-    if (character === ":" || index === body.length) {
-      const from = contentStart + partStart;
-      const to = contentStart + index;
-      result.push({
-        value: input.slice(from, to),
-        position: { start: from, end: to },
-      });
-      partStart = index + 1;
-    }
-  }
-  return result;
-}
-
-function tagNode(
-  input: string,
-  slice: TagSlice,
-  context: readonly MiniMessageContextFrame[],
-  baseOffset: number,
-): MiniMessageTagNode {
-  const absoluteStart = baseOffset + slice.start;
-  const absoluteEnd = baseOffset + slice.end;
-  const hasClosingSlash = slice.body.startsWith("/");
-  const withoutClosingSlash = hasClosingSlash
-    ? slice.body.slice(1)
-    : slice.body;
-  const selfClosing = withoutClosingSlash.endsWith("/");
-  const body = selfClosing
-    ? withoutClosingSlash.slice(0, -1)
-    : withoutClosingSlash;
-  const pieces = splitParameters(
-    input,
-    slice.start + 1 + Number(hasClosingSlash),
-    body,
-  );
-  const rawName = pieces[0]?.value ?? body;
-  const name = rawName.toLowerCase();
-  const parameters = pieces.slice(1);
-  return {
-    kind: "tag",
-    raw: slice.raw,
-    name,
-    parameters: parameters.map((parameter) => parameter.value),
-    parameterPositions: parameters.map((parameter) => ({
-      start: baseOffset + parameter.position.start,
-      end: baseOffset + parameter.position.end,
-    })),
-    closing: hasClosingSlash,
-    selfClosing,
-    semanticKind: styleKind(name),
-    position: { start: absoluteStart, end: absoluteEnd },
-    context,
-  };
-}
-
-interface ScannedNodes {
-  readonly nodes: readonly MiniMessageSourceNode[];
-  readonly hoverRanges: readonly {
-    readonly start: number;
-    readonly end: number;
-    readonly parent: MiniMessageContextFrame;
-  }[];
-}
-
-function scanMiniMessage(
-  input: string,
-  baseOffset = 0,
-  initialContext: readonly MiniMessageContextFrame[] = [],
-): ScannedNodes {
-  const nodes: MiniMessageSourceNode[] = [];
-  const stack: MiniMessageContextFrame[] = [...initialContext];
-  const hoverRanges: {
-    readonly start: number;
-    readonly end: number;
-    readonly parent: MiniMessageContextFrame;
-  }[] = [];
-  let cursor = 0;
-  let index = 0;
-
-  while (index < input.length) {
-    if (input[index] !== "<" || isEscaped(input, index)) {
-      index += 1;
-      continue;
-    }
-    const slice = findTagEnd(input, index);
-    if (slice === undefined) {
-      index += 1;
-      continue;
-    }
-    if (slice.start > cursor) {
-      nodes.push({
-        kind: "text",
-        raw: input.slice(cursor, slice.start),
-        position: { start: baseOffset + cursor, end: baseOffset + slice.start },
-        context: [...stack],
-      });
-    }
-    const tag = tagNode(input, slice, [...stack], baseOffset);
-    nodes.push(tag);
-    if (tag.name === "hover" && !tag.closing && !tag.selfClosing) {
-      const parsedTag = splitParameters(input, slice.start + 1, slice.body);
-      const mode = parsedTag[1]?.value.toLowerCase();
-      const textParameter = parsedTag[2];
-      if (mode === "show_text" && textParameter !== undefined) {
-        const quoteStart = textParameter.value[0];
-        const quoteEnd = textParameter.value.at(-1);
-        if (
-          (quoteStart === "'" || quoteStart === '"') &&
-          quoteEnd === quoteStart &&
-          textParameter.value.length >= 2
-        ) {
-          const start = textParameter.position.start + 1;
-          const end = textParameter.position.end - 1;
-          hoverRanges.push({
-            start: baseOffset + start,
-            end: baseOffset + end,
-            parent: {
-              kind: "hover-text",
-              name: "hover:show_text",
-              position: tag.position,
-            },
-          });
-        }
-      }
-    }
-    if (tag.closing) {
-      for (
-        let stackIndex = stack.length - 1;
-        stackIndex >= 0;
-        stackIndex -= 1
-      ) {
-        if (stack[stackIndex]?.name === tag.name) {
-          stack.splice(stackIndex, 1);
-          break;
-        }
-      }
-    } else if (!tag.selfClosing) {
-      stack.push({ kind: "tag", name: tag.name, position: tag.position });
-    }
-    cursor = slice.end;
-    index = slice.end;
-  }
-  if (cursor < input.length) {
-    nodes.push({
-      kind: "text",
-      raw: input.slice(cursor),
-      position: { start: baseOffset + cursor, end: baseOffset + input.length },
-      context: [...stack],
-    });
-  }
-  return { nodes, hoverRanges };
-}
-
-function sliceTextRange(input: string, range: MiniMessagePosition): string {
-  return input.slice(range.start, range.end);
-}
-
-function scanDocuments(
-  message: ObservedMessage,
-  origin: "source" | "target",
-  surface: MiniMessageSurface,
-  file: string,
-  path: readonly (string | number)[],
-  input: string,
-): {
-  readonly inputs: readonly MessageInput[];
-  readonly documents: readonly ParsedMiniMessageDocument[];
-} {
-  const rootScan = scanMiniMessage(input);
-  const root: ParsedMiniMessageDocument = {
-    message,
-    origin,
-    file,
-    path,
-    surface,
-    input,
-    range: { start: 0, end: input.length },
-    status: "parsed",
-    nodes: rootScan.nodes,
-    context: [],
-  };
-  const docs: ParsedMiniMessageDocument[] = [root];
-  function addHoverDocuments(
-    hoverRanges: ScannedNodes["hoverRanges"],
-    parentContext: readonly MiniMessageContextFrame[],
-  ): void {
-    for (const hover of hoverRanges) {
-      const nestedInput = sliceTextRange(input, {
-        start: hover.start,
-        end: hover.end,
-      });
-      const context = [...parentContext, hover.parent];
-      const scan = scanMiniMessage(nestedInput, hover.start, context);
-      docs.push({
-        message,
-        origin,
-        file,
-        path,
-        surface,
-        input,
-        range: { start: hover.start, end: hover.end },
-        status: "parsed",
-        nodes: scan.nodes,
-        context,
-        parent: hover.parent,
-      });
-      addHoverDocuments(scan.hoverRanges, context);
-    }
-  }
-  addHoverDocuments(rootScan.hoverRanges, []);
-  const inputs = [
-    {
-      index: -1,
-      message,
-      origin,
-      surface,
-      file,
-      path,
-      input,
-      nodes: root.nodes,
-      documentIndex: 0,
-      range: root.range,
-    },
-  ];
-  return { inputs, documents: docs };
-}
-
 function themeFinding(
   file: string,
   path: readonly (string | number)[],
@@ -609,9 +329,10 @@ function parseTheme(
       );
       return;
     }
-    for (const name of Object.keys(sectionValue).sort()) {
-      const value = sectionValue[name]!;
-      const path = [...sectionPath, name];
+    for (const originalName of Object.keys(sectionValue).sort()) {
+      const value = sectionValue[originalName]!;
+      const path = [...sectionPath, originalName];
+      const name = originalName.toLowerCase();
       if (!/^[a-z0-9_-]+$/u.test(name)) {
         findings.push(
           themeFinding(
@@ -620,12 +341,20 @@ function parseTheme(
             "minimessage.theme-name-invalid",
             "主题 token 名必须只含小写字母、数字、下划线或连字符",
             "[a-z0-9_-]+",
-            name,
+            originalName,
           ),
         );
         continue;
       }
-      if (typeof value !== "string") {
+      const source =
+        value === null
+          ? ""
+          : typeof value === "string"
+            ? value.trim() === ""
+              ? ""
+              : value
+            : undefined;
+      if (source === undefined) {
         findings.push(
           themeFinding(
             themeFile,
@@ -645,7 +374,7 @@ function parseTheme(
           path,
           surface,
           name,
-          source: value,
+          source,
         };
         definitions.push(definition);
         entries.push({
@@ -653,7 +382,7 @@ function parseTheme(
           path,
           surface,
           name,
-          source: value,
+          source,
         });
         nextIndex += 1;
       }
@@ -699,15 +428,11 @@ function messageSurface(
 function messagesToParseInputs(
   messages: readonly ObservedMessage[],
   resources: readonly ResourceInventoryEntry[],
-): {
-  readonly inputs: readonly MessageInput[];
-  readonly documents: readonly ParsedMiniMessageDocument[];
-} {
+): readonly MessageInput[] {
   const purposes = new Map(
     resources.map((resource) => [resource.path, resource.purpose]),
   );
   const inputs: MessageInput[] = [];
-  const documents: ParsedMiniMessageDocument[] = [];
   let nextIndex = 0;
 
   for (const message of messages) {
@@ -729,19 +454,17 @@ function messagesToParseInputs(
       if (typeof value === "string") {
         const file =
           origin === "source" ? message.sourceFile : message.targetFile;
-        const scan = scanDocuments(
+        inputs.push({
+          index: nextIndex,
           message,
           origin,
           surface,
           file,
-          message.path,
-          value,
-        );
-        for (const input of scan.inputs) {
-          inputs.push({ ...input, index: nextIndex });
-          nextIndex += 1;
-        }
-        documents.push(...scan.documents);
+          path: message.path,
+          input: value,
+          range: { start: 0, end: value.length },
+        });
+        nextIndex += 1;
       } else if (
         message.category === "chat-string-list" &&
         Array.isArray(value) &&
@@ -753,41 +476,38 @@ function messagesToParseInputs(
           surface === "gui" &&
           message.path.at(-1)?.toLowerCase() === "lore"
         ) {
-          const scan = scanDocuments(
+          const input = value.join("\n");
+          inputs.push({
+            index: nextIndex,
             message,
             origin,
             surface,
             file,
-            message.path,
-            value.join("\n"),
-          );
-          for (const input of scan.inputs) {
-            inputs.push({ ...input, index: nextIndex });
-            nextIndex += 1;
-          }
-          documents.push(...scan.documents);
+            path: message.path,
+            input,
+            range: { start: 0, end: input.length },
+          });
+          nextIndex += 1;
         } else {
           for (const [itemIndex, item] of value.entries()) {
             const itemPath = [...message.path, itemIndex];
-            const scan = scanDocuments(
+            inputs.push({
+              index: nextIndex,
               message,
               origin,
               surface,
               file,
-              itemPath,
-              item,
-            );
-            for (const input of scan.inputs) {
-              inputs.push({ ...input, index: nextIndex });
-              nextIndex += 1;
-            }
-            documents.push(...scan.documents);
+              path: itemPath,
+              input: item,
+              range: { start: 0, end: item.length },
+            });
+            nextIndex += 1;
           }
         }
       }
     }
   }
-  return { inputs, documents };
+  return inputs;
 }
 
 function encode(value: string): string {
@@ -798,11 +518,49 @@ function decode(value: string): string {
   return Buffer.from(value, "base64url").toString("utf8");
 }
 
+function readContextFrames(
+  fields: readonly string[],
+  startIndex: number,
+):
+  | {
+      readonly frames: readonly MiniMessageContextFrame[];
+      readonly nextIndex: number;
+    }
+  | undefined {
+  const count = Number(fields[startIndex]);
+  if (!Number.isSafeInteger(count) || count < 0) return undefined;
+  const frames: MiniMessageContextFrame[] = [];
+  let index = startIndex + 1;
+  for (let frameIndex = 0; frameIndex < count; frameIndex += 1) {
+    const kind = fields[index];
+    const name = fields[index + 1];
+    const start = Number(fields[index + 2]);
+    const end = Number(fields[index + 3]);
+    if (
+      (kind !== "tag" && kind !== "hover-text") ||
+      name === undefined ||
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end)
+    ) {
+      return undefined;
+    }
+    frames.push({
+      kind,
+      name: decode(name),
+      position: { start, end },
+    });
+    index += 4;
+  }
+  return { frames, nextIndex: index };
+}
+
 function javaUnavailable(reason: string): JavaParseResult {
   return {
     themes: new Map(),
     messages: new Map(),
+    documents: [],
     unresolved: [],
+    warnings: [],
     unavailable: reason,
   };
 }
@@ -920,7 +678,10 @@ async function runOfficialParser(
 
   const themes = new Map<number, JavaThemeResult>();
   const messages = new Map<number, JavaMessageResult>();
+  const documentMetadata = new Map<string, Omit<JavaSourceDocument, "nodes">>();
+  const nodesByDocument = new Map<string, MiniMessageSourceNode[]>();
   const unresolved: JavaUnresolvedTag[] = [];
+  const warnings: { messageIndex: number; reason: string }[] = [];
   for (const line of result.stdout.split(/\r?\n/u)) {
     if (line === "") continue;
     const fields = line.split("\t");
@@ -962,12 +723,145 @@ async function runOfficialParser(
         start: Number(fields[4]),
         end: Number(fields[5]),
       });
-    } else if (fields[0] === "U" && fields.length === 5) {
+    } else if (fields[0] === "D" && fields.length >= 7) {
+      const messageIndex = Number(fields[1]);
+      const documentIndex = Number(fields[2]);
+      const parentDocumentIndex = Number(fields[3]);
+      const rangeStart = Number(fields[4]);
+      const rangeEnd = Number(fields[5]);
+      const context = readContextFrames(fields, 6);
+      if (
+        !Number.isSafeInteger(messageIndex) ||
+        !Number.isSafeInteger(documentIndex) ||
+        !Number.isSafeInteger(parentDocumentIndex) ||
+        !Number.isSafeInteger(rangeStart) ||
+        !Number.isSafeInteger(rangeEnd) ||
+        context === undefined ||
+        context.nextIndex !== fields.length
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回无效文档结构；完整检查未完成",
+        );
+      }
+      const key = `${messageIndex}:${documentIndex}`;
+      documentMetadata.set(key, {
+        messageIndex,
+        documentIndex,
+        parentDocumentIndex,
+        range: { start: rangeStart, end: rangeEnd },
+        context: context.frames,
+      });
+      nodesByDocument.set(key, []);
+    } else if (fields[0] === "N" && fields.length >= 12) {
+      const messageIndex = Number(fields[1]);
+      const documentIndex = Number(fields[2]);
+      const kind = fields[3];
+      const start = Number(fields[4]);
+      const end = Number(fields[5]);
+      const raw = fields[6];
+      const name = fields[7];
+      const closing = fields[8];
+      const selfClosing = fields[9];
+      const parameterCount = Number(fields[10]);
+      const paramsEnd = 11 + parameterCount * 3;
+      const context = readContextFrames(fields, paramsEnd);
+      if (
+        !Number.isSafeInteger(messageIndex) ||
+        !Number.isSafeInteger(documentIndex) ||
+        (kind !== "text" && kind !== "tag") ||
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        raw === undefined ||
+        name === undefined ||
+        (closing !== "true" && closing !== "false") ||
+        (selfClosing !== "true" && selfClosing !== "false") ||
+        !Number.isSafeInteger(parameterCount) ||
+        parameterCount < 0 ||
+        context === undefined ||
+        context.nextIndex !== fields.length ||
+        !nodesByDocument.has(`${messageIndex}:${documentIndex}`)
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回无效源节点；完整检查未完成",
+        );
+      }
+      const parameters: string[] = [];
+      const parameterPositions: MiniMessagePosition[] = [];
+      for (let index = 11; index < paramsEnd; index += 3) {
+        const value = fields[index];
+        const parameterStart = Number(fields[index + 1]);
+        const parameterEnd = Number(fields[index + 2]);
+        if (
+          value === undefined ||
+          !Number.isSafeInteger(parameterStart) ||
+          !Number.isSafeInteger(parameterEnd)
+        ) {
+          return javaUnavailable(
+            "官方 MiniMessage 辅助程序返回无效标签参数；完整检查未完成",
+          );
+        }
+        parameters.push(decode(value));
+        parameterPositions.push({ start: parameterStart, end: parameterEnd });
+      }
+      let node: MiniMessageSourceNode;
+      if (kind === "text") {
+        node = {
+          kind,
+          raw: decode(raw),
+          position: { start, end },
+          context: context.frames,
+        };
+      } else {
+        const tagName = decode(name).toLowerCase();
+        node = {
+          kind,
+          raw: decode(raw),
+          name: tagName,
+          parameters,
+          parameterPositions,
+          closing: closing === "true",
+          selfClosing: selfClosing === "true",
+          semanticKind: styleKind(tagName),
+          position: { start, end },
+          context: context.frames,
+        };
+      }
+      nodesByDocument.get(`${messageIndex}:${documentIndex}`)!.push(node);
+    } else if (fields[0] === "U" && fields.length >= 8) {
+      const messageIndex = Number(fields[1]);
+      const documentIndex = Number(fields[2]);
+      const position = Number(fields[3]);
+      const name = fields[4];
+      const detail = fields[5];
+      const raw = fields[6];
+      const context = readContextFrames(fields, 7);
+      if (
+        !Number.isSafeInteger(messageIndex) ||
+        !Number.isSafeInteger(documentIndex) ||
+        !Number.isSafeInteger(position) ||
+        name === undefined ||
+        detail === undefined ||
+        raw === undefined ||
+        context === undefined ||
+        context.nextIndex !== fields.length
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回无效解析事件；完整检查未完成",
+        );
+      }
       unresolved.push({
+        messageIndex,
+        documentIndex,
+        name: decode(name).toLowerCase(),
+        position,
+        detail: decode(detail),
+        raw: decode(raw),
+        context: context.frames,
+      });
+    } else if (fields[0] === "W" && fields.length === 3) {
+      warnings.push({
         messageIndex: Number(fields[1]),
-        name: decode(fields[2]!).toLowerCase(),
-        position: Number(fields[3]),
-        detail: decode(fields[4]!),
+        reason: decode(fields[2]!),
       });
     } else {
       return javaUnavailable(
@@ -975,51 +869,11 @@ async function runOfficialParser(
       );
     }
   }
-  return { themes, messages, unresolved };
-}
-
-function nodesForMessage(
-  documents: readonly ParsedMiniMessageDocument[],
-  input: MessageInput,
-  message: ObservedMessage,
-  origin: "source" | "target",
-  file: string,
-): readonly MiniMessageTagNode[] {
-  const seen = new Set<string>();
-  const result: MiniMessageTagNode[] = [];
-  const candidates = [
-    ...input.nodes,
-    ...documents
-      .filter(
-        (document) =>
-          document.message.id === message.id &&
-          document.origin === origin &&
-          document.file === file,
-      )
-      .flatMap((document) => document.nodes),
-  ];
-  for (const node of candidates) {
-    if (node.kind !== "tag") continue;
-    const key = `${node.position.start}:${node.position.end}:${node.raw}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(node);
-  }
-  return result;
-}
-
-function nodeForUnresolvedTag(
-  nodes: readonly MiniMessageTagNode[],
-  unresolved: JavaUnresolvedTag,
-  claimed: ReadonlySet<MiniMessageTagNode>,
-): MiniMessageTagNode | undefined {
-  const sameName = nodes.filter((node) => node.name === unresolved.name);
-  return (
-    sameName.find(
-      (node) =>
-        node.position.start === unresolved.position && !claimed.has(node),
-    ) ?? sameName.find((node) => !claimed.has(node))
-  );
+  const documents = [...documentMetadata.entries()].map(([key, document]) => ({
+    ...document,
+    nodes: nodesByDocument.get(key) ?? [],
+  }));
+  return { themes, messages, documents, unresolved, warnings };
 }
 
 function findingForMessage(
@@ -1069,7 +923,6 @@ function themeEntryResults(
 
 function appendParserFindings(
   inputs: readonly MessageInput[],
-  documents: readonly ParsedMiniMessageDocument[],
   java: JavaParseResult,
   findings: MiniMessageFinding[],
   unavailable: Set<string>,
@@ -1079,35 +932,11 @@ function appendParserFindings(
     return;
   }
   const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));
-  const nodesByInput = new Map<number, readonly MiniMessageTagNode[]>();
-  const claimedNodesByInput = new Map<number, Set<MiniMessageTagNode>>();
-  const seenThemeErrorsByInput = new Map<number, Set<string>>();
-  const seenKnownTagErrorsByInput = new Map<number, Set<string>>();
-
-  function tagForUnresolved(
-    input: MessageInput,
-    unresolved: JavaUnresolvedTag,
-  ): MiniMessageTagNode | undefined {
-    let nodes = nodesByInput.get(input.index);
-    if (nodes === undefined) {
-      nodes = nodesForMessage(
-        documents,
-        input,
-        input.message,
-        input.origin,
-        input.file,
-      );
-      nodesByInput.set(input.index, nodes);
-    }
-    let claimed = claimedNodesByInput.get(input.index);
-    if (claimed === undefined) {
-      claimed = new Set();
-      claimedNodesByInput.set(input.index, claimed);
-    }
-    const tag = nodeForUnresolvedTag(nodes, unresolved, claimed);
-    if (tag !== undefined) claimed.add(tag);
-    return tag;
+  for (const warning of java.warnings) {
+    if (inputsByIndex.has(warning.messageIndex))
+      unavailable.add(warning.reason);
   }
+  const seenOccurrences = new Set<string>();
 
   for (const input of inputs) {
     const result = java.messages.get(input.index);
@@ -1144,9 +973,30 @@ function appendParserFindings(
   }
 
   for (const unresolved of java.unresolved) {
-    if (unresolved.position < 0) continue;
     const input = inputsByIndex.get(unresolved.messageIndex);
     if (input === undefined) continue;
+    const occurrence = `${unresolved.messageIndex}\0${unresolved.documentIndex}\0${unresolved.position}\0${unresolved.name}\0${unresolved.detail}`;
+    if (seenOccurrences.has(occurrence)) continue;
+    seenOccurrences.add(occurrence);
+    if (unresolved.position < 0) {
+      unavailable.add("存在 MiniMessage 解析诊断无法可靠映射回原文位置");
+    }
+    const context: JsonValue = unresolved.context.map(
+      (frame) =>
+        [
+          frame.kind,
+          frame.name,
+          frame.position.start,
+          frame.position.end,
+        ] as const,
+    );
+    const actualTag: { readonly [key: string]: JsonValue } = {
+      tag: unresolved.raw,
+      ...(unresolved.position < 0 ? {} : { position: unresolved.position }),
+      documentIndex: unresolved.documentIndex,
+      context,
+      parserDetail: unresolved.detail,
+    };
     const name = unresolved.name;
     const isMapTemplate =
       input.message.path.slice(0, 2).join(".") === "general.integration";
@@ -1155,27 +1005,18 @@ function appendParserFindings(
       continue;
     }
     if (landsControls.has(name) || landsPreprocessors.has(name)) {
-      const tag = tagForUnresolved(input, unresolved);
       const finding = findingForMessage(
         input,
         "minimessage.extension-unsupported",
         `Lands 扩展 <${name}> 的预处理语义尚未实现；本次检查没有判定该扩展正确`,
         { state: "Lands extension semantics checked" },
-        {
-          tag: tag?.raw ?? `<${name}>`,
-          ...(tag === undefined ? {} : { position: tag.position.start }),
-          parserDetail: unresolved.detail,
-        },
+        actualTag,
       );
       findings.push(finding);
       unavailable.add("Lands 控制和预处理语义尚未完成");
       continue;
     }
     if (name === "t") {
-      const seen = seenThemeErrorsByInput.get(input.index) ?? new Set<string>();
-      if (seen.has(unresolved.detail)) continue;
-      seen.add(unresolved.detail);
-      seenThemeErrorsByInput.set(input.index, seen);
       const unknownToken = /^Unknown theme token: (.*)$/u.exec(
         unresolved.detail,
       )?.[1];
@@ -1193,30 +1034,24 @@ function appendParserFindings(
           {
             tagName: "t",
             ...(token === undefined ? {} : { token }),
-            parserDetail: unresolved.detail,
+            ...actualTag,
           },
         ),
       );
       continue;
     }
     if (standardTags.has(name) || name === "v") {
-      const seen =
-        seenKnownTagErrorsByInput.get(input.index) ?? new Set<string>();
-      if (seen.has(`${name}\0${unresolved.detail}`)) continue;
-      seen.add(`${name}\0${unresolved.detail}`);
-      seenKnownTagErrorsByInput.set(input.index, seen);
       findings.push(
         findingForMessage(
           input,
           "minimessage.tag-unresolved",
           `官方解析器未能解析标签 <${name}>：${unresolved.detail || "标签参数或形式无法识别"}`,
           { state: "recognized MiniMessage tag" },
-          { tagName: name, parserDetail: unresolved.detail },
+          { tagName: name, ...actualTag },
         ),
       );
       continue;
     }
-    const tag = tagForUnresolved(input, unresolved);
     findings.push(
       findingForMessage(
         input,
@@ -1224,8 +1059,7 @@ function appendParserFindings(
         `官方默认模式将未识别标签 <${name}> 保留为文本，无法确认其扩展语义`,
         { state: "recognized tag or supported extension" },
         {
-          tag: tag?.raw ?? `<${name}>`,
-          ...(tag === undefined ? {} : { position: tag.position.start }),
+          ...actualTag,
         },
       ),
     );
@@ -1239,8 +1073,8 @@ export async function parseMiniMessages(
   themeSnapshot?: MiniMessageThemeSnapshot,
 ): Promise<MiniMessageParseProject> {
   const theme = parseTheme(themeSnapshot);
-  const collected = messagesToParseInputs(messages, resources);
-  const java = await runOfficialParser(theme.definitions, collected.inputs);
+  const inputs = messagesToParseInputs(messages, resources);
+  const java = await runOfficialParser(theme.definitions, inputs);
   const findings = [...theme.findings];
   const unavailable = new Set<string>();
   if (java.unavailable === undefined) {
@@ -1269,33 +1103,57 @@ export async function parseMiniMessages(
       }
     }
   }
-  appendParserFindings(
-    collected.inputs,
-    collected.documents,
-    java,
-    findings,
-    unavailable,
-  );
-  const documentResults = collected.documents.map((document) => {
-    const matchingInput = collected.inputs.find(
-      (input) =>
-        input.message.id === document.message.id &&
-        input.origin === document.origin &&
-        input.file === document.file &&
-        JSON.stringify(input.path) === JSON.stringify(document.path) &&
-        input.range.start <= document.range.start &&
-        input.range.end >= document.range.end,
-    );
-    if (matchingInput === undefined) return document;
-    const result = java.messages.get(matchingInput.index);
-    return {
-      ...document,
-      status: parserStatus(matchingInput, java),
-      ...(document.parent === undefined && result?.plainText !== undefined
+  appendParserFindings(inputs, java, findings, unavailable);
+  const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));
+  const documentResults: ParsedMiniMessageDocument[] = [];
+  const rootDocuments = new Set<number>();
+  for (const parsed of java.documents) {
+    const input = inputsByIndex.get(parsed.messageIndex);
+    if (input === undefined) continue;
+    const result = java.messages.get(input.index);
+    const parent =
+      parsed.parentDocumentIndex < 0
+        ? undefined
+        : [...parsed.context]
+            .reverse()
+            .find((frame) => frame.kind === "hover-text");
+    documentResults.push({
+      message: input.message,
+      origin: input.origin,
+      file: input.file,
+      path: input.path,
+      surface: input.surface,
+      input: input.input,
+      range: parsed.range,
+      status: parserStatus(input, java),
+      ...(parsed.documentIndex === 0 && result?.plainText !== undefined
         ? { plainText: result.plainText }
         : {}),
-    };
-  });
+      nodes: parsed.nodes,
+      context: parsed.context,
+      ...(parent === undefined ? {} : { parent }),
+    });
+    if (parsed.parentDocumentIndex < 0) rootDocuments.add(input.index);
+  }
+  for (const input of inputs) {
+    if (rootDocuments.has(input.index)) continue;
+    const result = java.messages.get(input.index);
+    documentResults.push({
+      message: input.message,
+      origin: input.origin,
+      file: input.file,
+      path: input.path,
+      surface: input.surface,
+      input: input.input,
+      range: input.range,
+      status: parserStatus(input, java),
+      ...(result?.plainText === undefined
+        ? {}
+        : { plainText: result.plainText }),
+      nodes: [],
+      context: [],
+    });
+  }
   return {
     documents: documentResults,
     themes: themeEntryResults(theme.definitions, java.themes),
