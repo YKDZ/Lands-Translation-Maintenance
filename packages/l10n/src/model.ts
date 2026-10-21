@@ -176,3 +176,89 @@ export interface StatusResult {
 export interface CheckResult {
   readonly report: ProjectReport;
 }
+
+export interface SyncMessageChange {
+  readonly id: string;
+  readonly action: "preserve" | "seed" | "reset" | "delete";
+  readonly reason:
+    | "unchanged"
+    | "missing-translation"
+    | "new-message"
+    | "source-changed"
+    | "source-removed"
+    | "orphaned-translation";
+  readonly sourceFile: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
+  readonly category: ChatFieldCategory;
+  readonly previousSource?: JsonValue;
+  readonly source?: JsonValue;
+  readonly previousTarget?: JsonValue;
+  readonly target?: JsonValue;
+}
+
+export interface SyncResourceChanges {
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly changed: readonly string[];
+  readonly unchanged: readonly string[];
+  readonly observedOnly: {
+    readonly added: readonly string[];
+    readonly removed: readonly string[];
+    readonly changed: readonly string[];
+  };
+}
+
+export interface SyncResourceDifference {
+  readonly undeclared: readonly string[];
+  readonly missing: readonly string[];
+  readonly duplicates: readonly string[];
+}
+
+export interface SyncBlocker {
+  readonly code: string;
+  readonly reason: string;
+}
+
+export interface SyncInputSnapshot {
+  readonly path: string;
+  readonly sha256?: string;
+}
+
+export interface SyncWrite {
+  readonly kind: "target" | "baseline" | "lock";
+  readonly path: string;
+  readonly content: string;
+  readonly expectedSha256?: string;
+}
+
+export interface SyncTargetFilePlan {
+  readonly path: string;
+  readonly action: "write" | "unchanged";
+  readonly expectedSha256?: string;
+  readonly contentSha256: string;
+}
+
+export interface SyncPlan {
+  readonly sourceVersion: string;
+  readonly jarSha256: string;
+  readonly resourceChanges: SyncResourceChanges;
+  readonly messages: readonly SyncMessageChange[];
+  readonly targetFiles: readonly SyncTargetFilePlan[];
+  readonly unmanagedTargets: readonly string[];
+  readonly pendingTranslations: readonly string[];
+  readonly inputSnapshots: readonly SyncInputSnapshot[];
+  readonly writes: readonly SyncWrite[];
+}
+
+export type SyncPreviewResult =
+  | {
+      readonly ready: true;
+      readonly plan: SyncPlan;
+    }
+  | {
+      readonly ready: false;
+      readonly blockers: readonly SyncBlocker[];
+      readonly resourceDifference: SyncResourceDifference;
+      readonly resourceChanges: SyncResourceChanges;
+    };

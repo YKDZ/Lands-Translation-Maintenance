@@ -4,6 +4,7 @@ export {
   initializeProject,
   inspectProject,
   operationExitCode,
+  previewSyncProject,
 } from "#/operations";
 export { builtInRules, evaluateRules } from "#/rules";
 export type { InitializationOptions } from "#/operations";
@@ -18,4 +19,13 @@ export type {
   RuleContext,
   RuleFinding,
   RuleEvaluation,
+  SyncBlocker,
+  SyncInputSnapshot,
+  SyncMessageChange,
+  SyncPlan,
+  SyncPreviewResult,
+  SyncResourceChanges,
+  SyncResourceDifference,
+  SyncTargetFilePlan,
+  SyncWrite,
 } from "#/model";
