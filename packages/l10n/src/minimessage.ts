@@ -845,7 +845,9 @@ async function runOfficialParser(
       const selfClosing = fields[9];
       const parameterCount = Number(fields[10]);
       const paramsEnd = 11 + parameterCount * 4;
-      const context = readContextFrames(fields, paramsEnd);
+      const visibleTextField = fields[paramsEnd];
+      const visibleSourceOffsetsField = fields[paramsEnd + 1];
+      const context = readContextFrames(fields, paramsEnd + 2);
       if (
         !Number.isSafeInteger(messageIndex) ||
         !Number.isSafeInteger(documentIndex) ||
@@ -858,12 +860,26 @@ async function runOfficialParser(
         (selfClosing !== "true" && selfClosing !== "false") ||
         !Number.isSafeInteger(parameterCount) ||
         parameterCount < 0 ||
+        visibleTextField === undefined ||
+        visibleSourceOffsetsField === undefined ||
         context === undefined ||
         context.nextIndex !== fields.length ||
         !nodesByDocument.has(`${messageIndex}:${documentIndex}`)
       ) {
         return javaUnavailable(
           "官方 MiniMessage 辅助程序返回无效源节点；完整检查未完成",
+        );
+      }
+      const visibleText = decode(visibleTextField);
+      const visibleSourceOffsets = visibleSourceOffsetsField
+        .split(",")
+        .map(Number);
+      if (
+        visibleSourceOffsets.length !== visibleText.length + 1 ||
+        visibleSourceOffsets.some((offset) => !Number.isSafeInteger(offset))
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回无效可见文本映射；完整检查未完成",
         );
       }
       const parameters: string[] = [];
@@ -900,6 +916,8 @@ async function runOfficialParser(
         node = {
           kind,
           raw: decode(raw),
+          visibleText,
+          visibleSourceOffsets,
           position: { start, end },
           context: context.frames,
         };
@@ -908,6 +926,8 @@ async function runOfficialParser(
         node = {
           kind,
           raw: decode(raw),
+          visibleText,
+          visibleSourceOffsets,
           name: tagName,
           parameters,
           parameterPositions,
@@ -1235,6 +1255,12 @@ function appendTextSegment(
   segments.push({ kind: "text", value, raw, position, context });
 }
 
+function visibleNodePosition(node: MiniMessageSourceNode): MiniMessagePosition {
+  const start = node.visibleSourceOffsets[0] ?? -1;
+  const end = node.visibleSourceOffsets.at(-1) ?? -1;
+  return start >= 0 && end >= start ? { start, end } : { start: -1, end: -1 };
+}
+
 function legacyVariableSegments(
   document: ParsedMiniMessageDocument,
 ): readonly TranslatableTextSegment[] {
@@ -1318,41 +1344,26 @@ function legacyVariableSegments(
   };
 
   for (const node of document.nodes) {
-    if (node.kind === "text") {
+    if (node.visibleText !== "") {
       const start = visibleText.length;
-      visibleText += node.raw;
+      visibleText += node.visibleText;
+      const fallback =
+        node.kind === "tag"
+          ? translationFallbackSegment(document, node)
+          : undefined;
       chunks.push({
-        value: node.raw,
-        sourceOffsets: Array.from(
-          { length: node.raw.length + 1 },
-          (_, index) => node.position.start + index,
-        ),
-        context: node.context,
+        value: node.visibleText,
+        sourceOffsets: node.visibleSourceOffsets,
+        context:
+          fallback?.value === node.visibleText
+            ? fallback.context
+            : node.context,
         start,
         end: visibleText.length,
       });
       continue;
     }
-    if (node.semanticKind === "style") continue;
-    const fallback = translationFallbackSegment(document, node);
-    if (fallback !== undefined) {
-      const sourceOffsets = node.parameterSourceOffsets[1];
-      if (
-        sourceOffsets !== undefined &&
-        sourceOffsets.length === fallback.value.length + 1
-      ) {
-        const start = visibleText.length;
-        visibleText += fallback.value;
-        chunks.push({
-          value: fallback.value,
-          sourceOffsets,
-          context: fallback.context,
-          start,
-          end: visibleText.length,
-        });
-      }
-      continue;
-    }
+    if (node.kind === "tag" && node.semanticKind === "style") continue;
     flush();
   }
   flush();
@@ -1372,27 +1383,11 @@ function translatableSegments(
     if (node.kind === "text") {
       appendTextSegment(
         segments,
+        node.visibleText,
         node.raw,
-        node.raw,
-        node.position,
+        visibleNodePosition(node),
         node.context,
       );
-      continue;
-    }
-    if (
-      node.name === "translate_or" ||
-      node.name === "lang_or" ||
-      node.name === "tr_or"
-    ) {
-      segments.push({
-        kind: "structure",
-        value: node.parameters[0] ?? "",
-        raw: node.raw,
-        position: node.position,
-        context: node.context,
-      });
-      const fallback = translationFallbackSegment(document, node);
-      if (fallback !== undefined) segments.push(fallback);
       continue;
     }
     if (
@@ -1409,7 +1404,6 @@ function translatableSegments(
       });
       continue;
     }
-    if (node.closing || node.semanticKind === "style") continue;
     if (node.name === "click") {
       segments.push({
         kind: "command",
@@ -1423,13 +1417,41 @@ function translatableSegments(
     if (node.name === "br" || node.name === "newline") {
       segments.push({
         kind: "boundary",
-        value: "\n",
+        value: node.visibleText || "\n",
         raw: node.raw,
-        position: node.position,
+        position: visibleNodePosition(node),
         context: node.context,
       });
       continue;
     }
+    if (
+      node.name === "translate_or" ||
+      node.name === "lang_or" ||
+      node.name === "tr_or"
+    ) {
+      const fallback = translationFallbackSegment(document, node);
+      segments.push({
+        kind: "structure",
+        value: node.parameters[0] ?? "",
+        raw: node.raw,
+        position: node.position,
+        context: node.context,
+      });
+      appendTextSegment(
+        segments,
+        node.visibleText,
+        node.visibleText === ""
+          ? node.raw
+          : document.input.slice(
+              Math.max(0, visibleNodePosition(node).start),
+              Math.max(0, visibleNodePosition(node).end),
+            ),
+        visibleNodePosition(node),
+        fallback?.value === node.visibleText ? fallback.context : node.context,
+      );
+      continue;
+    }
+    if (node.closing || node.semanticKind === "style") continue;
     segments.push({
       kind: "structure",
       value: node.parameters.join(":"),
@@ -1437,6 +1459,18 @@ function translatableSegments(
       position: node.position,
       context: node.context,
     });
+    appendTextSegment(
+      segments,
+      node.visibleText,
+      node.visibleText === ""
+        ? node.raw
+        : document.input.slice(
+            Math.max(0, visibleNodePosition(node).start),
+            Math.max(0, visibleNodePosition(node).end),
+          ),
+      visibleNodePosition(node),
+      node.context,
+    );
   }
   return segments;
 }

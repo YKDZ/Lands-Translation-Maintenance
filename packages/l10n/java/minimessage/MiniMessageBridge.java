@@ -13,6 +13,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.StorageNBTComponent;
+import net.kyori.adventure.text.NBTComponent;
+import net.kyori.adventure.text.ScoreComponent;
+import net.kyori.adventure.text.SelectorComponent;
 import net.kyori.adventure.text.flattener.ComponentFlattener;
 import net.kyori.adventure.text.flattener.FlattenerListener;
 import net.kyori.adventure.text.format.Style;
@@ -26,6 +29,7 @@ import net.kyori.adventure.text.minimessage.internal.parser.node.ElementNode;
 import net.kyori.adventure.text.minimessage.internal.parser.node.RootNode;
 import net.kyori.adventure.text.minimessage.internal.parser.node.TagNode;
 import net.kyori.adventure.text.minimessage.internal.parser.node.TagPart;
+import net.kyori.adventure.text.minimessage.internal.parser.node.TextNode;
 import net.kyori.adventure.text.minimessage.tag.Inserting;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -59,6 +63,10 @@ public final class MiniMessageBridge {
 
   private record Parameter(String value, Position position, int[] sourceOffsets) {}
 
+  private record AlignedText(String value, int[] sourceOffsets, int[] inputOffsets) {}
+
+  private record RenderedText(String value, int[] sourceOffsets) {}
+
   private record NodeOutput(
       String kind,
       Position position,
@@ -67,6 +75,8 @@ public final class MiniMessageBridge {
       boolean closing,
       boolean selfClosing,
       List<Parameter> parameters,
+      String visibleText,
+      int[] visibleSourceOffsets,
       List<Frame> context) {}
 
   private record UnresolvedOutput(
@@ -386,6 +396,134 @@ public final class MiniMessageBridge {
     }
   }
 
+  private static void collectTextNodes(ElementNode node, List<TextNode> textNodes) {
+    for (ElementNode child : node.children()) {
+      if (child instanceof TextNode text) {
+        textNodes.add(text);
+      }
+      collectTextNodes(child, textNodes);
+    }
+  }
+
+  private static String nodeKey(Token token) {
+    return token.startIndex() + ":" + token.endIndex();
+  }
+
+  /** 官方 TextNode 决定可见值；此处只把值的边界映回源码。 */
+  private static AlignedText alignTreeText(
+      TextNode textNode,
+      String input,
+      SourceMap sourceMap) {
+    int start = textNode.token().startIndex();
+    int end = textNode.token().endIndex();
+    String source = input.substring(start, end);
+    String visible = textNode.value();
+    int[] sourceOffsets = new int[visible.length() + 1];
+    int[] inputOffsets = new int[visible.length() + 1];
+    sourceOffsets[0] = sourceMap.sourceOffsets[start];
+    inputOffsets[0] = start;
+    int sourceIndex = source.length() - 1;
+    for (int index = visible.length() - 1; index >= 0; index--) {
+      char expected = visible.charAt(index);
+      while (sourceIndex >= 0 && source.charAt(sourceIndex) != expected) {
+        sourceIndex--;
+      }
+      if (sourceIndex < 0) return null;
+      sourceOffsets[index + 1] = sourceMap.sourceOffsets[start + sourceIndex + 1];
+      inputOffsets[index + 1] = start + sourceIndex + 1;
+      sourceIndex--;
+    }
+    return new AlignedText(visible, sourceOffsets, inputOffsets);
+  }
+
+  private static Map<String, RenderedText> renderedTextByToken(
+      List<Token> tokens,
+      List<TextNode> textNodes,
+      String input,
+      SourceMap sourceMap,
+      int messageIndex,
+      List<String> output) {
+    Map<String, StringBuilder> values = new HashMap<>();
+    Map<String, List<Integer>> offsets = new HashMap<>();
+    for (TextNode textNode : textNodes) {
+      AlignedText rendered = alignTreeText(textNode, input, sourceMap);
+      if (rendered == null) {
+        output.add("W\t" + messageIndex + "\t" + encode(
+            "官方 MiniMessage 文本节点无法映射到原始 UTF-16 位置；相关片段位置不可用"));
+        continue;
+      }
+      for (int index = 0; index < rendered.value().length(); index++) {
+        int start = rendered.inputOffsets()[index];
+        int end = rendered.inputOffsets()[index + 1];
+        Token owner = null;
+        for (Token token : tokens) {
+          if (token.startIndex() <= start && end <= token.endIndex()) {
+            owner = token;
+            break;
+          }
+        }
+        if (owner == null) {
+          output.add("W\t" + messageIndex + "\t" + encode(
+              "官方 MiniMessage 可见文本无法关联到词法来源范围；可见文本投影不完整"));
+          continue;
+        }
+        String key = nodeKey(owner);
+        StringBuilder value = values.computeIfAbsent(key, ignored -> new StringBuilder());
+        List<Integer> sourceOffsets = offsets.computeIfAbsent(key, ignored -> new ArrayList<>());
+        if (value.length() == 0) sourceOffsets.add(rendered.sourceOffsets()[index]);
+        value.append(rendered.value().charAt(index));
+        sourceOffsets.add(rendered.sourceOffsets()[index + 1]);
+      }
+    }
+    Map<String, RenderedText> result = new HashMap<>();
+    for (Map.Entry<String, StringBuilder> entry : values.entrySet()) {
+      result.put(entry.getKey(), new RenderedText(
+          entry.getValue().toString(),
+          offsets.get(entry.getKey()).stream().mapToInt(Integer::intValue).toArray()));
+    }
+    return result;
+  }
+
+  private static int[] alignVisibleText(
+      String visible,
+      String source,
+      int[] sourceOffsets) {
+    int[] offsets = new int[visible.length() + 1];
+    offsets[0] = sourceOffsets[0];
+    int sourceIndex = source.length() - 1;
+    for (int index = visible.length() - 1; index >= 0; index--) {
+      char expected = visible.charAt(index);
+      while (sourceIndex >= 0 && source.charAt(sourceIndex) != expected) {
+        sourceIndex--;
+      }
+      if (sourceIndex < 0) return null;
+      offsets[index + 1] = sourceOffsets[sourceIndex + 1];
+      sourceIndex--;
+    }
+    return offsets;
+  }
+
+  private static boolean hasRuntimeDependentComponent(Component component) {
+    if (component instanceof ScoreComponent
+        || component instanceof SelectorComponent
+        || component instanceof NBTComponent) return true;
+    for (Component child : component.children()) {
+      if (hasRuntimeDependentComponent(child)) return true;
+    }
+    return false;
+  }
+
+  private static int[] visibleOffsetsForInsertion(
+      String visible,
+      List<Parameter> parameters,
+      Position tagPosition) {
+    for (Parameter parameter : parameters) {
+      int[] offsets = alignVisibleText(visible, parameter.value(), parameter.sourceOffsets());
+      if (offsets != null) return offsets;
+    }
+    return unavailableSourceOffsets(visible, tagPosition);
+  }
+
   private static List<Integer> nestedContentIndexes(TagNode tag) {
     List<TagPart> parts = tag.parts();
     if (parts.isEmpty()) return List.of();
@@ -529,6 +667,11 @@ public final class MiniMessageBridge {
 
     Map<String, TagNode> treeTags = new HashMap<>();
     collectTagNodes(tree, treeTags);
+    List<TextNode> treeTexts = new ArrayList<>();
+    collectTextNodes(tree, treeTexts);
+    List<Token> tokens = TokenParser.tokenize(input, false);
+    Map<String, RenderedText> renderedTextByToken = renderedTextByToken(
+        tokens, treeTexts, input, sourceMap, messageIndex, output);
     List<NodeOutput> nodes = new ArrayList<>();
     List<UnresolvedOutput> unresolved = new ArrayList<>();
     Set<String> seenUnresolved = new HashSet<>();
@@ -536,11 +679,22 @@ public final class MiniMessageBridge {
 
     // The official tree supplies resolved nodes and child-acceptance semantics; tokenize adds explicit close tokens,
     // which the 4.26.1 tree intentionally omits. Apply its tagCloses rule to retain those source occurrences.
-    for (Token token : TokenParser.tokenize(input, false)) {
+    for (Token token : tokens) {
       if (token.type() == TokenType.TEXT) {
         Position position = sourceMap.range(token.startIndex(), token.endIndex());
+        RenderedText rendered = renderedTextByToken.get(nodeKey(token));
+        String visibleText = rendered == null ? "" : rendered.value();
+        int[] visibleOffsets = rendered == null
+            ? new int[] {sourceMap.sourceOffsets[token.startIndex()]}
+            : rendered.sourceOffsets();
+        if (rendered == null) {
+          visibleOffsets = unavailableSourceOffsets(visibleText, position);
+          output.add("W\t" + messageIndex + "\t" + encode(
+              "官方 MiniMessage 文本节点无法关联到词法来源范围；可见文本投影不完整"));
+        }
         nodes.add(new NodeOutput("text", position,
             sourceMap.raw(token.startIndex(), token.endIndex()), "", false, false, List.of(),
+            visibleText, visibleOffsets,
             contextFrames(initialContext, openTags, sourceMap)));
         continue;
       }
@@ -555,8 +709,34 @@ public final class MiniMessageBridge {
       Position position = sourceMap.range(token.startIndex(), token.endIndex());
       String raw = sourceMap.raw(token.startIndex(), token.endIndex());
       List<Parameter> parameters = parameters(input, token, treeTag, sourceMap);
+      RenderedText rendered = renderedTextByToken.get(nodeKey(token));
+      String visibleText = "";
+      int[] visibleOffsets = new int[] {sourceMap.sourceOffsets[token.startIndex()]};
+      if (rendered != null) {
+        visibleText = rendered.value();
+        visibleOffsets = rendered.sourceOffsets();
+      } else if (!closing && treeTag != null && treeTag.tag() instanceof Inserting inserting) {
+        Component inserted = inserting.value();
+        if (hasRuntimeDependentComponent(inserted)) {
+          output.add("W\t" + messageIndex + "\t" + encode(
+              "MiniMessage 组件依赖游戏运行时数据，静态可见文本投影不完整"));
+        }
+        try {
+          visibleText = PlainTextComponentSerializer.plainText().serialize(inserted);
+          visibleOffsets = visibleOffsetsForInsertion(visibleText, parameters, position);
+        } catch (RuntimeException exception) {
+          output.add("W\t" + messageIndex + "\t" + encode(
+              "官方 MiniMessage 插入组件无法静态序列化；可见文本投影不完整"));
+        }
+        if (!visibleText.isEmpty()
+            && !parameters.isEmpty()
+            && java.util.Arrays.stream(visibleOffsets).anyMatch(offset -> offset < 0)) {
+          output.add("W\t" + messageIndex + "\t" + encode(
+              "官方 MiniMessage 插入文本无法映射到来源参数；相关片段位置不可用"));
+        }
+      }
       NodeOutput node = new NodeOutput("tag", position, raw, name,
-          closing, selfClosing, parameters, currentContext);
+          closing, selfClosing, parameters, visibleText, visibleOffsets, currentContext);
       nodes.add(node);
 
       if (closing) {
@@ -636,6 +816,21 @@ public final class MiniMessageBridge {
     for (NodeOutput node : nodes) {
       output.add(nodeLine(messageIndex, documentIndex, node));
     }
+    String renderedProjection = nodes.stream()
+        .map(NodeOutput::visibleText)
+        .reduce("", String::concat);
+    try {
+      MiniMessage runtimeParser = MiniMessage.builder().tags(resolver).build();
+      String officialPlainText = PlainTextComponentSerializer.plainText()
+          .serialize(runtimeParser.deserialize(input));
+      if (!renderedProjection.equals(officialPlainText)) {
+        output.add("W\t" + messageIndex + "\t" + encode(
+            "官方 MiniMessage 源节点与 PlainText 输出不一致；可见文本投影不完整"));
+      }
+    } catch (RuntimeException exception) {
+      output.add("W\t" + messageIndex + "\t" + encode(
+          "官方 MiniMessage PlainText 依赖运行时数据，静态可见文本投影不完整"));
+    }
     for (UnresolvedOutput item : unresolved) {
       output.add("U\t" + messageIndex + "\t" + item.documentIndex() + "\t" + item.position()
           + "\t" + encode(item.name()) + "\t" + encode(item.detail()) + "\t" + encode(item.raw())
@@ -656,6 +851,8 @@ public final class MiniMessageBridge {
           .append('\t').append(parameter.position().end())
           .append('\t').append(offsetFields(parameter.sourceOffsets()));
     }
+    line.append('\t').append(encode(node.visibleText()))
+        .append('\t').append(offsetFields(node.visibleSourceOffsets()));
     line.append('\t').append(frameFields(node.context()));
     return line.toString();
   }
