@@ -21,6 +21,7 @@ export const stateDirectoryName = ".l10n";
 export const baselineDirectoryName = "upstream";
 export const baselineFileName = "source-baseline.json";
 export const lockFileName = "lock.json";
+export const exceptionsFileName = "exceptions.yml";
 export const transactionFileName = "transaction.json";
 
 export interface ResourceSnapshot extends ResourceInventoryEntry {

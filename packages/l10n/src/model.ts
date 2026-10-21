@@ -197,6 +197,10 @@ export interface MiniMessageThemeEntry {
 
 export interface MiniMessageFinding {
   readonly code: string;
+  /** 用于区分同一规则、消息和路径下的不同出现位置；不要包含可变内容。 */
+  readonly identity?: JsonValue;
+  /** 此诊断实际依赖的规则配置或外部内容。 */
+  readonly fingerprint?: JsonValue;
   readonly message?: MessageIdentity;
   readonly origin: MiniMessageOrigin;
   readonly location: DiagnosticLocation;
@@ -319,6 +323,8 @@ export interface DiagnosticLocation {
 
 export interface Diagnostic {
   readonly diagnosticId: string;
+  readonly objectId: string;
+  readonly contentFingerprint: string;
   readonly ruleId: string;
   readonly severity: Severity;
   readonly code: string;
@@ -332,6 +338,10 @@ export interface Diagnostic {
 
 export interface RuleFinding {
   readonly code: string;
+  /** 用于区分同一规则、消息和路径下的不同问题对象；不要包含可变内容。 */
+  readonly identity?: JsonValue;
+  /** 此诊断实际依赖的规则配置或外部内容。 */
+  readonly fingerprint?: JsonValue;
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;
   readonly location: DiagnosticLocation;
@@ -345,9 +355,12 @@ export interface RuleContext {
   readonly parameters: Readonly<Record<string, unknown>>;
 }
 
+export type RuleInput = "minimessage-parse";
+
 export interface CheckRule {
   readonly id: string;
   readonly defaultSeverity: Severity;
+  readonly requiredInputs?: readonly RuleInput[];
   evaluate(project: ProjectView, context: RuleContext): readonly RuleFinding[];
 }
 
@@ -356,6 +369,7 @@ export interface ProjectSummary {
   readonly messages: number;
   readonly pendingTranslations: number;
   readonly sameTextCandidates: number;
+  readonly confirmedSameText: number;
   readonly modifiedTranslations: number;
   readonly missingTranslations: number;
 }
@@ -373,6 +387,13 @@ export interface ProjectReport {
   readonly state: "ready" | "issues" | "incomplete";
   readonly summary: ProjectSummary;
   readonly diagnostics: readonly Diagnostic[];
+  readonly sameTextToConfirm: readonly {
+    readonly candidateId: string;
+    readonly message: MessageIdentity;
+    readonly source: JsonValue;
+    readonly target: JsonValue;
+    readonly pendingReason: "translation-seed" | "same-text-candidate";
+  }[];
   readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly coverage?: CheckCoverage;
 }
