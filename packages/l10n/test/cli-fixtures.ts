@@ -240,6 +240,7 @@ export async function createGuiProject(
   options: {
     readonly name: string;
     readonly lore: readonly string[];
+    readonly sourceVersion?: string;
     readonly dialogItemName?: string;
     readonly categoryName?: string;
   },
@@ -341,7 +342,7 @@ export async function createGuiProject(
     [
       "schemaVersion: 1",
       "source:",
-      '  version: "8.0.1"',
+      `  version: ${JSON.stringify(options.sourceVersion ?? "8.0.1")}`,
       '  translationHistory: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad"',
       "resources:",
       "  - path: plugin.yml",

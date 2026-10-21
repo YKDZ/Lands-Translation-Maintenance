@@ -2544,6 +2544,89 @@ void describe("MiniMessage 官方检查制品", () => {
     );
   });
 
+  void it("通过正式 CLI 定位来源版本不支持的旧颜色码", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "Tool",
+      lore: ["§aLand"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(checked.status, 1, checked.stderr);
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const finding = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === "legacy-format.code-unsupported" &&
+        diagnostic.origin === "target",
+    );
+
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.match(JSON.stringify(finding?.actual), /§a/u);
+    assert.match(JSON.stringify(finding?.actual), /"start":0/u);
+  });
+
+  void it("通过正式 CLI 报告未知旧颜色来源版本的未完成范围", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "&aTool",
+      lore: ["&cLand"],
+      sourceVersion: "8.9.3",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(checked.status, 1, checked.stderr);
+    const report = readReport(checked.stderr || checked.stdout);
+    const diagnostics = report.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    const coverage = report.coverage as Record<string, unknown>;
+    const finding = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === "legacy-format.source-version-unsupported" &&
+        diagnostic.origin === "target",
+    );
+
+    assert.equal(coverage.complete, false);
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.match(JSON.stringify(finding?.expected), /8\.0\.1/u);
+    assert.match(JSON.stringify(finding?.expected), /8\.9\.2/u);
+  });
+
   void it("按场景把对话框物品和混合配置字符串交给 GUI 主题", async (t) => {
     const project = await createGuiProject(t, {
       name: "<t:gui_only>工具</t>",

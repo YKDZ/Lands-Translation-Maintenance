@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseMiniMessages } from "../src/minimessage.ts";
-import type { ObservedMessage } from "../src/model.ts";
-import { createFormatProject, readReport, runCli } from "./cli-fixtures.ts";
+import {
+  inspectProject,
+  type CheckRule,
+  type ProjectView,
+} from "@lands-l10n/l10n";
+
+import {
+  createFormatProject,
+  createGuiProject,
+  readReport,
+  runCli,
+} from "../cli-fixtures.ts";
 
 function diagnostics(report: Record<string, unknown>) {
   return report.diagnostics as readonly Record<string, unknown>[];
@@ -30,29 +39,52 @@ function initAndCheck(project: { directory: string; jarFile: string }) {
   return { checked, report: readReport(checked.stdout || checked.stderr) };
 }
 
+function initialize(project: { directory: string; jarFile: string }) {
+  const initialized = runCli(
+    "init",
+    "--project",
+    project.directory,
+    "--jar",
+    project.jarFile,
+    "--output-format",
+    "structured",
+  );
+  assert.equal(initialized.status, 0, initialized.stderr);
+}
+
+async function inspectTranslatableView(projectDirectory: string) {
+  let observed: ProjectView | undefined;
+  const observer: CheckRule = {
+    id: "test-translatable-text-view",
+    defaultSeverity: "info",
+    requiredInputs: ["minimessage-parse"],
+    evaluate(project) {
+      observed = project;
+      return [];
+    },
+  };
+  const report = await inspectProject(projectDirectory, "check", [observer]);
+  assert.equal(report.operation, "check");
+  assert.deepEqual(report.coverage?.enabledRuleIds, [observer.id]);
+  assert.ok(observed?.miniMessage);
+  return observed;
+}
+
 void describe("地图 HTML 与旧格式正式检查", () => {
-  void it("向只读译文视图输出分开的正文、变量、命令、结构与换行片段", async () => {
+  void it("正式检查向只读规则提供分开的正文、变量、命令、结构与换行片段", async (t) => {
     const input =
       "<div>前 <click:run_command:/lands claim>认领<v:land></click> 后<br/>完成</div>";
-    const message: ObservedMessage = {
-      id: "map-description",
-      sourceFile: "Locale/en-US.yml",
-      targetFile: "Locale/zh-CN.yml",
-      path: ["general", "integration", "dynmap", "land", "description"],
-      category: "chat-string",
-      format: "map-html-minimessage",
-      source: input,
-      target: input,
-      targetStatus: "present",
-    };
-    const parsed = await parseMiniMessages(
-      [message],
-      [{ path: message.sourceFile, purpose: "chat-language" }],
-      undefined,
-      "8.9.2",
-    );
-    const document = parsed.translatableText.find(
-      (entry) => entry.origin === "target",
+    const project = await createFormatProject(t, {
+      mapDescription: input,
+      targetMapDescription: input,
+      sourceVersion: "8.9.2",
+    });
+    initialize(project);
+    const view = await inspectTranslatableView(project.directory);
+    const document = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.segments.some((segment) => segment.kind === "command"),
     );
     assert.ok(document);
     const segments = document.segments;
@@ -63,7 +95,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       (segment) => segment.kind === "text" && segment.value === "认领",
     );
 
-    assert.deepEqual(document.path, message.path);
+    assert.ok(document.path.includes("description"));
     assert.ok(commandIndex >= 0);
     assert.equal(segments[commandIndex - 1]?.value, "前 ");
     assert.equal(segments[commandIndex + 1]?.value, "认领");
@@ -80,6 +112,124 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
     assert.ok(segments.some((segment) => segment.kind === "boundary"));
     assert.equal(segments.at(-1)?.value, "完成");
+  });
+
+  void it("正式解析把 translate_or 的纯字符串 fallback 作为独立片段提供给消费者", async (t) => {
+    const input =
+      "<lang_or:lands.key:'<v:owner> <red>fallback</red>':'<bold><v:land></bold>'>";
+    const project = await createGuiProject(t, {
+      name: "Land",
+      lore: [input],
+      sourceVersion: "8.9.2",
+    });
+    initialize(project);
+    const view = await inspectTranslatableView(project.directory);
+    const document = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.documentIndex === 0 &&
+        entry.segments.some(
+          (segment) =>
+            segment.kind === "text" && segment.value.includes("fallback"),
+        ),
+    );
+
+    assert.ok(document);
+    const fallback = document.segments.find(
+      (segment) =>
+        segment.kind === "text" && segment.value.includes("fallback"),
+    );
+    assert.ok(fallback);
+    assert.equal(fallback?.value, "<v:owner> <red>fallback</red>");
+    assert.equal(
+      input.slice(fallback?.position.start, fallback?.position.end),
+      fallback?.raw,
+    );
+    assert.match(JSON.stringify(fallback?.context), /translate_or:fallback/u);
+    assert.equal(
+      document.segments.some(
+        (segment) => segment.kind === "variable" && segment.value === "owner",
+      ),
+      false,
+    );
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" &&
+        entry.message.id === document.message.id &&
+        entry.documentIndex === 0,
+    );
+    assert.ok(
+      targetDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === "<v:owner> <red>fallback</red>",
+      ),
+    );
+    const argumentDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.message.id === document?.message.id &&
+        entry.documentIndex > 0,
+    );
+    assert.ok(argumentDocument);
+    assert.match(JSON.stringify(argumentDocument?.context), /translate_or:0/u);
+    assert.ok(
+      argumentDocument?.segments.some(
+        (segment) => segment.kind === "variable" && segment.value === "land",
+      ),
+    );
+    assert.equal(
+      argumentDocument?.segments.some((segment) =>
+        segment.value.includes("fallback"),
+      ),
+      false,
+    );
+  });
+
+  void it("地图 HTML 正文的 fallback 通过正式规则输入保留嵌套上下文", async (t) => {
+    const input =
+      "<div><lang_or:lands.key:'<v:owner> <red>fallback</red>'></div>";
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: input,
+      targetMapDescription: input,
+    });
+    initialize(project);
+    const view = await inspectTranslatableView(project.directory);
+    const document = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.documentIndex === 0 &&
+        entry.path.join(".").includes("dynmap.land.description"),
+    );
+    const fallback = document?.segments.find(
+      (segment) =>
+        segment.kind === "text" && segment.value.includes("fallback"),
+    );
+
+    assert.ok(fallback);
+    assert.equal(fallback?.value, "<v:owner> <red>fallback</red>");
+    assert.match(JSON.stringify(fallback?.context), /html-element/u);
+    assert.match(JSON.stringify(fallback?.context), /translate_or:fallback/u);
+    assert.equal(
+      document?.segments.some(
+        (segment) => segment.kind === "variable" && segment.value === "owner",
+      ),
+      false,
+    );
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" &&
+        entry.path.join(".").includes("dynmap.land.description") &&
+        entry.documentIndex === 0,
+    );
+    assert.ok(
+      targetDocument?.segments.some(
+        (segment) =>
+          segment.kind === "text" &&
+          segment.value === "<v:owner> <red>fallback</red>",
+      ),
+    );
   });
 
   void it("按地图字段识别 HTML，允许实体、中文属性正文和纯句子 spawn", async (t) => {

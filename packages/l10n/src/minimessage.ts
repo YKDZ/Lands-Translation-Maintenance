@@ -14,6 +14,7 @@ import {
   mapHtmlTagRanges,
   supportsMapHtmlVersion,
 } from "#/map-html";
+import { translationFallbackSegment } from "#/minimessage-text";
 import type {
   AdaptedMiniMessageInput,
   JsonValue,
@@ -609,7 +610,7 @@ function readContextFrames(
     const start = Number(fields[index + 2]);
     const end = Number(fields[index + 3]);
     if (
-      (kind !== "tag" && kind !== "hover-text") ||
+      (kind !== "tag" && kind !== "hover-text" && kind !== "tag-argument") ||
       name === undefined ||
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(end)
@@ -1346,6 +1347,22 @@ function translatableSegments(
         node.position,
         node.context,
       );
+      continue;
+    }
+    if (
+      node.name === "translate_or" ||
+      node.name === "lang_or" ||
+      node.name === "tr_or"
+    ) {
+      segments.push({
+        kind: "structure",
+        value: node.parameters[0] ?? "",
+        raw: node.raw,
+        position: node.position,
+        context: node.context,
+      });
+      const fallback = translationFallbackSegment(document, node);
+      if (fallback !== undefined) segments.push(fallback);
       continue;
     }
     if (
