@@ -89,6 +89,21 @@ export interface InitializationOptions {
   readonly beforeApply?: () => Promise<void>;
 }
 
+export interface SyncApplyOptions {
+  readonly beforeApply?: () => Promise<void>;
+}
+
+export type SyncApplyResult =
+  | {
+      readonly applied: true;
+      readonly plan: SyncPlan;
+      readonly status: ProjectReport;
+    }
+  | {
+      readonly applied: false;
+      readonly preview: Extract<SyncPreviewResult, { readonly ready: false }>;
+    };
+
 interface ReadBytes {
   readonly bytes: Uint8Array;
   readonly text: string;
@@ -636,7 +651,7 @@ export async function initializeProject(
     await recoverInterruptedTransaction(project, transactionRelativePath);
   } catch (error) {
     throw new ProjectOperationError(
-      `发现未完成的初始化事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
+      `发现未完成的维护事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
       "transaction.recovery-failed",
       { file: transactionRelativePath, path: [] },
     );
@@ -1525,6 +1540,62 @@ export async function previewSyncProject(
     writes,
   };
   return { ready: true, plan };
+}
+
+export async function applySyncProject(
+  projectDirectory: string,
+  jarPath: string,
+  options: SyncApplyOptions = {},
+): Promise<SyncApplyResult> {
+  const project = await realpath(resolve(projectDirectory));
+  const transactionRelativePath = `${stateDirectoryName}/${transactionFileName}`;
+  await assertNoSymlinkPath(project, transactionRelativePath);
+  try {
+    await recoverInterruptedTransaction(project, transactionRelativePath);
+  } catch (error) {
+    throw new ProjectOperationError(
+      `发现未完成的维护事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
+      "transaction.recovery-failed",
+      { file: transactionRelativePath, path: [] },
+    );
+  }
+
+  const preview = await previewSyncProject(project, jarPath);
+  if (!preview.ready) return { applied: false, preview };
+
+  const writes: FileWrite[] = preview.plan.writes.map((write) => ({
+    path: write.path,
+    content: write.content,
+    expectedSha256: write.expectedSha256,
+  }));
+  const inputSnapshots: FileSnapshot[] = preview.plan.inputSnapshots.map(
+    (snapshot) => ({ path: snapshot.path, sha256: snapshot.sha256 }),
+  );
+  try {
+    await writeFilesAtomically(
+      project,
+      transactionRelativePath,
+      writes,
+      async () => {
+        await options.beforeApply?.();
+        await assertFileSnapshots(inputSnapshots);
+      },
+    );
+  } catch (error) {
+    if (error instanceof ConcurrentEditError) {
+      throw new ProjectOperationError(error.message, "sync.concurrent-edit", {
+        file: error.file,
+        path: [],
+      });
+    }
+    throw error;
+  }
+
+  return {
+    applied: true,
+    plan: preview.plan,
+    status: await inspectProject(project, "status"),
+  };
 }
 
 async function loadSavedProject(projectDirectory: string): Promise<{

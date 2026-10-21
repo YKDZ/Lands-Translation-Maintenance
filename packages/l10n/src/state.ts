@@ -216,15 +216,15 @@ export async function readState(
     return {
       ok: false,
       code: "transaction.invalid",
-      message:
-        error instanceof Error ? error.message : "无法读取初始化事务记录",
+      message: error instanceof Error ? error.message : "无法读取维护事务记录",
     };
   }
   if (transactionPhase === "prepared") {
     return {
       ok: false,
       code: "transaction.prepared",
-      message: "发现尚未提交的初始化事务；status/check 不会恢复，请先运行 init",
+      message:
+        "发现尚未提交的维护事务；status/check 不会恢复，请重新执行 init 或 sync",
     };
   }
 

@@ -4,10 +4,15 @@ export {
   initializeProject,
   inspectProject,
   operationExitCode,
+  applySyncProject,
   previewSyncProject,
 } from "#/operations";
 export { builtInRules, evaluateRules } from "#/rules";
-export type { InitializationOptions } from "#/operations";
+export type {
+  InitializationOptions,
+  SyncApplyOptions,
+  SyncApplyResult,
+} from "#/operations";
 export type { RuleEvaluationOptions } from "#/rules";
 export type {
   CheckCoverage,

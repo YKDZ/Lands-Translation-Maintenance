@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { watch } from "node:fs";
 import {
+  chmod,
+  chown,
   mkdir,
   mkdtemp,
   readdir,
@@ -15,8 +17,9 @@ import { basename, dirname, join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { initializeProject } from "@lands-l10n/l10n";
+import { applySyncProject, initializeProject } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
+import { parse as parseYaml } from "yaml";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
@@ -31,6 +34,14 @@ function runCliWithoutPath(...args: string[]) {
   return spawnSync(process.execPath, [cliFile, ...args], {
     encoding: "utf8",
     env: { ...process.env, PATH: "" },
+  });
+}
+
+function runCliAs(uid: number, gid: number, ...args: string[]) {
+  return spawnSync(process.execPath, [cliFile, ...args], {
+    encoding: "utf8",
+    ...(process.getuid?.() === uid ? {} : { uid }),
+    ...(process.getgid?.() === gid ? {} : { gid }),
   });
 }
 
@@ -91,6 +102,19 @@ async function snapshotProjectFiles(projectDirectory: string) {
   );
 }
 
+async function setProjectOwner(
+  directory: string,
+  uid: number,
+  gid: number,
+): Promise<void> {
+  await chown(directory, uid, gid);
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) await setProjectOwner(path, uid, gid);
+    else await chown(path, uid, gid);
+  }
+}
+
 async function createProject(t: TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "lands-l10n-cli-"));
   t.after(async () => rm(directory, { force: true, recursive: true }));
@@ -98,27 +122,7 @@ async function createProject(t: TestContext) {
   const jarFile = join(directory, "Lands.jar");
   await mkdir(join(directory, "lang"), { recursive: true });
   await mkdir(join(directory, ".l10n"), { recursive: true });
-  await writeFile(
-    jarFile,
-    zipSync({
-      "lang/en.yml": strToU8(
-        [
-          "messages:",
-          "  greeting: Hello",
-          "  welcome: Welcome",
-          "  commands:",
-          "    registered: Run",
-          "list:",
-          "  entries: [first, second]",
-          "",
-        ].join("\n"),
-      ),
-      "plugin.yml": strToU8("name: Lands\n"),
-      "settings.yml": strToU8("enabled: true\n"),
-      "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
-      "me/lands/Plugin.class": strToU8("class bytes"),
-    }),
-  );
+  await writeJar(jarFile);
   await writeFile(
     join(directory, ".l10n/config.yml"),
     [
@@ -216,8 +220,9 @@ async function createInterruptedProject(t: TestContext, resourceCount = 150) {
   return { directory, jarFile, targetPaths };
 }
 
-function killInitWhenFileAppears(
+function killCliWhenFileAppears(
   project: { readonly directory: string; readonly jarFile: string },
+  command: "init" | "sync",
   relativePath: string,
   shouldKill?: (contents: string) => boolean,
 ) {
@@ -232,7 +237,7 @@ function killInitWhenFileAppears(
       process.execPath,
       [
         cliFile,
-        "init",
+        command,
         "--project",
         project.directory,
         "--jar",
@@ -323,6 +328,175 @@ void describe("CLI 制品", () => {
     await readFile(
       join(stateDirectory, "upstream/source-baseline.json"),
       "utf8",
+    );
+  });
+
+  void it("同步应用候选原文并一致更新译文、基线和锁", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const lockPath = join(project.directory, ".l10n/lock.json");
+    const beforeBaseline = await readFile(baselinePath, "utf8");
+    const beforeLock = await readFile(lockPath, "utf8");
+    const candidateJar = join(project.directory, "Lands-8.9.2.jar");
+    await writeJar(candidateJar, {
+      source: [
+        "messages:",
+        "  greeting: Bonjour",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const beforePreview = await snapshotProjectFiles(project.directory);
+    const preview = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--dry-run",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(preview.status, 0, preview.stderr);
+    const planned = readEnvelope(preview.stdout).data?.plan as Record<
+      string,
+      unknown
+    >;
+    const plannedWrites = planned.writes as readonly {
+      readonly kind: string;
+      readonly path: string;
+      readonly content: string;
+    }[];
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforePreview,
+    );
+
+    const applied = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedEnvelope = readEnvelope(applied.stdout);
+    assert.equal(appliedEnvelope.variant, "applied");
+    const appliedData = appliedEnvelope.data as Record<string, unknown>;
+    assert.deepEqual(appliedData.plan, planned);
+    for (const write of plannedWrites) {
+      assert.equal(await readFile(write.path, "utf8"), write.content);
+    }
+    assert.deepEqual(
+      new Set(plannedWrites.map((write) => write.kind)),
+      new Set(["target", "baseline", "lock"]),
+    );
+    const target = await readFile(
+      join(project.directory, "lang/zh.yml"),
+      "utf8",
+    );
+    assert.match(target, /greeting: Bonjour/);
+    assert.match(target, /welcome: Welcome/);
+    const afterBaseline = await readFile(baselinePath, "utf8");
+    const afterLock = await readFile(lockPath, "utf8");
+    assert.notEqual(afterBaseline, beforeBaseline);
+    assert.match(afterBaseline, /Bonjour/);
+    assert.notEqual(afterLock, beforeLock);
+
+    const status = runCliWithoutPath(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    const summary = readReport(status.stdout).summary as Record<
+      string,
+      unknown
+    >;
+    assert.equal(summary.pendingTranslations, 2);
+
+    const translatedTarget = target.replace(
+      "greeting: Bonjour",
+      "greeting: 你好",
+    );
+    await writeFile(join(project.directory, "lang/zh.yml"), translatedTarget);
+    const beforeRepeatedSync = await snapshotProjectFiles(project.directory);
+    const repeated = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeated.status, 0, repeated.stderr);
+    assert.equal(
+      await readFile(join(project.directory, "lang/zh.yml"), "utf8"),
+      translatedTarget,
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforeRepeatedSync,
+    );
+
+    const repeatedStatus = runCliWithoutPath(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(repeatedStatus.status, 0, repeatedStatus.stderr);
+    const repeatedSummary = readReport(repeatedStatus.stdout).summary as Record<
+      string,
+      unknown
+    >;
+    assert.equal(repeatedSummary.pendingTranslations, 1);
+    assert.equal(repeatedSummary.modifiedTranslations, 1);
+    const repeatedLock = JSON.parse(await readFile(lockPath, "utf8")) as {
+      readonly translationSeeds: readonly unknown[];
+    };
+    assert.equal(repeatedLock.translationSeeds.length, 2);
+
+    const beforeTextSync = await snapshotProjectFiles(project.directory);
+    const textSync = runCliWithoutPath(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+    );
+    assert.equal(textSync.status, 0, textSync.stderr);
+    assert.match(textSync.stdout, /sync：已应用来源 8\.0\.1/);
+    assert.match(textSync.stdout, /待翻译 1 条；已修改 1 条/);
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforeTextSync,
     );
   });
 
@@ -436,23 +610,7 @@ void describe("CLI 制品", () => {
     }
   });
 
-  void it("未指定 --dry-run 时明确说明实际同步尚未交付", async (t) => {
-    const project = await createProject(t);
-    const result = runCli(
-      "sync",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-
-    assert.equal(result.status, 1);
-    assert.match(result.stdout || result.stderr, /实际同步尚未交付/);
-  });
-
-  void it("完整资源差异先阻断，消费者更新清单后可预演且未维护资源只观察", async (t) => {
+  void it("资源差异阻断应用，消费者更新清单后才提交观察记录", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
       "init",
@@ -478,6 +636,22 @@ void describe("CLI 制品", () => {
     const beforeBlocked = await Promise.all(
       paths.map((path) => readFile(path)),
     );
+    const blockedApply = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(blockedApply.status, 1);
+    const blockedApplyResult = readEnvelope(
+      blockedApply.stdout || blockedApply.stderr,
+    );
+    assert.equal(blockedApplyResult.kind, "failure");
+    assert.equal(blockedApplyResult.variant, "blocked");
+
     const blocked = runCli(
       "sync",
       "--project",
@@ -559,6 +733,32 @@ void describe("CLI 制品", () => {
     for (let index = 0; index < beforeAccepted.length; index += 1) {
       assert.deepEqual(afterAccepted[index], beforeAccepted[index]);
     }
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedEnvelope = readEnvelope(applied.stdout);
+    assert.equal(appliedEnvelope.variant, "applied");
+    assert.deepEqual(appliedEnvelope.data?.plan, plan);
+    const baseline = JSON.parse(await readFile(paths[2]!, "utf8")) as {
+      readonly resources: readonly { readonly path: string }[];
+    };
+    assert.deepEqual(
+      baseline.resources.map(({ path }) => path),
+      [
+        "lang/en.yml",
+        "plugin.yml",
+        "readme.md",
+        "bedrock/lang/en_us.json",
+      ].sort(),
+    );
   });
 
   void it("按解析值严格保留或重置消息，列表整体比较并计划增删", async (t) => {
@@ -683,9 +883,50 @@ void describe("CLI 制品", () => {
     for (let index = 0; index < before.length; index += 1) {
       assert.deepEqual(after[index], before[index]);
     }
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedEnvelope = readEnvelope(applied.stdout);
+    assert.equal(appliedEnvelope.variant, "applied");
+    assert.deepEqual(appliedEnvelope.data?.plan, plan);
+    const appliedTarget = await readFile(targetPath, "utf8");
+    const appliedSource = parseYaml(appliedTarget) as {
+      readonly messages: {
+        readonly greeting: string;
+        readonly welcome: string;
+        readonly commands: {
+          readonly registered: string;
+          readonly multiline: string;
+          readonly added: string;
+          readonly leaving?: string;
+        };
+      };
+      readonly list: { readonly entries: readonly string[] };
+    };
+    assert.equal(appliedSource.messages.greeting, "你好");
+    assert.equal(appliedSource.messages.welcome, "Welcome ");
+    assert.equal(
+      appliedSource.messages.commands.registered,
+      "Run <green>now</green>",
+    );
+    assert.equal(
+      appliedSource.messages.commands.multiline,
+      "Line one\nLine two",
+    );
+    assert.equal(appliedSource.messages.commands.added, "New line");
+    assert.equal(appliedSource.messages.commands.leaving, undefined);
+    assert.deepEqual(appliedSource.list.entries, ["second", "extra"]);
   });
 
-  void it("移除旧字符串消息时按旧身份删除完整错误对象值", async (t) => {
+  void it("删除消息原文实际清除旧目标对象整棵子树", async (t) => {
     const project = await createProject(t);
     const targetPath = join(project.directory, "lang/zh.yml");
     await writeFile(
@@ -765,6 +1006,21 @@ void describe("CLI 制品", () => {
     ).find(({ kind }) => kind === "target");
     assert.match(targetWrite?.content as string, /keep: 保留/);
     assert.doesNotMatch(targetWrite?.content as string, /greeting|text/);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedEnvelope = readEnvelope(applied.stdout);
+    assert.equal(appliedEnvelope.variant, "applied");
+    assert.deepEqual(appliedEnvelope.data?.plan, plan);
+    assert.doesNotMatch(await readFile(targetPath, "utf8"), /greeting|text/);
   });
 
   void it("旧标量消息变为分支时先删除旧身份再新增子消息", async (t) => {
@@ -932,7 +1188,7 @@ void describe("CLI 制品", () => {
     assert.doesNotMatch(targetWrite?.content as string, /child: 你好/);
   });
 
-  void it("映射字段类型变化沿用身份并重置整条消息", async (t) => {
+  void it("映射字段类型变化实际重置整条消息", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
       "init",
@@ -1006,6 +1262,28 @@ void describe("CLI 制品", () => {
     assert.equal(message?.previousTarget, "欢迎");
     assert.deepEqual(message?.source, ["Welcome", "again"]);
     assert.deepEqual(message?.target, ["Welcome", "again"]);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedEnvelope = readEnvelope(applied.stdout);
+    assert.equal(appliedEnvelope.variant, "applied");
+    assert.deepEqual(appliedEnvelope.data?.plan, plan);
+    assert.deepEqual(
+      (
+        parseYaml(await readFile(targetPath, "utf8")) as {
+          readonly messages: { readonly welcome: readonly string[] };
+        }
+      ).messages.welcome,
+      ["Welcome", "again"],
+    );
   });
 
   void it("映射目标移动后按来源路径保留译文并计划新文件", async (t) => {
@@ -1060,7 +1338,7 @@ void describe("CLI 制品", () => {
     );
   });
 
-  void it("未维护资源内容变化只更新预演基线，不重置译文", async (t) => {
+  void it("同步未维护资源变化只更新观察基线，不重置译文", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
       "init",
@@ -1073,7 +1351,14 @@ void describe("CLI 制品", () => {
     );
     assert.equal(initialized.status, 0, initialized.stderr);
     const targetPath = join(project.directory, "lang/zh.yml");
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const lockPath = join(project.directory, ".l10n/lock.json");
     const targetBefore = await readFile(targetPath);
+    const baselineBefore = await readFile(baselinePath);
+    const lockBefore = await readFile(lockPath);
     await writeJar(project.jarFile, { settings: "enabled: false\n" });
 
     const result = runCli(
@@ -1110,9 +1395,26 @@ void describe("CLI 制品", () => {
       false,
     );
     assert.deepEqual(await readFile(targetPath), targetBefore);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const envelope = readEnvelope(applied.stdout);
+    assert.equal(envelope.variant, "applied");
+    assert.deepEqual(envelope.data?.plan, plan);
+    assert.deepEqual(await readFile(targetPath), targetBefore);
+    assert.notDeepEqual(await readFile(baselinePath), baselineBefore);
+    assert.notDeepEqual(await readFile(lockPath), lockBefore);
   });
 
-  void it("原文未变但目标字段缺失时计划填入英文并保留待翻译状态", async (t) => {
+  void it("原文未变但目标字段缺失时实际填入英文并保留待翻译状态", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
       "init",
@@ -1161,9 +1463,37 @@ void describe("CLI 制品", () => {
     ).find(({ kind }) => kind === "target");
     assert.match(targetWrite?.content as string, /welcome: Welcome/);
     assert.deepEqual(await readFile(targetPath), before);
+
+    const applied = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(applied.status, 0, applied.stderr);
+    const appliedEnvelope = readEnvelope(applied.stdout);
+    assert.equal(appliedEnvelope.variant, "applied");
+    assert.deepEqual(appliedEnvelope.data?.plan, plan);
+    assert.match(await readFile(targetPath, "utf8"), /welcome: Welcome/);
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    assert.equal(
+      (readReport(status.stdout).summary as Record<string, unknown>)
+        .pendingTranslations,
+      1,
+    );
   });
 
-  void it("移出最后一条维护映射后保留整份中文目标", async (t) => {
+  void it("同步移出最后一条维护映射后保留整份中文目标", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
       "init",
@@ -1193,16 +1523,14 @@ void describe("CLI 制品", () => {
       project.directory,
       "--jar",
       project.jarFile,
-      "--dry-run",
       "--output-format",
       "structured",
     );
 
     assert.equal(result.status, 0, result.stderr);
-    const plan = readEnvelope(result.stdout).data?.plan as Record<
-      string,
-      unknown
-    >;
+    const envelope = readEnvelope(result.stdout);
+    assert.equal(envelope.variant, "applied");
+    const plan = envelope.data?.plan as Record<string, unknown>;
     assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
     assert.deepEqual(plan.messages, []);
     assert.equal(
@@ -1212,6 +1540,13 @@ void describe("CLI 制品", () => {
       false,
     );
     assert.deepEqual(await readFile(targetPath), targetBefore);
+    const baseline = JSON.parse(
+      await readFile(
+        join(project.directory, ".l10n/upstream/source-baseline.json"),
+        "utf8",
+      ),
+    ) as { readonly mappings: readonly unknown[] };
+    assert.equal(baseline.mappings.length, 0);
   });
 
   void it("目标消息路径被字符串祖先阻断时只读保留整份中文", async (t) => {
@@ -1324,6 +1659,27 @@ void describe("CLI 制品", () => {
       assert.deepEqual(afterChangedPreview[index], beforeChangedPreview[index]);
     }
 
+    const blockedApply = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(blockedApply.status, 1);
+    assert.equal(
+      readEnvelope(blockedApply.stdout || blockedApply.stderr).variant,
+      "blocked",
+    );
+    const afterBlockedApply = await Promise.all(
+      statePaths.map((path) => readFile(path)),
+    );
+    for (let index = 0; index < beforeChangedPreview.length; index += 1) {
+      assert.deepEqual(afterBlockedApply[index], beforeChangedPreview[index]);
+    }
+
     await writeJar(project.jarFile, {
       source: ["messages: {}", "list:", "  entries: [first, second]", ""].join(
         "\n",
@@ -1362,7 +1718,7 @@ void describe("CLI 制品", () => {
     }
   });
 
-  void it("移出范围的缺失目标不因预演而新建", async (t) => {
+  void it("同步时移出范围的缺失目标不会新建", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
       "init",
@@ -1386,22 +1742,20 @@ void describe("CLI 制品", () => {
       ),
     );
 
-    const preview = runCli(
+    const applied = runCli(
       "sync",
       "--project",
       project.directory,
       "--jar",
       project.jarFile,
-      "--dry-run",
       "--output-format",
       "structured",
     );
 
-    assert.equal(preview.status, 0, preview.stderr);
-    const plan = readEnvelope(preview.stdout).data?.plan as Record<
-      string,
-      unknown
-    >;
+    assert.equal(applied.status, 0, applied.stderr);
+    const envelope = readEnvelope(applied.stdout);
+    assert.equal(envelope.variant, "applied");
+    const plan = envelope.data?.plan as Record<string, unknown>;
     assert.deepEqual(plan.unmanagedTargets, ["lang/zh.yml"]);
     assert.equal(
       (plan.writes as readonly Record<string, unknown>[]).some(
@@ -2398,8 +2752,9 @@ void describe("CLI 制品", () => {
 
   void it("SIGKILL 后重试先回滚残留，再建立完整待翻译状态", async (t) => {
     const project = await createInterruptedProject(t);
-    const interrupted = await killInitWhenFileAppears(
+    const interrupted = await killCliWhenFileAppears(
       project,
+      "init",
       project.targetPaths[0]!,
     );
     assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
@@ -2447,8 +2802,9 @@ void describe("CLI 制品", () => {
 
   void it("只读查询拒绝尚未提交的晚期事务，并保持文件不变", async (t) => {
     const project = await createInterruptedProject(t);
-    const interrupted = await killInitWhenFileAppears(
+    const interrupted = await killCliWhenFileAppears(
       project,
+      "init",
       ".l10n/lock.json",
     );
     assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
@@ -2471,11 +2827,11 @@ void describe("CLI 制品", () => {
       assert.equal(result.status, 1, result.stderr);
       const report = readReport(result.stderr || result.stdout);
       assert.equal(report.state, "issues");
-      assert.ok(
-        (report.diagnostics as Array<Record<string, unknown>>).some(
-          (item) => item.code === "transaction.prepared",
-        ),
-      );
+      const transactionIssue = (
+        report.diagnostics as Array<Record<string, unknown>>
+      ).find((item) => item.code === "transaction.prepared");
+      assert.ok(transactionIssue);
+      assert.match(String(transactionIssue.reason), /init 或 sync/);
       assert.deepEqual(await snapshotProjectFiles(project.directory), before);
     }
 
@@ -2499,8 +2855,9 @@ void describe("CLI 制品", () => {
 
   void it("只读查询接受已提交但尚未清理的事务", async (t) => {
     const project = await createInterruptedProject(t, 300);
-    const interrupted = await killInitWhenFileAppears(
+    const interrupted = await killCliWhenFileAppears(
       project,
+      "init",
       ".l10n/transaction.json",
       (contents) =>
         (JSON.parse(contents) as { readonly phase: string }).phase ===
@@ -2538,7 +2895,11 @@ void describe("CLI 制品", () => {
   void it("中断后出现并行编辑时拒绝恢复且保留编辑内容", async (t) => {
     const project = await createInterruptedProject(t);
     const targetPath = project.targetPaths[0]!;
-    const interrupted = await killInitWhenFileAppears(project, targetPath);
+    const interrupted = await killCliWhenFileAppears(
+      project,
+      "init",
+      targetPath,
+    );
     assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
     assert.equal(interrupted.killedAtFile, true);
 
@@ -2557,10 +2918,251 @@ void describe("CLI 制品", () => {
 
     assert.equal(retried.status, 1);
     assert.match(retried.stdout || retried.stderr, /中断|并行编辑/);
+    assert.match(retried.stdout || retried.stderr, /维护事务/);
     assert.equal(await readFile(targetFile, "utf8"), parallelEdit);
     await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
     await assert.rejects(
       readFile(join(project.directory, ".l10n/upstream/source-baseline.json")),
+    );
+  });
+
+  void it("同步事务中断后只读查询拒绝残缺状态，重试先恢复再提交", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Bonjour",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace("target: lang/zh.yml", "target: lang/zh-moved.yml"),
+    );
+    const targetPath = join(project.directory, "lang/zh-moved.yml");
+    const oldTargetPath = join(project.directory, "lang/zh.yml");
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const lockPath = join(project.directory, ".l10n/lock.json");
+    const beforeTarget = await readFile(oldTargetPath, "utf8");
+    const beforeBaseline = await readFile(baselinePath, "utf8");
+    const beforeLock = await readFile(lockPath, "utf8");
+    const interrupted = await killCliWhenFileAppears(
+      project,
+      "sync",
+      "lang/zh-moved.yml",
+      (contents) => contents.includes("greeting: Bonjour"),
+    );
+    assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
+    assert.equal(interrupted.killedAtFile, true);
+    const transactionPath = join(project.directory, ".l10n/transaction.json");
+    assert.equal(
+      (JSON.parse(await readFile(transactionPath, "utf8")) as { phase: string })
+        .phase,
+      "prepared",
+    );
+    assert.match(await readFile(targetPath, "utf8"), /greeting: Bonjour/);
+
+    const beforeReadOnly = await snapshotProjectFiles(project.directory);
+    for (const command of ["status", "check"]) {
+      const result = runCli(
+        command,
+        "--project",
+        project.directory,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(result.status, 1, result.stderr);
+      const report = readReport(result.stderr || result.stdout);
+      assert.ok(
+        (report.diagnostics as Array<Record<string, unknown>>).some(
+          ({ code }) => code === "transaction.prepared",
+        ),
+      );
+      assert.deepEqual(
+        await snapshotProjectFiles(project.directory),
+        beforeReadOnly,
+      );
+    }
+
+    await writeFile(project.jarFile, "not a JAR");
+    const failedRetry = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(failedRetry.status, 1);
+    assert.match(failedRetry.stdout || failedRetry.stderr, /JAR|压缩/);
+    assert.equal(await readFile(oldTargetPath, "utf8"), beforeTarget);
+    assert.equal(await readFile(baselinePath, "utf8"), beforeBaseline);
+    assert.equal(await readFile(lockPath, "utf8"), beforeLock);
+    await assert.rejects(readFile(targetPath));
+    await assert.rejects(readFile(transactionPath));
+
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Bonjour",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+
+    const retried = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(retried.status, 0, retried.stderr);
+    const envelope = readEnvelope(retried.stdout);
+    assert.equal(envelope.variant, "applied");
+    const finalTarget = await readFile(targetPath, "utf8");
+    assert.match(finalTarget, /greeting: Bonjour/);
+    const baseline = JSON.parse(await readFile(baselinePath, "utf8")) as {
+      readonly mappings: readonly {
+        readonly sourceValue: {
+          readonly messages: { readonly greeting: string };
+        };
+      }[];
+    };
+    assert.equal(
+      baseline.mappings[0]?.sourceValue.messages.greeting,
+      "Bonjour",
+    );
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 0, status.stderr);
+    assert.ok(
+      !(
+        readReport(status.stdout).diagnostics as Array<Record<string, unknown>>
+      ).some(({ code }) => code === "transaction.prepared"),
+    );
+    await assert.rejects(readFile(transactionPath));
+  });
+
+  void it("同步恢复遇到并行编辑时保留编辑且不推进原文基线", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Bonjour",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const configPath = join(project.directory, ".l10n/config.yml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      config.replace("target: lang/zh.yml", "target: lang/zh-moved.yml"),
+    );
+    const targetPath = join(project.directory, "lang/zh-moved.yml");
+    const baselinePath = join(
+      project.directory,
+      ".l10n/upstream/source-baseline.json",
+    );
+    const lockPath = join(project.directory, ".l10n/lock.json");
+    const interrupted = await killCliWhenFileAppears(
+      project,
+      "sync",
+      "lang/zh-moved.yml",
+      (contents) => contents.includes("greeting: Bonjour"),
+    );
+    assert.equal(interrupted.signal, "SIGKILL", interrupted.stderr);
+    assert.equal(interrupted.killedAtFile, true);
+    const partialBaseline = await readFile(baselinePath, "utf8");
+    const partialLock = await readFile(lockPath, "utf8");
+
+    const parallelEdit = [
+      "messages:",
+      "  greeting: 并行编辑",
+      "  welcome: Welcome",
+      "  commands:",
+      "    registered: 已注册",
+      "list:",
+      "  entries: [第一项, 第二项]",
+      "",
+    ].join("\n");
+    await writeFile(targetPath, parallelEdit);
+    const retried = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(retried.status, 1);
+    assert.match(retried.stdout || retried.stderr, /并行编辑/);
+    assert.equal(await readFile(targetPath, "utf8"), parallelEdit);
+    assert.equal(await readFile(baselinePath, "utf8"), partialBaseline);
+    assert.equal(await readFile(lockPath, "utf8"), partialLock);
+
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(status.status, 1);
+    assert.ok(
+      (
+        readReport(status.stdout || status.stderr).diagnostics as Array<
+          Record<string, unknown>
+        >
+      ).some(({ code }) => code === "transaction.prepared"),
     );
   });
 
@@ -2617,6 +3219,151 @@ void describe("CLI 制品", () => {
       readFile(join(project.directory, ".l10n/upstream/source-baseline.json")),
     );
     await assert.rejects(readFile(join(project.directory, ".l10n/lock.json")));
+  });
+
+  void it("同步提交前复核中文、声明、基线、锁和候选 JAR", async (t) => {
+    const inputCases = [
+      { name: "中文目标", path: "lang/zh.yml", suffix: "\n# 并行编辑\n" },
+      {
+        name: "声明",
+        path: ".l10n/config.yml",
+        suffix: "\n# 并行编辑\n",
+      },
+      {
+        name: "原文基线",
+        path: ".l10n/upstream/source-baseline.json",
+        suffix: " ",
+      },
+      { name: "同步锁", path: ".l10n/lock.json", suffix: " " },
+      { name: "候选 JAR", path: "candidate.jar", suffix: "损坏的并行版本" },
+    ] as const;
+
+    for (const input of inputCases) {
+      const project = await createProject(t);
+      const initialized = runCli(
+        "init",
+        "--project",
+        project.directory,
+        "--jar",
+        project.jarFile,
+        "--output-format",
+        "structured",
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+      const candidateJar = join(project.directory, "candidate.jar");
+      await writeJar(candidateJar, {
+        source: [
+          "messages:",
+          "  greeting: Bonjour",
+          "  welcome: Welcome",
+          "  commands:",
+          "    registered: Run",
+          "list:",
+          "  entries: [first, second]",
+          "",
+        ].join("\n"),
+      });
+      const targetPath = join(project.directory, "lang/zh.yml");
+      const baselinePath = join(
+        project.directory,
+        ".l10n/upstream/source-baseline.json",
+      );
+      const lockPath = join(project.directory, ".l10n/lock.json");
+      const beforeTarget = await readFile(targetPath, "utf8");
+      const beforeBaseline = await readFile(baselinePath, "utf8");
+      const beforeLock = await readFile(lockPath, "utf8");
+      const concurrentPath = join(project.directory, input.path);
+      const concurrentContent =
+        input.path === "candidate.jar"
+          ? input.suffix
+          : `${await readFile(concurrentPath, "utf8")}${input.suffix}`;
+
+      await assert.rejects(
+        applySyncProject(project.directory, candidateJar, {
+          beforeApply: async () => writeFile(concurrentPath, concurrentContent),
+        }),
+        /并行编辑/,
+        input.name,
+      );
+      assert.equal(
+        await readFile(concurrentPath, "utf8"),
+        concurrentContent,
+        input.name,
+      );
+      if (input.path !== "lang/zh.yml") {
+        assert.equal(
+          await readFile(targetPath, "utf8"),
+          beforeTarget,
+          input.name,
+        );
+      }
+      if (input.path !== ".l10n/upstream/source-baseline.json") {
+        assert.equal(
+          await readFile(baselinePath, "utf8"),
+          beforeBaseline,
+          input.name,
+        );
+      }
+      if (input.path !== ".l10n/lock.json") {
+        assert.equal(await readFile(lockPath, "utf8"), beforeLock, input.name);
+      }
+    }
+  });
+
+  void it("写入目录不可写时同步失败且保持上次完整状态", async (t) => {
+    const project = await createProject(t);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeJar(project.jarFile, {
+      source: [
+        "messages:",
+        "  greeting: Bonjour",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const before = await snapshotProjectFiles(project.directory);
+    const processUid = process.getuid?.();
+    const processGid = process.getgid?.();
+    assert.notEqual(processUid, undefined);
+    assert.notEqual(processGid, undefined);
+    const uid = processUid === 0 ? 65534 : processUid!;
+    const gid = processGid === 0 ? 65534 : processGid!;
+    if (processUid === 0) {
+      await setProjectOwner(project.directory, uid, gid);
+    }
+    const targetDirectory = join(project.directory, "lang");
+    await chmod(targetDirectory, 0o555);
+
+    const failed = runCliAs(
+      uid,
+      gid,
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    await chmod(targetDirectory, 0o755);
+    assert.equal(failed.error, undefined);
+    assert.equal(failed.status, 1);
+    assert.match(failed.stdout || failed.stderr, /EACCES|permission denied/i);
+    assert.deepEqual(await snapshotProjectFiles(project.directory), before);
   });
 
   void it("规则策略变更不要求重建基线，但禁用结构规则会显示为不完整", async (t) => {

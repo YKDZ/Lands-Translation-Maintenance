@@ -39,7 +39,7 @@ export class ConcurrentEditError extends Error {
   readonly file: string;
 
   constructor(file: string) {
-    super(`初始化期间文件发生变化，未覆盖并行编辑：${file}`);
+    super(`维护事务期间文件发生变化，未覆盖并行编辑：${file}`);
     this.name = "ConcurrentEditError";
     this.file = file;
   }
@@ -279,11 +279,11 @@ async function readJournal(
   try {
     value = JSON.parse(source) as unknown;
   } catch {
-    throw new Error("发现无法解析的中断初始化事务记录，未改动项目文件");
+    throw new Error("发现无法解析的中断维护事务记录，未改动项目文件");
   }
   const parsed = journalSchema.safeParse(value);
   if (!parsed.success) {
-    throw new Error("发现格式无效的中断初始化事务记录，未改动项目文件");
+    throw new Error("发现格式无效的中断维护事务记录，未改动项目文件");
   }
   return parsed.data;
 }
@@ -592,7 +592,7 @@ export async function writeFilesAtomically(
     } catch (recoveryError) {
       if (recoveryError instanceof ConcurrentEditError) throw recoveryError;
       throw new Error(
-        `初始化事务失败，且无法安全恢复：${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+        `维护事务失败，且无法安全恢复：${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
         { cause: error },
       );
     }
