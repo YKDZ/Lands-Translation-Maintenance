@@ -4,7 +4,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { adaptLegacyMiniMessageInput } from "#/legacy-format";
 import type {
+  AdaptedMiniMessageInput,
   JsonValue,
   MiniMessageContextFrame,
   MiniMessageFinding,
@@ -38,6 +40,14 @@ interface MessageInput {
   readonly file: string;
   readonly path: readonly (string | number)[];
   readonly input: string;
+  readonly adapted: AdaptedMiniMessageInput;
+  readonly legacyAdapterUnsupported: boolean;
+  readonly legacyIssues: readonly {
+    readonly code: string;
+    readonly position: MiniMessagePosition;
+    readonly expected: string;
+    readonly actual: string;
+  }[];
   readonly range: MiniMessagePosition;
 }
 
@@ -456,7 +466,10 @@ function messageSurface(
 
 function usesMiniMessage(message: ObservedMessage): boolean {
   if (message.format !== undefined)
-    return message.format.includes("minimessage");
+    return (
+      message.format.includes("minimessage") ||
+      message.format.includes("legacy-color")
+    );
   return (
     message.category === "chat-string" ||
     message.category === "chat-string-list"
@@ -466,12 +479,51 @@ function usesMiniMessage(message: ObservedMessage): boolean {
 function messagesToParseInputs(
   messages: readonly ObservedMessage[],
   resources: readonly ResourceInventoryEntry[],
+  sourceVersion: string,
 ): readonly MessageInput[] {
   const purposes = new Map(
     resources.map((resource) => [resource.path, resource.purpose]),
   );
   const inputs: MessageInput[] = [];
   let nextIndex = 0;
+
+  function appendInput(
+    message: ObservedMessage,
+    origin: "source" | "target",
+    surface: MiniMessageSurface,
+    file: string,
+    path: readonly (string | number)[],
+    input: string,
+  ): void {
+    const isLegacyColor = message.format?.includes("legacy-color") ?? false;
+    const legacy = isLegacyColor
+      ? adaptLegacyMiniMessageInput(input, sourceVersion)
+      : undefined;
+    const adapted =
+      legacy ??
+      ({
+        input,
+        sourceOffsets: Array.from(
+          { length: input.length + 1 },
+          (_, index) => index,
+        ),
+        exact: true,
+      } satisfies AdaptedMiniMessageInput);
+    inputs.push({
+      index: nextIndex,
+      message,
+      origin,
+      surface,
+      file,
+      path,
+      input,
+      adapted,
+      legacyAdapterUnsupported: isLegacyColor && legacy === undefined,
+      legacyIssues: legacy?.issues ?? [],
+      range: { start: 0, end: input.length },
+    });
+    nextIndex += 1;
+  }
 
   for (const message of messages) {
     if (!usesMiniMessage(message)) continue;
@@ -493,17 +545,7 @@ function messagesToParseInputs(
       if (typeof value === "string") {
         const file =
           origin === "source" ? message.sourceFile : message.targetFile;
-        inputs.push({
-          index: nextIndex,
-          message,
-          origin,
-          surface,
-          file,
-          path: message.path,
-          input: value,
-          range: { start: 0, end: value.length },
-        });
-        nextIndex += 1;
+        appendInput(message, origin, surface, file, message.path, value);
       } else if (
         (message.category === "chat-string-list" ||
           message.category === "configuration-string-list" ||
@@ -516,31 +558,11 @@ function messagesToParseInputs(
           origin === "source" ? message.sourceFile : message.targetFile;
         if (message.category === "gui-lore") {
           const input = value.join("<newline>");
-          inputs.push({
-            index: nextIndex,
-            message,
-            origin,
-            surface,
-            file,
-            path: message.path,
-            input,
-            range: { start: 0, end: input.length },
-          });
-          nextIndex += 1;
+          appendInput(message, origin, surface, file, message.path, input);
         } else {
           for (const [itemIndex, item] of value.entries()) {
             const itemPath = [...message.path, itemIndex];
-            inputs.push({
-              index: nextIndex,
-              message,
-              origin,
-              surface,
-              file,
-              path: itemPath,
-              input: item,
-              range: { start: 0, end: item.length },
-            });
-            nextIndex += 1;
+            appendInput(message, origin, surface, file, itemPath, item);
           }
         }
       }
@@ -682,7 +704,15 @@ async function runOfficialParser(
   }
   for (const input of inputs) {
     lines.push(
-      ["M", input.index, encode(input.surface), encode(input.input)].join("\t"),
+      [
+        "M",
+        input.index,
+        encode(input.surface),
+        encode(input.input),
+        encode(input.adapted.input),
+        input.adapted.sourceOffsets.join(","),
+        String(input.adapted.exact),
+      ].join("\t"),
     );
   }
   const result = spawnSync(
@@ -1110,9 +1140,10 @@ export async function parseMiniMessages(
   messages: readonly ObservedMessage[],
   resources: readonly ResourceInventoryEntry[],
   themeSnapshot?: MiniMessageThemeSnapshot,
+  sourceVersion = "",
 ): Promise<MiniMessageParseProject> {
   const theme = parseTheme(themeSnapshot);
-  const inputs = messagesToParseInputs(messages, resources);
+  const inputs = messagesToParseInputs(messages, resources, sourceVersion);
   const java = await runOfficialParser(theme.definitions, inputs);
   const findings = [...theme.findings];
   const unavailable = new Set<string>();
