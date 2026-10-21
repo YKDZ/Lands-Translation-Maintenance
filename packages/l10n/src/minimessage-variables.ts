@@ -669,9 +669,11 @@ function finding(
   expected: JsonValue,
   actual: JsonValue,
   reason: string,
+  identity: JsonValue = { context: context as unknown as JsonValue },
 ): RuleFinding {
   return {
     code,
+    identity,
     message,
     origin: "target",
     location: { file: message.targetFile, path: message.path },
@@ -738,6 +740,10 @@ function appendDifferenceFindings(
               context: actual.item.context as unknown as JsonValue,
             },
             `变量名称不一致：${expected.item.name} 被译为 ${actual.item.name}`,
+            {
+              context: expected.item.context as unknown as JsonValue,
+              expectedName: expected.item.name,
+            },
           ),
         );
         expected.remaining -= count;
@@ -768,6 +774,10 @@ function appendDifferenceFindings(
             context: item.item.context as unknown as JsonValue,
           },
           `变量 ${item.item.name} 遗漏或次数不足`,
+          {
+            context: item.item.context as unknown as JsonValue,
+            name: item.item.name,
+          },
         ),
       );
     }
@@ -795,6 +805,10 @@ function appendDifferenceFindings(
             context: item.item.context as unknown as JsonValue,
           },
           `正文新增变量 ${item.item.name} 或出现次数过多`,
+          {
+            context: item.item.context as unknown as JsonValue,
+            name: item.item.name,
+          },
         ),
       );
     }
@@ -829,6 +843,29 @@ function clickBehaviorKey(interaction: ClickInteraction): string {
   });
 }
 
+function clickOrdinals(
+  groups: ReadonlyMap<string, readonly ClickInteraction[]>,
+): ReadonlyMap<ClickInteraction, number> {
+  const result = new Map<ClickInteraction, number>();
+  for (const group of groups.values()) {
+    group.forEach((interaction, index) => {
+      result.set(interaction, index);
+    });
+  }
+  return result;
+}
+
+function clickFindingIdentity(
+  interaction: ClickInteraction,
+  ordinal: number,
+): JsonValue {
+  return {
+    field: fieldContext(interaction.document) as unknown as JsonValue,
+    parentContext: interaction.parentContext as unknown as JsonValue,
+    ordinal,
+  };
+}
+
 function sortClicks(clicks: readonly ClickInteraction[]): ClickInteraction[] {
   return [...clicks].sort((left, right) =>
     clickBehaviorKey(left).localeCompare(clickBehaviorKey(right)),
@@ -848,6 +885,7 @@ function appendClickDifference(
   message: ProjectView["messages"][number],
   expected: ClickInteraction,
   actual: ClickInteraction,
+  identity: JsonValue,
   findings: RuleFinding[],
 ): void {
   const expectedValue = clickPayload(expected);
@@ -862,6 +900,7 @@ function appendClickDifference(
         expectedValue,
         actualValue,
         `click 交互动作从 ${expected.action} 变为 ${actual.action}`,
+        identity,
       ),
     );
     return;
@@ -876,6 +915,7 @@ function appendClickDifference(
           expectedValue,
           actualValue,
           `click 命令名从 ${expected.commandName || "（空）"} 变为 ${actual.commandName || "（空）"}`,
+          identity,
         ),
       );
     }
@@ -888,6 +928,7 @@ function appendClickDifference(
           expectedValue,
           actualValue,
           "click 命令参数与原文不同",
+          identity,
         ),
       );
     }
@@ -902,6 +943,7 @@ function appendClickDifference(
         expectedValue,
         actualValue,
         `click ${expected.action} 行为参数与原文不同`,
+        identity,
       ),
     );
   }
@@ -930,6 +972,8 @@ function appendClickFindings(
   const groupKeys = [
     ...new Set([...sourceGroups.keys(), ...targetGroups.keys()]),
   ].sort();
+  const sourceOrdinals = clickOrdinals(sourceGroups);
+  const targetOrdinals = clickOrdinals(targetGroups);
   for (const groupKey of groupKeys) {
     const expected = sortClicks(sourceGroups.get(groupKey) ?? []);
     const actual = sortClicks(targetGroups.get(groupKey) ?? []);
@@ -967,10 +1011,18 @@ function appendClickFindings(
           : undefined;
       const actualItem =
         sameCommand ?? sameAction ?? unmatchedActualSorted.shift()!;
-      appendClickDifference(message, expectedItem, actualItem, findings);
+      const ordinal = sourceOrdinals.get(expectedItem)!;
+      appendClickDifference(
+        message,
+        expectedItem,
+        actualItem,
+        clickFindingIdentity(expectedItem, ordinal),
+        findings,
+      );
     }
 
     for (const item of unmatchedExpectedSorted) {
+      const ordinal = sourceOrdinals.get(item)!;
       findings.push(
         finding(
           message,
@@ -979,10 +1031,12 @@ function appendClickFindings(
           clickPayload(item),
           { state: "missing" },
           "原文中的 click 交互在译文中缺失",
+          clickFindingIdentity(item, ordinal),
         ),
       );
     }
     for (const item of unmatchedActualSorted) {
+      const ordinal = targetOrdinals.get(item)!;
       findings.push(
         finding(
           message,
@@ -991,6 +1045,7 @@ function appendClickFindings(
           { state: "not present in source" },
           clickPayload(item),
           "译文新增了原文没有的 click 交互",
+          clickFindingIdentity(item, ordinal),
         ),
       );
     }

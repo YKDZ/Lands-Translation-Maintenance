@@ -921,9 +921,13 @@ function findingForMessage(
   reason: string,
   expected: JsonValue,
   actual: JsonValue,
+  identity?: JsonValue,
+  fingerprint?: JsonValue,
 ): MiniMessageFinding {
   return {
     code,
+    ...(identity === undefined ? {} : { identity }),
+    ...(fingerprint === undefined ? {} : { fingerprint }),
     message: input.message,
     origin: input.origin,
     location: { file: input.file, path: input.path },
@@ -965,6 +969,7 @@ function appendParserFindings(
   java: JavaParseResult,
   findings: MiniMessageFinding[],
   unavailable: Set<string>,
+  themeDefinitions: readonly ThemeDefinition[],
 ): void {
   if (java.unavailable !== undefined) {
     unavailable.add(java.unavailable);
@@ -976,6 +981,7 @@ function appendParserFindings(
       unavailable.add(warning.reason);
   }
   const seenOccurrences = new Set<string>();
+  const occurrenceIndices = new Map<string, number>();
 
   for (const input of inputs) {
     const result = java.messages.get(input.index);
@@ -1006,6 +1012,7 @@ function appendParserFindings(
             input: input.input,
             parserMessage: result.error ?? "未知解析错误",
           },
+          { kind: "syntax-invalid" },
         ),
       );
     }
@@ -1017,6 +1024,9 @@ function appendParserFindings(
     const occurrence = `${unresolved.messageIndex}\0${unresolved.documentIndex}\0${unresolved.position}\0${unresolved.name}\0${unresolved.detail}`;
     if (seenOccurrences.has(occurrence)) continue;
     seenOccurrences.add(occurrence);
+    const occurrenceKey = `${unresolved.messageIndex}\0${unresolved.documentIndex}`;
+    const occurrenceIndex = occurrenceIndices.get(occurrenceKey) ?? 0;
+    occurrenceIndices.set(occurrenceKey, occurrenceIndex + 1);
     if (unresolved.position < 0) {
       unavailable.add("存在 MiniMessage 解析诊断无法可靠映射回原文位置");
     }
@@ -1066,6 +1076,26 @@ function appendParserFindings(
             ...(token === undefined ? {} : { token }),
             ...actualTag,
           },
+          {
+            documentIndex: unresolved.documentIndex,
+            occurrence: occurrenceIndex,
+          },
+          {
+            themeToken: token ?? "",
+            definitions: themeDefinitions
+              .filter(
+                (definition) =>
+                  definition.surface === input.surface &&
+                  definition.name.toLowerCase() === token,
+              )
+              .map((definition) => ({
+                file: definition.file,
+                path: definition.path,
+                surface: definition.surface,
+                name: definition.name,
+                source: definition.source,
+              })),
+          },
         ),
       );
       continue;
@@ -1078,6 +1108,10 @@ function appendParserFindings(
           `官方解析器未能解析标签 <${name}>：${unresolved.detail || "标签参数或形式无法识别"}`,
           { state: "recognized MiniMessage tag" },
           { tagName: name, ...actualTag },
+          {
+            documentIndex: unresolved.documentIndex,
+            occurrence: occurrenceIndex,
+          },
         ),
       );
       continue;
@@ -1090,6 +1124,10 @@ function appendParserFindings(
         { state: "recognized tag or supported extension" },
         {
           ...actualTag,
+        },
+        {
+          documentIndex: unresolved.documentIndex,
+          occurrence: occurrenceIndex,
         },
       ),
     );
@@ -1143,7 +1181,7 @@ export async function parseMiniMessages(
       }
     }
   }
-  appendParserFindings(inputs, java, findings, unavailable);
+  appendParserFindings(inputs, java, findings, unavailable, theme.definitions);
   const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));
   const documentResults: ParsedMiniMessageDocument[] = [];
   const rootDocuments = new Set<number>();

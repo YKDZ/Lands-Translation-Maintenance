@@ -6,12 +6,16 @@ export {
   operationExitCode,
   applySyncProject,
   previewSyncProject,
+  recordDiagnosticExemption,
+  confirmSameText,
 } from "#/operations";
 export { builtInRules, evaluateRules } from "#/rules";
 export type {
   InitializationOptions,
   SyncApplyOptions,
   SyncApplyResult,
+  ExceptionRecordingOptions,
+  ConfirmationReceipt,
 } from "#/operations";
 export type { RuleEvaluationOptions } from "#/rules";
 export type {
