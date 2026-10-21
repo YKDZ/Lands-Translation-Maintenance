@@ -25,7 +25,10 @@ function runCli(...args: string[]) {
   });
 }
 
-async function createProject(t: TestContext) {
+async function createProject(
+  t: TestContext,
+  options: { readonly bedrockTheme?: string } = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "lands-l10n-cli-"));
   t.after(async () => rm(directory, { force: true, recursive: true }));
 
@@ -48,7 +51,13 @@ async function createProject(t: TestContext) {
       ),
       "plugin.yml": strToU8("name: Lands\n"),
       "settings.yml": strToU8("enabled: true\n"),
+      "Locale/theme.yml": strToU8(
+        'theme:\n  tokens:\n    regular: "<gray>"\n',
+      ),
       "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
+      ...(options.bedrockTheme === undefined
+        ? {}
+        : { "bedrock/theme.yml": strToU8(options.bedrockTheme) }),
       "me/lands/Plugin.class": strToU8("class bytes"),
     }),
   );
@@ -66,8 +75,16 @@ async function createProject(t: TestContext) {
       "    purpose: metadata",
       "  - path: settings.yml",
       "    purpose: configuration",
+      "  - path: Locale/theme.yml",
+      "    purpose: configuration",
       "  - path: bedrock/lang/en_us.json",
       "    purpose: bedrock-excluded",
+      ...(options.bedrockTheme === undefined
+        ? []
+        : [
+            "  - path: bedrock/theme.yml",
+            "    purpose: bedrock-excluded",
+          ]),
       "translationScope:",
       '  sourceLanguage: "en-US"',
       '  targetLanguage: "zh-CN"',
@@ -154,7 +171,7 @@ void describe("CLI 制品", () => {
     >;
     assert.equal(initData?.pendingTranslations, 1);
     assert.equal(initData?.messages, 4);
-    assert.equal(initData?.resourceFiles, 4);
+    assert.equal(initData?.resourceFiles, 5);
 
     const target = await readFile(
       join(project.directory, "lang/zh.yml"),
@@ -386,6 +403,9 @@ void describe("CLI 制品", () => {
         ),
         "plugin.yml": strToU8("name: Lands\n"),
         "settings.yml": strToU8("enabled: true\n"),
+        "Locale/theme.yml": strToU8(
+          'theme:\n  tokens:\n    regular: "<gray>"\n',
+        ),
         "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
         "me/lands/Plugin.class": strToU8("class bytes"),
       }),
@@ -407,6 +427,37 @@ void describe("CLI 制品", () => {
     await assert.rejects(
       readFile(join(project.directory, ".lands-l10n/sync-lock.json")),
     );
+  });
+
+  void it("只把配置用途的主题作为主题输入，Bedrock 同名资源保持排除", async (t) => {
+    const project = await createProject(t, {
+      bedrockTheme:
+        "theme:\n  tokens:\n    regular: '<gray>'\n    regular: '<red>'\n",
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const baseline = JSON.parse(
+      await readFile(
+        join(project.directory, ".lands-l10n/source-baseline.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly miniMessageTheme?: {
+        readonly file: string;
+        readonly source: string;
+      };
+    };
+    assert.equal(baseline.miniMessageTheme?.file, "Locale/theme.yml");
+    assert.match(baseline.miniMessageTheme?.source ?? "", /regular/u);
   });
 
   void it("初始化提交前发现并行编辑并保留编辑者内容", async (t) => {
