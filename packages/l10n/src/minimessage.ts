@@ -1165,19 +1165,6 @@ function appendParserFindings(
       continue;
     }
     if (landsControls.has(name) || landsPreprocessors.has(name)) {
-      const finding = findingForMessage(
-        input,
-        "minimessage.extension-unsupported",
-        `Lands 扩展 <${name}> 的预处理语义尚未实现；本次检查没有判定该扩展正确`,
-        { state: "Lands extension semantics checked" },
-        actualTag,
-        {
-          documentIndex: unresolved.documentIndex,
-          occurrence: occurrenceIndex,
-        },
-      );
-      findings.push(finding);
-      unavailable.add("Lands 控制和预处理语义尚未完成");
       continue;
     }
     if (name === "t") {
