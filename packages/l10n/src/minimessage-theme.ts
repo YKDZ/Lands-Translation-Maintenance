@@ -14,6 +14,7 @@ export interface CapturedMiniMessageTheme {
 
 function themeFiles(resources: readonly ResourceInventoryEntry[]): string[] {
   return resources
+    .filter((resource) => resource.purpose === "configuration")
     .map((resource) => resource.path)
     .filter((path) => path.split("/").at(-1) === "theme.yml")
     .sort();
