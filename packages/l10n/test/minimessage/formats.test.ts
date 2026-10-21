@@ -208,9 +208,10 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
 
     assert.ok(fallback);
-    assert.equal(fallback?.value, "<v:owner> <red>fallback</red>");
+    assert.equal(fallback?.value, "fallback");
     assert.match(JSON.stringify(fallback?.context), /html-element/u);
     assert.match(JSON.stringify(fallback?.context), /translate_or:fallback/u);
+    assert.match(JSON.stringify(fallback?.context), /red/u);
     assert.equal(
       document?.segments.some(
         (segment) => segment.kind === "variable" && segment.value === "owner",
@@ -225,9 +226,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
     assert.ok(
       targetDocument?.segments.some(
-        (segment) =>
-          segment.kind === "text" &&
-          segment.value === "<v:owner> <red>fallback</red>",
+        (segment) => segment.kind === "text" && segment.value === "fallback",
       ),
     );
   });
@@ -268,7 +267,6 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     const finding = diagnostics(report).find(
       (entry) => entry.code === "map-html.behavior-attribute-mismatch",
     );
-
     assert.equal(checked.status, 1);
     assert.ok(finding, checked.stderr || checked.stdout);
     assert.deepEqual(
@@ -277,6 +275,119 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     );
     assert.match(JSON.stringify(finding?.expected), /land/u);
     assert.match(JSON.stringify(finding?.actual), /region/u);
+  });
+
+  void it("按 MiniMessage PlainText 后的地图 HTML fallback 检查链接属性", async (t) => {
+    const target = "<div><lang_or:lands.key:'<a href=/drop>城镇</a>'></div>";
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: "<div><lang_or:lands.key:'<a href=/keep>Land</a>'></div>",
+      targetMapDescription: target,
+    });
+    const { checked, report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const finding = diagnostics(report).find(
+      (entry) => entry.code === "map-html.behavior-attribute-mismatch",
+    );
+    const actual = finding?.actual as
+      | { readonly position?: { readonly start: number; readonly end: number } }
+      | undefined;
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" &&
+        entry.path.join(".").includes("dynmap.land.description") &&
+        entry.documentIndex === 0,
+    );
+    const body = targetDocument?.segments.find(
+      (segment) =>
+        segment.kind === "text" &&
+        segment.value === "城镇" &&
+        segment.context.some(
+          (frame) =>
+            frame.kind === "tag-argument" &&
+            frame.name === "translate_or:fallback",
+        ),
+    );
+
+    assert.equal(checked.status, 1);
+    assert.ok(finding, checked.stderr || checked.stdout);
+    assert.match(JSON.stringify(finding?.expected), /keep/u);
+    assert.match(JSON.stringify(finding?.actual), /drop/u);
+    assert.ok(actual?.position);
+    assert.equal(
+      target.slice(actual.position.start, actual.position.end),
+      "href=/drop",
+    );
+    assert.ok(body);
+    assert.equal(
+      target.slice(body.position.start, body.position.end),
+      body.raw,
+    );
+  });
+
+  void it("地图 fallback 正文和可译属性可改写而保留行为属性", async (t) => {
+    const source =
+      "<div><lang_or:lands.key:'<a href=/keep title=Land>Land</a>'></div>";
+    const target =
+      "<div><lang_or:lands.key:'<a href=/keep title=城镇>城镇</a>'></div>";
+    const project = await createFormatProject(t, {
+      sourceVersion: "8.9.2",
+      mapDescription: source,
+      targetMapDescription: target,
+    });
+    const { checked, report } = initAndCheck(project);
+    const view = await inspectTranslatableView(project.directory);
+    const targetDocument = view.miniMessage?.translatableText.find(
+      (entry) =>
+        entry.origin === "target" &&
+        entry.path.join(".").includes("dynmap.land.description") &&
+        entry.documentIndex === 0,
+    );
+    const body = targetDocument?.segments.find(
+      (segment) =>
+        segment.kind === "text" &&
+        segment.value === "城镇" &&
+        segment.context.some(
+          (frame) => frame.kind === "html-element" && frame.name === "a",
+        ),
+    );
+    const title = targetDocument?.segments.find(
+      (segment) =>
+        segment.kind === "text" &&
+        segment.value === "城镇" &&
+        segment.context.some(
+          (frame) => frame.kind === "html-attribute" && frame.name === "title",
+        ),
+    );
+
+    assert.equal(checked.status, 1);
+    assert.equal(
+      diagnostics(report).some(
+        (entry) => entry.code === "map-html.behavior-attribute-mismatch",
+      ),
+      false,
+      checked.stderr || checked.stdout,
+    );
+    assert.ok(body);
+    assert.ok(title);
+    assert.equal(
+      target.slice(title.position.start, title.position.end),
+      title.raw,
+    );
+    assert.ok(
+      body?.context.some(
+        (frame) =>
+          frame.kind === "tag-argument" &&
+          frame.name === "translate_or:fallback",
+      ),
+    );
+    assert.ok(
+      title?.context.some(
+        (frame) =>
+          frame.kind === "tag-argument" &&
+          frame.name === "translate_or:fallback",
+      ),
+    );
   });
 
   void it("保留旧地图模板的属性占位符并报告 8.0.1 未供值限制", async (t) => {
