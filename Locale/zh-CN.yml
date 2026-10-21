@@ -19,7 +19,7 @@ general:
   wilderness: <dark_green>荒野</dark_green>
   server: 服务器
   affiliation:
-    land: <t:decoration>[</t><t:entity_land><v:land></t>]
+    land: <t:decoration>[</t><t:entity_land><v:land></t><t:decoration>]</t>
   relation:
     ally: <t:regular_value>盟友</t>
     enemy: <t:error_value>政敌</t>
@@ -193,7 +193,7 @@ help:
     sub:
       unknown: |
         <t:error>子命令<t:error_value> <v:command> </t>不存在.
-          <hover:show_text:"<t:regular>点击查看可用命令列表"><click:run_command:"/<v:cmd>"><t:regular>✖ 查看命令: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+          <hover:show_text:"<t:regular>点击查看可用命令列表"><click:run_command:"/<v:cmd>"><t:regular>✖ 查看命令: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       header: <noprefix><hover:show_text:"<t:regular>Click here to navigate to the previous page."><click:run_command:"/<v:cmd> <v:previous>"><t:decoration><b>━━━━━<!b><t:cmd><b>«<!b></t><t:decoration><b>━</click></hover> <!b><t:prefix>Sub Commands </t><t:regular>Page<t:regular_value> <v:page> </t><t:decoration>/</t><t:regular_value> <v:pages></t> <hover:show_text:"<t:regular>Click here to go to the next page."><click:run_command:"/<v:cmd> <v:next>"><t:decoration><b>━<!b><t:cmd><b>»<!b></t><t:decoration><b>━━━━━</click></hover>
       footer: |
         <noprefix>
@@ -405,10 +405,10 @@ lands:
       new:
         posts: |
           <t:regular>有<t:regular_value> <v:amount> </t>条由你的城镇<t:entity_land> <v:land> </t>成员发布的新消息. 最新一条: <t:user_content><v:latest></t>
-            <hover:show_text:"<t:regular>点击查看这些消息"><click:run_command:"/<v:cmd>"><t:regular>✖ 查看: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+            <hover:show_text:"<t:regular>点击查看这些消息"><click:run_command:"/<v:cmd>"><t:regular>✖ 查看: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
         general: |
           <t:regular>有<t:regular_value> <v:amount> </t>条发给城镇<t:entity_land> <v:land> </t>的新日志箱消息. 最新一条: <t:user_content><v:latest></t>
-            <hover:show_text:"<t:regular>点击查看这些消息"><click:run_command:"/<v:cmd>"><t:regular>✖ 查看: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+            <hover:show_text:"<t:regular>点击查看这些消息"><click:run_command:"/<v:cmd>"><t:regular>✖ 查看: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
     feature-disabled: <t:error>此功能已被管理员禁用. <t:regular>管理员需要在配置中启用设置 '<t:regular_value><v:setting></t><t:decoration>'</t><t:regular>, 你才能使用此功能.
     combat:
       tag: <bossbar:purple:solid><t:regular>战斗标记:<t:time> <v:time></t>
@@ -451,7 +451,7 @@ lands:
     introduction:
       container-placement: |
         <t:negative>你在荒野放置了一个容器. <t:regular>其他玩家可能会打开它并取走物品.
-          <hover:show_text:"<t:regular>占领此处为城镇领土以保护它."><click:run_command:"/<v:fullcmd>"><t:regular>✖ 保护它: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+          <hover:show_text:"<t:regular>占领此处为城镇领土以保护它."><click:run_command:"/<v:fullcmd>"><t:regular>✖ 保护它: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
     event:
       fly:
         counter: <title><t:error_heading>飞行模式即将关闭<subtitle><t:regular>将在<t:time> <v:sec> </t>秒后关闭
@@ -486,7 +486,7 @@ lands:
       plugin: <t:error>第三方插件取消了传送. <t:regular>请检查其他插件. <t:regular>这不是 Lands 的问题.
       unsafe: |
         <t:regular>传送已取消, 因为目标位置不安全.
-          <hover:show_text:"<t:regular>你有<t:time> <v:time> </t>时间确认此次传送. 警告: 传送目标不安全, 可能会让你陷入危险."><click:run_command:"/<v:cmd>"><t:positive>✔ 仍然传送: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+          <hover:show_text:"<t:regular>你有<t:time> <v:time> </t>时间确认此次传送. 警告: 传送目标不安全, 可能会让你陷入危险."><click:run_command:"/<v:cmd>"><t:positive>✔ 仍然传送: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       corrected: <t:regular>原始传送目的地不安全. <t:regular>最终目的地已修正到安全位置.
     claimblock:
       dropped: <t:error>部分占领方块掉落在地上. <t:regular>你的背包没有剩余空间.
@@ -560,7 +560,7 @@ lands:
         interval: <t:error>租金周期必须短于最大总租期. <t:regular>给定值 - 周期:<t:time> <v:interval></t>, 最大总租期:<t:time> <v:max-time></t>
         success: |
           <t:regular>你已将子区域<t:regular_value> <v:area> </t>设为出租. 住户每期需支付<t:cost> <v:cost> </t>, 周期为<t:time> <v:time></t>.
-            <hover:show_text:"<t:regular>点击移除这个出租报价."><click:run_command:"/<v:cmd>"><t:decoration>✔</t><t:regular>移除报价: <t:cmd>/<v:cmd> </t><t:click>[CLICK]</t></click></hover>
+            <hover:show_text:"<t:regular>点击移除这个出租报价."><click:run_command:"/<v:cmd>"><t:decoration>✔</t><t:regular>移除报价: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
         invalid: |
           <t:regular>你的城镇或子区域租赁告示牌行格式无效 (第 <t:regular_value><v:line></t> 行)
            <t:decoration>1. line:</t><t:regular> Lands
@@ -582,7 +582,7 @@ lands:
         success: |
           <t:regular>你租用了子区域<t:regular_value> <v:area> </t>, 所属城镇为<t:entity_land> <v:land> </t>, 花费<t:cost> <v:cost></t>. 租约将在<t:time> <v:time> </t>后到期.
             <t:decoration>✔ </t><t:regular>延长租期: 点击告示牌或全息文字
-            <hover:show_text:"<t:regular>点击这里取消租约."><click:run_command:"/<v:cmd>"><t:decoration>✔ </t><t:regular>取消租约: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+            <hover:show_text:"<t:regular>点击这里取消租约."><click:run_command:"/<v:cmd>"><t:decoration>✔ </t><t:regular>取消租约: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
         info: |
           <noprefix>
           <t:decoration>━━━━━━━━━‹━ <t:regular_heading>Rented Info </t><t:decoration>━›━━━━━━━━━
@@ -602,7 +602,7 @@ lands:
         tenant:
           confirm: |
             <t:error>请确认你要支付<t:cost> <v:cost> </t>作为补偿, 以移除住户<t:error_value> <v:player> </t>.
-              <hover:show_text:"<t:regular>点击这里确认此操作和付款."><click:run_command:"/<v:cmd>"><t:positive>✔ 确认: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+              <hover:show_text:"<t:regular>点击这里确认此操作和付款."><click:run_command:"/<v:cmd>"><t:positive>✔ 确认: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
           success: <t:regular>你已将住户<t:regular_value> <v:player> </t>从子区域<t:regular_value> <v:area> </t>所属城镇<t:entity_land> <v:land> </t>中移除, 并支付了<t:cost> <v:cost> </t>作为补偿.
           target: <t:error>你已被从子区域<t:error_value> <v:area> </t><t:error_value>所属城镇</t><t:error_value> <v:land> </t><t:error>中移除, 不再是该子区域的住户. <t:regular>对方向你支付了<t:regular_value> <v:compensation> </t>作为补偿.
       sell:
@@ -683,14 +683,14 @@ lands:
       area-not-trusted: <t:error>你不能在这里这么做. <t:regular>你不是子区域<t:regular_value> <v:area> </t>的成员, 该子区域属于城镇<t:entity_land> <v:land></t>.
       number: <t:error>你的输入<t:error_value> <v:input> </t>不是数字. <t:regular>参数<t:regular_value> <v:argument> </t>必须是数字.
       money:
-        fallback: '<t:regular>提示:<t:cost> <v:cost> </t>已从你的个人账户扣除, 因为城镇<t:entity_land> <v:land> </t>的金库余额不足. 存款: <t:cmd>/<v:cmd></t><hover:show_text:"<t:regular>点击这里向城镇 <v:land> 的金库存款."> <click:suggest_command:"/<v:cmd>"><t:click>[点击]</t></click></hover>'
+        fallback: '<t:regular>提示:<t:cost> <v:cost> </t>已从你的个人账户扣除, 因为城镇<t:entity_land> <v:land> </t>的金库余额不足. 存款: <t:cmd>/<v:cmd></t><hover:show_text:"<t:regular>点击这里向城镇 <v:land> 的金库存款."> <click:suggest_command:"/<v:cmd>"><java><t:click>[点击]</t></java></click></hover>'
         failure:
-          bank: '<t:error>城镇金库余额不足, 无法支付这笔费用. <t:regular>请向城镇金库存入<t:cost> <v:cost> </t>: <hover:show_text:"<t:regular>点击向城镇金库存入<t:cost> <v:cost> </t>."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>'
+          bank: '<t:error>城镇金库余额不足, 无法支付这笔费用. <t:regular>请向城镇金库存入<t:cost> <v:cost> </t>: <hover:show_text:"<t:regular>点击向城镇金库存入<t:cost> <v:cost> </t>."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>'
           personal: '<t:error>你的余额不足, 无法支付这笔费用. <t:regular>还需要<t:cost> <v:cost></t>. 当前余额: <t:regular_value><v:balance></t>'
       input:
         confirm: |
           <t:regular>请点击下方确认执行此操作 <t:decoration>(</t><t:cmd>/<v:input></t><t:decoration>)</t><t:regular>:
-            <hover:show_text:"<t:regular>点击确认执行此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><t:click>[点击]</t></click></hover>
+            <hover:show_text:"<t:regular>点击确认执行此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
         land: <t:error>城镇<t:error_value> <v:input> </t>不存在.
         area: <t:error>此城镇中不存在子区域<t:error_value> <v:input> </t>.
         holder: <t:error>没有名为<t:error_value> <v:input> </t>的城镇或联邦. <t:regular>是否输入有误?
@@ -786,9 +786,9 @@ lands:
       success:
         land: |
           <t:regular>已成功创建城镇<t:entity_land> <v:land> </t>, 花费<t:cost> <v:cost></t>.
-            <hover:show_text:"<t:regular>使用 <t:cmd>/<v:cmd_claim></t><t:regular> 及其子命令占领更多区块."><click:suggest_command:"/<v:cmd_claim>"><t:regular>✖ 扩张城镇: <t:cmd>/<v:cmd_claim> </t><t:click>[点击]</t></click></hover>
-            <hover:show_text:"<t:regular>点击此处打开你的城镇菜单."><click:run_command:"/<v:cmd_menu>"><t:regular>✖ 管理城镇: <t:cmd>/<v:cmd_menu> </t><t:click>[点击]</t></click></hover>
-            <hover:show_text:"<t:regular>点击此处查看你的城镇可用的全部命令."><click:run_command:"/<v:cmd_help>"><t:regular>✖ 更多命令: <t:cmd>/<v:cmd_help> </t><t:click>[点击]</t></click></hover>
+            <hover:show_text:"<t:regular>使用 <t:cmd>/<v:cmd_claim></t><t:regular> 及其子命令占领更多区块."><click:suggest_command:"/<v:cmd_claim>"><t:regular>✖ 扩张城镇: <t:cmd>/<v:cmd_claim> </t><java><t:click>[点击]</t></java></click></hover>
+            <hover:show_text:"<t:regular>点击此处打开你的城镇菜单."><click:run_command:"/<v:cmd_menu>"><t:regular>✖ 管理城镇: <t:cmd>/<v:cmd_menu> </t><java><t:click>[点击]</t></java></click></hover>
+            <hover:show_text:"<t:regular>点击此处查看你的城镇可用的全部命令."><click:run_command:"/<v:cmd_help>"><t:regular>✖ 更多命令: <t:cmd>/<v:cmd_help> </t><java><t:click>[点击]</t></java></click></hover>
         camp: <t:regular>你已在当前位置创建露营地<t:entity_land> <v:land> </t>. <t:regular>你支付了<t:cost> <v:cost></t>. 露营地无法扩张, 并将在<t:time> <v:time></t> 后到期.
         land_edit: |
           <t:regular>Successfully created land<t:entity_land> <v:land> </t>for<t:cost> <v:cost></t>. <t:regular>Selected the land for command executions.
@@ -903,7 +903,7 @@ lands:
             <hover:show_text:"<t:regular>Click here to claim this selection."><click:suggest_command:"/<v:cmd_claim>"><t:regular>✖ Claim: <t:cmd>/<v:cmd_claim> </t><java><t:click>[CLICK]</t></java></click></hover>
             <hover:show_text:"<t:regular>Click here to unclaim this selection."><click:suggest_command:"/<v:cmd_unclaim>"><t:regular>✖ Unclaim: <t:cmd>/<v:cmd_unclaim> </t><java><t:click>[CLICK]</t></java></click></hover>
             <hover:show_text:"<t:regular>Assign this selection to a subarea."><click:suggest_command:"/<v:cmd_assign>"><t:regular>✖ Subarea: <t:cmd>/<v:cmd_assign> </t><java><t:click>[CLICK]</t></java></click></hover>
-        not-complete: <t:error>你的选区尚未完成. <t:regular>请确保两个位置都已设置. <hover:show_text:"<t:regular>点击此处切换选区模式."><click:run_command:"/<v:cmd>"><t:regular>执行<t:cmd>/<v:cmd> </t>即可切换选区模式<t:click>[点击]</t></click></hover>
+        not-complete: <t:error>你的选区尚未完成. <t:regular>请确保两个位置都已设置. <hover:show_text:"<t:regular>点击此处切换选区模式."><click:run_command:"/<v:cmd>"><t:regular>执行<t:cmd>/<v:cmd> </t>即可切换选区模式<java><t:click>[点击]</t></java></click></hover>
         disabled: <title><t:regular_heading>选区模式<subtitle><t:negative>模式已禁用
     invites:
       accept:
@@ -916,7 +916,7 @@ lands:
         notification: |
           <t:regular>你有<t:regular_value> <v:invites> </t>个来自其他城镇的邀请.
 
-           <hover:show_text:"<t:regular>查看从其他城镇收到的全部邀请."><click:run_command:"/<v:cmd>"><t:regular>查看收到的邀请: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+           <hover:show_text:"<t:regular>查看从其他城镇收到的全部邀请."><click:run_command:"/<v:cmd>"><t:regular>查看收到的邀请: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
         area:
           success: <t:regular>已成功接受来自城镇<t:entity_land> <v:land> </t>的邀请, 加入子区域<t:regular_value> <v:area></t>.
           broadcast: <t:entity_land><v:land> </t><t:decoration>| </t><t:regular>玩家<t:regular_value> <v:player> </t>现已成为我们城镇中子区域<t:regular_value> <v:area> </t>的成员.
@@ -940,7 +940,7 @@ lands:
     view:
       disabled: <t:regular>已成功关闭当前可视化显示.
       wilderness: <t:regular>已启用领土可视化. <t:regular>你当前所在位置是荒野.
-      tool: '<t:regular>你指向的位置是荒野. <hover:show_text:"<t:regular>点击占领你指向的区块."><click:run_command:"/<v:fullcmd>"><t:regular>占领: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>'
+      tool: '<t:regular>你指向的位置是荒野. <hover:show_text:"<t:regular>点击占领你指向的区块."><click:run_command:"/<v:fullcmd>"><t:regular>占领: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>'
       y-level: <t:regular>当前所在位置是荒野, 但该区块已被城镇<t:entity_land> <v:land> </t>在其他高度占领.
       y-lock:
         enabled: '<t:error>已开启高度锁定模式: <t:regular>城镇边界将不再随你的高度上下移动.'
@@ -968,7 +968,7 @@ lands:
         <t:decoration>• </t>Description:<t:user_content> <v:description></t>
         <reset><t:regular><t:decoration>━━━━━━━━━‹━</t> <t:regular_heading>Area View </t><t:decoration>━›━━━━━━━━━</t></t>
     map:
-      link: '<hover:show_text:"<t:regular>点击打开 dynmap."><click:open_url:"<v:dynmap>"><t:regular>dynmap 链接: <t:click>[点击]</t></click></hover>'
+      link: '<hover:show_text:"<t:regular>点击打开 dynmap."><click:open_url:"<v:dynmap>"><t:regular>dynmap 链接: <java><t:click>[点击]</t></java></click></hover>'
     unstuck:
       success: <t:regular>已成功传送到最近的未占领位置.
       success_wilderness: <t:regular>Successfully teleported to the world spawn.
@@ -1006,7 +1006,7 @@ lands:
             <ingame><reset><t:decoration>━━━━━━━━━‹━</t> <t:negative_heading>Upkeep Collected</t> <t:decoration>━›━━━━━━━━━</ingame>
         none: <t:regular>你目前不需要为任何城镇缴纳维护费.
         header: <noprefix><t:decoration>━━━━━━━━━‹━ <t:negative_heading>Upcoming Upkeep</t> <t:decoration>━›━━━━━━━━━
-        entry: <noprefix><hover:show_text:"<t:regular>点击此处存入所需金额."><click:run_command:"/<v:cmd>"><t:regular_value><v:covered> </t><t:entity_land><v:land></t><t:regular>:<t:cost> <v:upkeep_form> </t><t:click>[点击]</t></click></hover>
+        entry: <noprefix><hover:show_text:"<t:regular>点击此处存入所需金额."><click:run_command:"/<v:cmd>"><t:regular_value><v:covered> </t><t:entity_land><v:land></t><t:regular>:<t:cost> <v:upkeep_form> </t><java><t:click>[点击]</t></java></click></hover>
         footer: |
           <noprefix><t:regular>Your lands need to pay a total of <t:cost><v:total></t> in <t:time><v:next> </t><t:regular>in order to keep up all claims or membership in their nation. <t:regular>Click above to deposit money into your land's banks.
           <t:decoration>━━━━━━━━━‹━ <t:negative_heading>Upcoming Upkeep</t> <t:decoration>━›━━━━━━━━━
@@ -1026,12 +1026,12 @@ lands:
         migrate:
           confirm: |
             <t:negative>请确认你已在 <v:file> 中配置所有限制包. 将旧权限迁移到新限制时, 系统会计算编号权限与限制包之间的差异.<t:regular> 因此应提前配置所有限制包, 否则可能无法得到正确结果.<t:error_value> 另外建议在执行此操作前备份数据库, 以便需要时恢复.
-              </t><hover:show_text:"</t><t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><t:click>[点击]</t></click></hover>
+              </t><hover:show_text:"</t><t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
       land:
         addrole:
           confirm: |
             <t:negative>执行此命令可能导致城镇拥有多个相同职位. <t:regular>例如, 新创建的城镇可能已从 roles.yml 继承了该职位. 对同一职位多次执行此命令, 也会导致受影响的城镇出现重复职位. <t:regular>请确认此操作:
-              <hover:show_text:"<t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><t:click>[点击]</t></click></hover>
+              <hover:show_text:"<t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
       database:
         restore:
           confirm: |
@@ -1300,7 +1300,7 @@ list:
     rented:
       - <t:regular>子区域<t:regular_value> <v:area></t>
       - <t:regular>住户:<t:regular_value> <v:player></t>
-      - <t:regular>剩余时长 <t:time><v:time> </t>
+      - <t:time><v:time> </t><t:regular>剩余时长
       - <t:cost><v:cost> </t><t:regular>每 <t:time><v:time></t>
       - '<t:decoration>按住潜行键点击: 取消</t>'
       - '<t:decoration>点击: 延长租期</t>'

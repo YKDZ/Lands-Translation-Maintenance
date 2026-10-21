@@ -15,7 +15,8 @@ land:
       allow-auto-accept: true
       name: '&e成员募集中 ☺'
       description:
-        - '&7这个城镇正在募集新成员.'
+        - '&7这个城镇正在积极寻找'
+        - '&7新成员.'
       default: false
     shop:
       enabled: true

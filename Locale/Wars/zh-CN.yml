@@ -217,16 +217,16 @@ wars:
       hours: '<t:error>只能在以下战争时段宣战:<t:error_value> <v:hours></t> <t:decoration>(</t><t:regular>当前时间:<t:time> <v:current></t>, 时区: <t:time><v:timezone></t><t:decoration>)</t>'
       enemies: |
         <t:error>必须先将<t:error_value> <v:object> </t>设为政敌, 才能通过宣战发动战争.
-          <hover:show_text:"<t:regular>点击此处将 <v:object> <t:regular>设为政敌, 以便向其宣战."><click:run_command:"/<v:cmd>"><t:regular>✖ 设为政敌: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+          <hover:show_text:"<t:regular>点击此处将 <v:object> <t:regular>设为政敌, 以便向其宣战."><click:run_command:"/<v:cmd>"><t:regular>✖ 设为政敌: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       ally: |
         <t:error>不能向盟友<t:error_value> <v:object> </t>宣战, 盟友之间不能互相发动战争.
-          <hover:show_text:"<t:regular>点击此处管理外交关系."><click:run_command:"/<v:cmd>"><t:regular>✖ 管理外交关系: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+          <hover:show_text:"<t:regular>点击此处管理外交关系."><click:run_command:"/<v:cmd>"><t:regular>✖ 管理外交关系: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       nation: <t:error>不能向<t:error_value> <v:object> </t>宣战. <t:regular>对方与你同属联邦<t:entity_nation> <v:nation></t>, 不能互相发动战争.
       min-balance:
-        attacker: '<t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>的余额至少需要达到<t:limit> <v:min> </t>才能发动战争. 请向城镇金库存款: <hover:show_text:"<t:regular>点击此处向城镇金库中存入 <v:min>."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>'
+        attacker: '<t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>的余额至少需要达到<t:limit> <v:min> </t>才能发动战争. 请向城镇金库存款: <hover:show_text:"<t:regular>点击此处向城镇金库中存入 <v:min>."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>'
         defender: <t:error>守方 <v:object> <t:error>的余额过低. <t:regular>只能攻击余额至少为<t:limit> <v:min> </t>的其他目标.
       min-chunks:
-        attacker: '<t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>需要至少拥有<t:limit> <v:min> </t>个区块才能发动战争. 占领区块: <hover:show_text:"<t:regular>点击此处占领."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>'
+        attacker: '<t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>需要至少拥有<t:limit> <v:min> </t>个区块才能发动战争. 占领区块: <hover:show_text:"<t:regular>点击此处占领."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>'
         defender: <t:error>守方 <v:object> <t:error>的占领区块数过少. <t:regular>只能攻击至少拥有<t:limit> <v:min> </t>个区块的其他目标.
       min-age:
         attacker: <t:error>无法发送这份宣战书. <t:regular>攻方 <v:object> <t:regular>的成立时间至少达到<t:time> <v:min></t>, 才能发动战争.

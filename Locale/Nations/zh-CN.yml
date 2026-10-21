@@ -7,7 +7,7 @@
 
 general:
   affiliation:
-    nation: <t:decoration>[</t><t:entity_nation><v:nation> </t>|<t:entity_land> <v:land></t>]
+    nation: <t:decoration>[</t><t:entity_nation><v:nation> </t><t:decoration>|</t><t:entity_land> <v:land></t><t:decoration>]</t>
   command:
     argument:
       type:
@@ -77,11 +77,11 @@ nations:
         <t:error>你的城镇<t:error_value> <v:land></t> 不属于任何联邦.
 
           <t:regular>任何联邦都可以邀请你的城镇: <t:cmd>/<v:cmd_trust>
-          </t><hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:cmd>"><t:regular>创建自己的联邦: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+          </t><hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:cmd>"><t:regular>创建自己的联邦: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
     create:
       camp: |
         <t:error>你不能以露营地 <t:decoration>(</t><t:error_value><v:land></t>) <t:error>作为首都建立联邦.
-          <hover:show_text:"<t:regular>创建城镇. 点击复制."><click:suggest_command:"/<v:cmd_create>"><t:regular>✖ 创建城镇: <t:cmd>/<v:cmd_create> </t><t:click>[点击]</t></click></hover>
+          <hover:show_text:"<t:regular>创建城镇. 点击复制."><click:suggest_command:"/<v:cmd_create>"><t:regular>✖ 创建城镇: <t:cmd>/<v:cmd_create> </t><java><t:click>[点击]</t></java></click></hover>
       already: <t:error>你的城镇<t:error_value> <v:land></t> 已经属于联邦<t:error_value> <v:nation></t>. <t:regular>你的城镇需要先退出该联邦, 执行 <t:cmd>/<v:cmd></t><t:regular>.
       war: <t:error>你不能在以城镇<t:error_value> <v:land></t> 为首都时建立联邦, 因其仍处于与<t:error_value> <v:object></t> 的战争中. <t:regular>请在战争结束后重试.
       level: '<t:error>你目前不能建立联邦. <t:regular>你的城镇<t:entity_land> <v:land></t> 至少需要达到<t:regular_value> <v:level> </t>级 <t:decoration>(</t><t:regular>当前: <t:regular_value><v:current></t><t:decoration>)</t><t:regular>.'
@@ -235,12 +235,12 @@ lands:
         add:
           nation: |
             <t:error>无法与城镇<t:error_value> <v:land></t> 结成联盟. <t:regular>该城镇由联邦<t:entity_nation> <v:nation></t> 管理.
-              <hover:show_text:"<t:regular>点击此处向联邦<t:entity_nation> <v:nation></t> 发送联盟请求."><click:run_command:"/<v:cmd>"><t:regular>✖ 改为向联邦<t:entity_nation> <v:nation></t> 发送联盟请求: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+              <hover:show_text:"<t:regular>点击此处向联邦<t:entity_nation> <v:nation></t> 发送联盟请求."><click:run_command:"/<v:cmd>"><t:regular>✖ 改为向联邦<t:entity_nation> <v:nation></t> 发送联盟请求: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       enemies:
         add:
           nation: |
             <t:error>无法将城镇<t:error_value> <v:land> </t>设为政敌. <t:regular>该城镇由联邦<t:entity_nation> <v:nation> </t>管理.
-              <hover:show_text:"<t:regular>点击此处向联邦<t:entity_nation> <v:nation> </t>宣战."><click:run_command:"/<v:cmd>"><t:regular>✖ 改为向联邦<t:entity_nation> <v:nation></t> 宣战: <t:cmd>/<v:cmd> </t><t:click>[点击]</t></click></hover>
+              <hover:show_text:"<t:regular>点击此处向联邦<t:entity_nation> <v:nation> </t>宣战."><click:run_command:"/<v:cmd>"><t:regular>✖ 改为向联邦<t:entity_nation> <v:nation></t> 宣战: <t:cmd>/<v:cmd> </t><java><t:click>[点击]</t></java></click></hover>
       nation: <t:error>所有外交关系均由联邦<t:error_value> <v:nation></t> 管理, 你的城镇属于该联邦.
     nation:
       leave:

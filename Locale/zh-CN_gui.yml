@@ -2637,7 +2637,7 @@ gui:
     items:
       default:
         refresh_filter:
-          name: <t:regular_heading>按类型筛选
+          name: <t:regular_heading>按类型筛选：</t><t:regular_value> <v:type></t>
           lore:
             - <t:decoration>✖ </t><t:regular>Cycle through message types.
             - "   Current:<t:regular_value> <v:type></t>"
