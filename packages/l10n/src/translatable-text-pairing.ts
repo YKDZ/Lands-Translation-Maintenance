@@ -1,14 +1,23 @@
-import type { JsonValue, ProjectView, TranslatableTextDocument } from "#/model";
+import type {
+  JsonValue,
+  MiniMessageContextFrame,
+  ProjectView,
+  TranslatableTextDocument,
+} from "#/model";
 import { canonicalJson } from "#/value";
 
-function documentOwnershipIdentity(
+export function translatableTextOwnerIdentity(
   project: ProjectView,
-  document: TranslatableTextDocument,
+  document: Pick<
+    TranslatableTextDocument,
+    "message" | "origin" | "path" | "file"
+  >,
+  context: readonly MiniMessageContextFrame[],
 ): JsonValue | undefined {
-  if (document.context.length === 0) return [];
+  if (context.length === 0) return [];
   const parsedDocuments = project.miniMessage?.documents ?? [];
   const owners: JsonValue[] = [];
-  for (const frame of document.context) {
+  for (const frame of context) {
     if (frame.kind === "hover-text" || frame.kind === "tag-argument") {
       owners.push({ kind: frame.kind, name: frame.name });
       continue;
@@ -18,7 +27,9 @@ function documentOwnershipIdentity(
       .filter(
         (candidate) =>
           candidate.message.id === document.message.id &&
-          candidate.origin === document.origin,
+          candidate.origin === document.origin &&
+          candidate.file === document.file &&
+          canonicalJson(candidate.path) === canonicalJson(document.path),
       )
       .flatMap((candidate) => candidate.nodes)
       .filter(
@@ -54,7 +65,11 @@ export function pairedTextDocuments(project: ProjectView): readonly {
     }
   >();
   for (const document of project.miniMessage?.translatableText ?? []) {
-    const ownership = documentOwnershipIdentity(project, document);
+    const ownership = translatableTextOwnerIdentity(
+      project,
+      document,
+      document.context,
+    );
     if (ownership === undefined) continue;
     const key = canonicalJson([document.message.id, document.path, ownership]);
     let group = groups.get(key);

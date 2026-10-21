@@ -2944,21 +2944,11 @@ function ruleUnavailable(
           matchesPath(document.path) &&
           (location === undefined || location.file === document.file),
       );
-      const indexes = (
-        documents: readonly { readonly documentIndex: number }[],
-      ) =>
-        documents
-          .map((document) => document.documentIndex)
-          .sort((a, b) => a - b);
-      const sameIndexes = (left: readonly number[], right: readonly number[]) =>
-        canonicalJson(left) === canonicalJson(right);
       return (
         sourceText.length === 0 ||
         targetText.length === 0 ||
-        !sameIndexes(indexes(sourceText), indexes(targetText)) ||
         sourceDocuments.length === 0 ||
         targetDocuments.length === 0 ||
-        !sameIndexes(indexes(sourceDocuments), indexes(targetDocuments)) ||
         sourceDocuments.some((document) => document.status !== "parsed") ||
         targetDocuments.some((document) => document.status !== "parsed")
       );

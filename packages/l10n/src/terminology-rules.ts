@@ -2,11 +2,14 @@ import type {
   CheckRule,
   MiniMessageContextFrame,
   MiniMessagePosition,
+  ProjectView,
   TranslatableTextDocument,
-  TranslatableTextSegment,
 } from "#/model";
 import { terminologyEntries, terminologyStyleSource } from "#/terminology-data";
-import { pairedTextDocuments } from "#/translatable-text-pairing";
+import {
+  pairedTextDocuments,
+  translatableTextOwnerIdentity,
+} from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 
 interface TextPart {
@@ -83,8 +86,10 @@ function sourcePositions(run: TextRun, start: number, end: number) {
 }
 
 function textRuns(
-  segments: readonly TranslatableTextSegment[],
+  project: ProjectView,
+  document: TranslatableTextDocument,
 ): readonly TextRun[] {
+  const segments = document.segments;
   const elementFrames = new Map<
     string,
     { readonly frame: MiniMessageContextFrame; parentKey?: string }
@@ -138,33 +143,17 @@ function textRuns(
     );
   }
 
-  const clickFrames = new Map<string, MiniMessageContextFrame>();
-  for (const segment of segments) {
-    for (const frame of segment.context) {
-      if (frame.kind !== "tag" || frame.name !== "click") continue;
-      clickFrames.set(
-        `${frame.position.start}:${frame.position.end}:${frame.name}`,
-        frame,
-      );
-    }
-  }
-  const clickIdentities = new Map<string, string>();
-  [...clickFrames.entries()]
-    .sort(
-      ([leftKey, left], [rightKey, right]) =>
-        left.position.start - right.position.start ||
-        left.position.end - right.position.end ||
-        leftKey.localeCompare(rightKey),
-    )
-    .forEach(([key], index) => clickIdentities.set(key, `click[${index}]`));
-
   const contextKey = (context: readonly MiniMessageContextFrame[]): string => {
     const frames: string[] = [];
     for (const [index, frame] of context.entries()) {
       if (frame.kind === "tag") {
         if (frame.name === "click") {
-          const key = `${frame.position.start}:${frame.position.end}:${frame.name}`;
-          frames.push(`tag:${clickIdentities.get(key) ?? "click"}`);
+          const owner = translatableTextOwnerIdentity(project, document, [
+            frame,
+          ]);
+          frames.push(
+            `tag:click-owner:${canonicalJson(owner ?? { state: "unknown-owner" })}`,
+          );
         }
         continue;
       }
@@ -605,8 +594,8 @@ export const terminologyRule: CheckRule = {
       ) {
         continue;
       }
-      const sourceRuns = textRuns(source.segments);
-      const targetRuns = textRuns(target.segments);
+      const sourceRuns = textRuns(project, source);
+      const targetRuns = textRuns(project, target);
       for (const [runIndex, run] of sourceRuns.entries()) {
         const matches = termMatches(run.text, source.path);
         for (const match of matches) {
@@ -661,6 +650,9 @@ function styleFinding(
     actual: {
       character,
       codePoint: `U+${character.codePointAt(0)?.toString(16).toUpperCase()}`,
+      documentIndex: document.documentIndex,
+      occurrenceIndex,
+      position: { start: position.start, end: position.end },
     },
   };
 }
@@ -690,7 +682,7 @@ export const translationStyleRule: CheckRule = {
       );
       if (parsedDocument?.status === "parser-failed") continue;
       let occurrenceIndex = 0;
-      for (const run of textRuns(document.segments)) {
+      for (const run of textRuns(project, document)) {
         for (let offset = 0; offset < run.text.length;) {
           const codePoint = run.text.codePointAt(offset);
           if (codePoint === undefined) break;

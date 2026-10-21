@@ -5537,10 +5537,10 @@ void describe("术语和风格正式检查", () => {
   });
 
   void it("按 click 所属对象换序配对 hover 术语", async (t) => {
-    const sourceA = `<click:run_command:"/lands a"><hover:show_text:'Nation'>A</hover></click>`;
-    const sourceB = `<click:run_command:"/lands b"><hover:show_text:'Owner'>B</hover></click>`;
-    const targetB = `<click:run_command:"/lands b"><hover:show_text:'所有者'>乙</hover></click>`;
-    const targetA = `<click:run_command:"/lands a"><hover:show_text:'联邦'>甲</hover></click>`;
+    const sourceA = `<click:run_command:"/lands a"><hover:show_text:'Nation'>Nation</hover></click>`;
+    const sourceB = `<click:run_command:"/lands b"><hover:show_text:'Owner'>Owner</hover></click>`;
+    const targetB = `<click:run_command:"/lands b"><hover:show_text:'所有者'>所有者</hover></click>`;
+    const targetA = `<click:run_command:"/lands a"><hover:show_text:'联邦'>联邦</hover></click>`;
     const result = await checkGreeting(
       t,
       `${sourceA} ${sourceB}`,
@@ -5552,6 +5552,97 @@ void describe("术语和风格正式检查", () => {
       ),
       [],
       result.checked.stderr || result.checked.stdout,
+    );
+
+    const sameOrder = await checkGreeting(
+      t,
+      `${sourceA} ${sourceB}`,
+      `${targetA} ${targetB}`,
+    );
+    assert.deepEqual(
+      sameOrder.diagnostics.filter(
+        (diagnostic) => diagnostic.ruleId === "terminology",
+      ),
+      [],
+      sameOrder.checked.stderr || sameOrder.checked.stdout,
+    );
+
+    const wrongBodyOwner = await checkGreeting(
+      t,
+      `${sourceA} ${sourceB}`,
+      `<click:run_command:"/lands a"><hover:show_text:'联邦'>所有者</hover></click> <click:run_command:"/lands b"><hover:show_text:'所有者'>联邦</hover></click>`,
+    );
+    const bodyFindings = wrongBodyOwner.diagnostics.filter(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+    assert.equal(
+      bodyFindings.length,
+      2,
+      wrongBodyOwner.checked.stderr || wrongBodyOwner.checked.stdout,
+    );
+    assert.deepEqual(
+      bodyFindings
+        .map(
+          (diagnostic) =>
+            (diagnostic.expected as Record<string, unknown>).termId,
+        )
+        .sort((left, right) => String(left).localeCompare(String(right))),
+      ["nation", "owner"],
+    );
+  });
+
+  void it("在不同列表项中按实际文档路径解析 hover 术语 owner", async (t) => {
+    const sourceEntries = [
+      "<click:run_command:'/a'><hover:show_text:'Nation'>A</hover></click>",
+      "<click:run_command:'/b'><hover:show_text:'Owner'>B</hover></click>",
+    ];
+    const targetEntries = [
+      "<click:run_command:'/a'><hover:show_text:'国家'>甲</hover></click>",
+      "<click:run_command:'/b'><hover:show_text:'业主'>乙</hover></click>",
+    ];
+    const project = await createProject(t, { sourceEntries });
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    const initializedTarget = targetEntries.reduce(
+      (updated, entry, index) =>
+        updated.replace(
+          index === 0 ? "- 第一项" : "- 第二项",
+          `- ${JSON.stringify(entry)}`,
+        ),
+      target,
+    );
+    await writeFile(targetPath, initializedTarget);
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const findings = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "terminology");
+    assert.deepEqual(
+      findings
+        .map(
+          (diagnostic) =>
+            (diagnostic.expected as Record<string, unknown>).termId,
+        )
+        .sort((left, right) => String(left).localeCompare(String(right))),
+      ["nation", "owner"],
+      checked.stderr || checked.stdout,
     );
   });
 
@@ -5632,6 +5723,47 @@ void describe("术语和风格正式检查", () => {
       assert.notEqual(diagnostic.expected, undefined);
       assert.notEqual(diagnostic.actual, undefined);
     }
+  });
+
+  void it("在文本与结构化报告中定位同文档内的每处风格违规", async (t) => {
+    const result = await checkGreeting(t, "Hello again", "您和您");
+    const honorifics = result.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.ruleId === "translation-style" &&
+        diagnostic.code === "translation-style.honorific",
+    );
+    assert.equal(honorifics.length, 2, result.checked.stderr);
+    const locations = honorifics.map((diagnostic) => {
+      const actual = diagnostic.actual as Record<string, unknown>;
+      return {
+        documentIndex: actual.documentIndex,
+        occurrenceIndex: actual.occurrenceIndex,
+        position: actual.position,
+      };
+    });
+    assert.deepEqual(locations, [
+      {
+        documentIndex: 0,
+        occurrenceIndex: 0,
+        position: { start: 0, end: 1 },
+      },
+      {
+        documentIndex: 0,
+        occurrenceIndex: 1,
+        position: { start: 2, end: 3 },
+      },
+    ]);
+
+    const text = runCli("check", "--project", result.project.directory);
+    assert.equal(text.status, 1, text.stderr || text.stdout);
+    assert.match(
+      text.stderr || text.stdout,
+      /"position":\{"start":0,"end":1\}/u,
+    );
+    assert.match(
+      text.stderr || text.stdout,
+      /"position":\{"start":2,"end":3\}/u,
+    );
   });
 
   void it("允许配置单项规范译法和规则严重级别", async (t) => {
@@ -5749,6 +5881,89 @@ void describe("术语和风格正式检查", () => {
         (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
       ),
       afterIncompleteParse.stderr || afterIncompleteParse.stdout,
+    );
+  });
+
+  void it("已解析的 hover 表面消失时将旧术语豁免标为孤立", async (t) => {
+    const source = "<hover:show_text:'Owner'>Click</hover>";
+    const translated = "<hover:show_text:'业主'>点击</hover>";
+    const result = await checkGreeting(t, source, translated);
+    const issue = result.diagnostics.find(
+      (diagnostic) => diagnostic.ruleId === "terminology",
+    );
+    assert.ok(issue, result.checked.stderr || result.checked.stdout);
+    if (issue === undefined) throw new Error("缺少悬浮术语诊断");
+    const exemption = runCli(
+      "exempt",
+      "--project",
+      result.project.directory,
+      "--diagnostic",
+      String(issue.diagnosticId),
+      "--reason",
+      "只适用于原来的悬浮术语对象",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exemption.status, 0, exemption.stderr);
+
+    const targetPath = join(result.project.directory, "lang/zh.yml");
+    const validTarget = await readFile(targetPath, "utf8");
+    const targetWithoutHover = validTarget.replace(
+      JSON.stringify(translated),
+      JSON.stringify("点击"),
+    );
+    assert.notEqual(targetWithoutHover, validTarget);
+    await writeFile(targetPath, targetWithoutHover);
+    const removed = runCli(
+      "check",
+      "--project",
+      result.project.directory,
+      "--output-format",
+      "structured",
+    );
+    const removedReport = readReport(removed.stdout || removed.stderr);
+    const removedDiagnostics = removedReport.diagnostics as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      removedDiagnostics.some(
+        (diagnostic) =>
+          diagnostic.ruleId === "minimessage-tags" &&
+          diagnostic.code === "minimessage.tag-mismatch",
+      ),
+      removed.stderr || removed.stdout,
+    );
+    assert.ok(
+      removedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.orphaned",
+      ),
+      removed.stderr || removed.stdout,
+    );
+    assert.equal(
+      removedDiagnostics.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      removed.stderr || removed.stdout,
+    );
+
+    await writeFile(targetPath, validTarget);
+    const restored = runCli(
+      "check",
+      "--project",
+      result.project.directory,
+      "--output-format",
+      "structured",
+    );
+    const restoredDiagnostics = (
+      readReport(restored.stdout || restored.stderr)
+        .diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "exceptions");
+    assert.deepEqual(
+      restoredDiagnostics,
+      [],
+      restored.stderr || restored.stdout,
     );
   });
 
