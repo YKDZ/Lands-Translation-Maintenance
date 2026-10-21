@@ -42,7 +42,13 @@ public final class MiniMessageBridge {
 
   private record ThemeInput(int index, String surface, String name, String input) {}
 
-  private record MessageInput(int index, String surface, String input) {}
+  private record MessageInput(
+      int index,
+      String surface,
+      String originalInput,
+      String input,
+      int[] sourceOffsets,
+      boolean exact) {}
 
   private record StyleParse(Style style, String error, int start, int end) {}
 
@@ -73,24 +79,42 @@ public final class MiniMessageBridge {
   private static final class SourceMap {
     private final String rootSource;
     private final String input;
-    private final int[] indexes;
+    private final int[] sourceOffsets;
     private final boolean exact;
     private final Position emptyRange;
 
-    SourceMap(String rootSource, String input, int[] indexes, boolean exact, Position emptyRange) {
+    SourceMap(
+        String rootSource,
+        String input,
+        int[] sourceOffsets,
+        boolean exact,
+        Position emptyRange) {
       this.rootSource = rootSource;
       this.input = input;
-      this.indexes = indexes;
+      this.sourceOffsets = sourceOffsets;
       this.exact = exact;
       this.emptyRange = emptyRange;
     }
 
     Position range(int start, int end) {
-      if (!this.exact || start < 0 || end < start || end > this.indexes.length) {
+      if (start < 0 || end < start || end >= this.sourceOffsets.length) {
         return new Position(-1, -1);
       }
-      if (start == end) return this.emptyRange;
-      return new Position(this.indexes[start], this.indexes[end - 1] + 1);
+      if (start == end) {
+        int sourcePosition = this.sourceOffsets[start];
+        return sourcePosition < 0
+            ? this.emptyRange
+            : new Position(sourcePosition, sourcePosition);
+      }
+      int sourceStart = Integer.MAX_VALUE;
+      int sourceEnd = -1;
+      for (int index = start; index <= end; index++) {
+        int sourcePosition = this.sourceOffsets[index];
+        if (sourcePosition < 0) return new Position(-1, -1);
+        sourceStart = Math.min(sourceStart, sourcePosition);
+        sourceEnd = Math.max(sourceEnd, sourcePosition);
+      }
+      return new Position(sourceStart, sourceEnd);
     }
 
     String raw(int start, int end) {
@@ -99,12 +123,17 @@ public final class MiniMessageBridge {
       return this.input.substring(start, end);
     }
 
-    SourceMap nested(String nestedInput, int[] nestedIndexes, boolean nestedExact, Position emptyRange) {
-      return new SourceMap(this.rootSource, nestedInput, nestedIndexes, this.exact && nestedExact, emptyRange);
+    SourceMap nested(String nestedInput, int[] nestedOffsets, boolean nestedExact, Position emptyRange) {
+      return new SourceMap(
+          this.rootSource,
+          nestedInput,
+          nestedOffsets,
+          this.exact && nestedExact,
+          emptyRange);
     }
   }
 
-  private record MappedValue(String value, int[] indexes) {}
+  private record MappedValue(String value, int[] sourceOffsets) {}
 
   private static String encode(String value) {
     return ENCODER.encodeToString(value.getBytes(StandardCharsets.UTF_8));
@@ -112,6 +141,20 @@ public final class MiniMessageBridge {
 
   private static String decode(String value) {
     return new String(DECODER.decode(value), StandardCharsets.UTF_8);
+  }
+
+  private static int[] identityOffsets(String input) {
+    int[] offsets = new int[input.length() + 1];
+    for (int index = 0; index < offsets.length; index++) offsets[index] = index;
+    return offsets;
+  }
+
+  private static int[] parseOffsets(String value, int expectedLength) {
+    String[] parts = value.split(",", -1);
+    if (parts.length != expectedLength) throw new IllegalArgumentException("Invalid source offset count");
+    int[] offsets = new int[parts.length];
+    for (int index = 0; index < parts.length; index++) offsets[index] = Integer.parseInt(parts[index]);
+    return offsets;
   }
 
   private static List<String> fields(String line) {
@@ -217,13 +260,13 @@ public final class MiniMessageBridge {
   private static MappedValue decodePart(String input, Token token, SourceMap sourceMap) {
     int start = token.startIndex();
     int end = token.endIndex();
-    if (start == end) return new MappedValue("", new int[0]);
+    if (start == end) return new MappedValue("", new int[] {sourceMap.sourceOffsets[start]});
     char first = input.charAt(start);
     if (first != '\'' && first != '"') {
       String value = input.substring(start, end);
-      int[] indexes = new int[value.length()];
-      System.arraycopy(sourceMap.indexes, start, indexes, 0, value.length());
-      return new MappedValue(value, indexes);
+      int[] offsets = new int[value.length() + 1];
+      System.arraycopy(sourceMap.sourceOffsets, start, offsets, 0, offsets.length);
+      return new MappedValue(value, offsets);
     }
 
     int contentStart = start + 1;
@@ -232,15 +275,17 @@ public final class MiniMessageBridge {
     if (last == '\'' || last == '"') contentEnd -= 1;
     if (contentStart > contentEnd) {
       String value = input.substring(start, end);
-      int[] indexes = new int[value.length()];
-      System.arraycopy(sourceMap.indexes, start, indexes, 0, value.length());
-      return new MappedValue(value, indexes);
+      int[] offsets = new int[value.length() + 1];
+      System.arraycopy(sourceMap.sourceOffsets, start, offsets, 0, offsets.length);
+      return new MappedValue(value, offsets);
     }
 
     StringBuilder value = new StringBuilder(contentEnd - contentStart);
-    List<Integer> indexes = new ArrayList<>();
+    List<Integer> offsets = new ArrayList<>();
+    offsets.add(sourceMap.sourceOffsets[contentStart]);
     int cursor = contentStart;
     while (cursor < contentEnd) {
+      int sourceStart = cursor;
       int codePoint = input.codePointAt(cursor);
       int next = cursor + Character.charCount(codePoint);
       if (codePoint == TokenParser.ESCAPE && next < contentEnd) {
@@ -252,12 +297,19 @@ public final class MiniMessageBridge {
         }
       }
       value.appendCodePoint(codePoint);
-      int count = Character.charCount(codePoint);
-      for (int part = 0; part < count; part++) indexes.add(sourceMap.indexes[cursor + part]);
+      int outputUnits = Character.charCount(codePoint);
+      int sourceUnits = next - sourceStart;
+      if (outputUnits == sourceUnits) {
+        for (int part = 1; part <= outputUnits; part++) {
+          offsets.add(sourceMap.sourceOffsets[sourceStart + part]);
+        }
+      } else {
+        for (int part = 1; part < outputUnits; part++) offsets.add(-1);
+        offsets.add(sourceMap.sourceOffsets[next]);
+      }
       cursor = next;
     }
-    int[] mappedIndexes = indexes.stream().mapToInt(Integer::intValue).toArray();
-    return new MappedValue(value.toString(), mappedIndexes);
+    return new MappedValue(value.toString(), offsets.stream().mapToInt(Integer::intValue).toArray());
   }
 
   private static List<Frame> contextFrames(List<Frame> initial, List<TagNode> openTags, SourceMap sourceMap) {
@@ -318,6 +370,62 @@ public final class MiniMessageBridge {
       }
       collectTagNodes(child, tagNodes);
     }
+  }
+
+  private static List<Integer> nestedContentIndexes(TagNode tag) {
+    List<TagPart> parts = tag.parts();
+    if (parts.isEmpty()) return List.of();
+    String name = parts.get(0).value().toLowerCase(Locale.ROOT);
+    if (name.equals("hover") && parts.size() >= 2) {
+      String action = parts.get(1).value().toLowerCase(Locale.ROOT);
+      if (action.equals("show_text") && parts.size() >= 3) return List.of(2);
+      if (action.equals("show_entity") && parts.size() >= 5) return List.of(4);
+      return List.of();
+    }
+    if (name.equals("translate") || name.equals("tr") || name.equals("lang")) {
+      List<Integer> indexes = new ArrayList<>();
+      for (int index = 2; index < parts.size(); index++) indexes.add(index);
+      return indexes;
+    }
+    if (name.equals("translate_or") || name.equals("tr_or") || name.equals("lang_or")) {
+      List<Integer> indexes = new ArrayList<>();
+      for (int index = 2; index < parts.size(); index++) indexes.add(index);
+      return indexes;
+    }
+    if (name.equals("nbt") || name.equals("data")) {
+      int separatorIndex = parts.size() - 1;
+      if (separatorIndex >= 1
+          && parts.get(separatorIndex).value().equalsIgnoreCase("interpret")) {
+        separatorIndex--;
+      }
+      if (separatorIndex >= 4
+          && !parts.get(separatorIndex).value().equalsIgnoreCase("interpret")) {
+        return List.of(separatorIndex);
+      }
+    }
+    return List.of();
+  }
+
+  private static Frame nestedContentFrame(
+      String tagName,
+      int argumentIndex,
+      Position argumentPosition,
+      Position tagPosition) {
+    String canonicalName = switch (tagName.toLowerCase(Locale.ROOT)) {
+      case "tr", "lang" -> "translate";
+      case "tr_or", "lang_or" -> "translate_or";
+      default -> tagName.toLowerCase(Locale.ROOT);
+    };
+    if (canonicalName.equals("hover")) {
+      String action = "unknown";
+      if (argumentIndex == 2) action = "show_text";
+      else if (argumentIndex == 4) action = "show_entity";
+      return new Frame("hover-text", "hover:" + action, tagPosition);
+    }
+    int argumentNumber = argumentIndex - 2;
+    if (canonicalName.equals("translate_or")) argumentNumber = argumentIndex - 3;
+    if (canonicalName.equals("nbt") && argumentIndex >= 4) argumentNumber = 0;
+    return new Frame("tag-argument", canonicalName + ":" + argumentNumber, argumentPosition);
   }
 
   private static String frameFields(List<Frame> frames) {
@@ -440,38 +548,37 @@ public final class MiniMessageBridge {
             detail, raw, currentContext);
       }
 
-      int hoverContentIndex = -1;
-      String hoverAction = "";
-      if (name.equals("hover") && !closing && treeTag != null && treeTag.parts().size() >= 2) {
-        hoverAction = treeTag.parts().get(1).value().toLowerCase(Locale.ROOT);
-        if (hoverAction.equals("show_text") && treeTag.parts().size() >= 3) {
-          hoverContentIndex = 2;
-        } else if (hoverAction.equals("show_entity") && treeTag.parts().size() >= 5) {
-          hoverContentIndex = 4;
+      if (!closing && treeTag != null) {
+        List<Integer> contentIndexes = nestedContentIndexes(treeTag);
+        for (int contentIndex : contentIndexes) {
+          TagPart content = treeTag.parts().get(contentIndex);
+          MappedValue decoded = decodePart(input, content.token(), sourceMap);
+          String nestedInput = content.value();
+          boolean exact = decoded.value().equals(nestedInput);
+          int[] nestedOffsets = new int[nestedInput.length() + 1];
+          if (exact && decoded.sourceOffsets().length == nestedOffsets.length) {
+            System.arraycopy(decoded.sourceOffsets(), 0, nestedOffsets, 0, nestedOffsets.length);
+          } else {
+            java.util.Arrays.fill(nestedOffsets, -1);
+            nestedOffsets[0] = sourceMap.range(content.token().startIndex(), content.token().endIndex()).start();
+            nestedOffsets[nestedOffsets.length - 1] = sourceMap.range(
+                content.token().startIndex(), content.token().endIndex()).end();
+            output.add("W\t" + messageIndex + "\t" + encode(
+                "MiniMessage 标签参数经过预处理后无法可靠映射回原文位置；相关嵌套诊断位置不可用"));
+          }
+          Position emptyRange = sourceMap.range(content.token().startIndex(), content.token().endIndex());
+          SourceMap nestedMap = sourceMap.nested(nestedInput, nestedOffsets, exact, emptyRange);
+          List<Frame> nestedContext = new ArrayList<>(currentContext);
+          nestedContext.add(nestedContentFrame(
+              name,
+              contentIndex,
+              emptyRange,
+              sourceMap.range(treeTag.token().startIndex(), treeTag.token().endIndex())));
+          int nestedDocumentIndex = nextDocumentIndex[0]++;
+          outputDocument(resolver, theme, messageIndex,
+              nestedDocumentIndex, documentIndex, nestedInput, nestedMap, nestedContext,
+              nextDocumentIndex, output);
         }
-      }
-      if (hoverContentIndex >= 0) {
-        TagPart content = treeTag.parts().get(hoverContentIndex);
-        MappedValue decoded = decodePart(input, content.token(), sourceMap);
-        String nestedInput = content.value();
-        boolean exact = decoded.value().equals(nestedInput);
-        int[] nestedIndexes = new int[nestedInput.length()];
-        if (exact && decoded.indexes().length == nestedIndexes.length) {
-          System.arraycopy(decoded.indexes(), 0, nestedIndexes, 0, nestedIndexes.length);
-        } else {
-          java.util.Arrays.fill(nestedIndexes, -1);
-          output.add("W\t" + messageIndex + "\t" + encode(
-              "hover 参数经过预处理后无法可靠映射回原文位置；相关嵌套诊断位置不可用"));
-        }
-        Position emptyRange = sourceMap.range(content.token().startIndex(), content.token().endIndex());
-        SourceMap nestedMap = sourceMap.nested(nestedInput, nestedIndexes, exact, emptyRange);
-        Position hoverPosition = sourceMap.range(token.startIndex(), token.endIndex());
-        List<Frame> nestedContext = new ArrayList<>(currentContext);
-        nestedContext.add(new Frame("hover-text", "hover:" + hoverAction, hoverPosition));
-        int nestedDocumentIndex = nextDocumentIndex[0]++;
-        outputDocument(resolver, theme, messageIndex,
-            nestedDocumentIndex, documentIndex, nestedInput, nestedMap, nestedContext,
-            nextDocumentIndex, output);
       }
     }
 
@@ -515,9 +622,27 @@ public final class MiniMessageBridge {
       if (fields.get(0).equals("T") && fields.size() == 5) {
         themes.add(new ThemeInput(Integer.parseInt(fields.get(1)), decode(fields.get(2)),
             decode(fields.get(3)), decode(fields.get(4))));
-      } else if (fields.get(0).equals("M") && fields.size() == 4) {
-        messages.add(new MessageInput(Integer.parseInt(fields.get(1)), decode(fields.get(2)),
-            decode(fields.get(3))));
+      } else if (fields.get(0).equals("M") && (fields.size() == 4 || fields.size() == 7)) {
+        String surface = decode(fields.get(2));
+        if (fields.size() == 4) {
+          String input = decode(fields.get(3));
+          messages.add(new MessageInput(Integer.parseInt(fields.get(1)), surface,
+              input, input, identityOffsets(input), true));
+        } else {
+          String originalInput = decode(fields.get(3));
+          String input = decode(fields.get(4));
+          int[] sourceOffsets = parseOffsets(fields.get(5), input.length() + 1);
+          for (int offset : sourceOffsets) {
+            if (offset < -1 || offset > originalInput.length()) {
+              throw new IllegalArgumentException("Source offset is outside the original input");
+            }
+          }
+          if (!fields.get(6).equals("true") && !fields.get(6).equals("false")) {
+            throw new IllegalArgumentException("Invalid exact source map flag");
+          }
+          messages.add(new MessageInput(Integer.parseInt(fields.get(1)), surface,
+              originalInput, input, sourceOffsets, fields.get(6).equals("true")));
+        }
       } else {
         throw new IllegalArgumentException("Invalid bridge request row");
       }
@@ -545,7 +670,13 @@ public final class MiniMessageBridge {
           .build();
       try {
         Component component = runtimeParser.deserialize(message.input());
-        String plain = PlainTextComponentSerializer.plainText().serialize(component);
+        String plain;
+        try {
+          plain = PlainTextComponentSerializer.plainText().serialize(component);
+        } catch (RuntimeException ignored) {
+          // Some valid content components (such as NBT) cannot be rendered without a game runtime.
+          plain = "";
+        }
         System.out.println("M\t" + message.index() + "\tok\t" + encode(plain) + "\t-1\t-1\t");
       } catch (ParsingException exception) {
         System.out.println("M\t" + message.index() + "\tinvalid\t\t" + exception.startIndex()
@@ -556,9 +687,11 @@ public final class MiniMessageBridge {
             + encode(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()));
       }
 
-      int[] identity = new int[message.input().length()];
-      for (int index = 0; index < identity.length; index++) identity[index] = index;
-      SourceMap sourceMap = new SourceMap(message.input(), message.input(), identity, true,
+      SourceMap sourceMap = new SourceMap(
+          message.originalInput(),
+          message.input(),
+          message.sourceOffsets(),
+          message.exact(),
           new Position(0, 0));
       int[] nextDocumentIndex = {1};
       List<String> structureOutput = new ArrayList<>();
