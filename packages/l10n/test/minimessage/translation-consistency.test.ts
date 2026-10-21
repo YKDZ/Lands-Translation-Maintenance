@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 
 import { builtInRules, inspectProject } from "@lands-l10n/l10n";
+import type { CheckRule } from "@lands-l10n/l10n";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 import {
@@ -205,7 +206,7 @@ void describe("跨消息翻译一致性", () => {
     assert.deepEqual(consistencyDiagnostics(consistentReport), []);
   });
 
-  void it("按列表项路径配对聊天列表文档", async (t) => {
+  void it("按列表项路径配对，并识别没有待翻译记录的同文", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "first",
       sourceEntries: ["first", "second"],
@@ -266,13 +267,132 @@ void describe("跨消息翻译一致性", () => {
     const partialReport = readReport(
       partialCheck.stdout || partialCheck.stderr,
     );
-    assert.deepEqual(consistencyDiagnostics(partialReport), []);
+    const partialConsistency = consistencyDiagnostics(partialReport).filter(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.equal(
+      partialConsistency.length,
+      1,
+      partialCheck.stderr || partialCheck.stdout,
+    );
+    const partialFinding = partialConsistency[0];
+    assert.ok(partialFinding);
+    assert.equal(
+      (partialFinding.expected as { readonly sourceText?: string }).sourceText,
+      "first",
+    );
+    const partialParticipants = JSON.stringify(partialFinding.actual);
+    assert.match(partialParticipants, /greeting/u);
+    assert.match(partialParticipants, /entries/u);
     assert.ok(
       (partialReport.diagnostics as readonly Record<string, unknown>[]).some(
         (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
       ),
       partialCheck.stderr || partialCheck.stdout,
     );
+  });
+
+  void it("按正式交互归属配对重排的悬浮文档", async (t) => {
+    const clickHover = (command: string, hover: string, body: string) =>
+      `<click:run_command:'/${command}'><hover:show_text:'${hover}'>${body}</hover></click>`;
+    const firstSource = clickHover("a", "First", "A");
+    const secondSource = clickHover("b", "Second", "B");
+    const greetingSource = `${firstSource} ${secondSource}`;
+    const welcomeSource = firstSource;
+    const greetingTranslation = `${clickHover("b", "第二项", "乙")} ${clickHover("a", "第一项", "甲")}`;
+    const welcomeTranslation = clickHover("a", "第一项", "甲");
+    const project = await createProject(t, {
+      sourceGreeting: greetingSource,
+    });
+    const jar = unzipSync(await readFile(project.jarFile));
+    jar["lang/en.yml"] = strToU8(
+      strFromU8(jar["lang/en.yml"]!).replace(
+        /^  welcome:.*$/mu,
+        `  welcome: ${JSON.stringify(welcomeSource)}`,
+      ),
+    );
+    await writeFile(project.jarFile, zipSync(jar));
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target
+        .replace(
+          /^  greeting:.*$/mu,
+          `  greeting: ${JSON.stringify(greetingTranslation)}`,
+        )
+        .replace(
+          /^  welcome:.*$/mu,
+          `  welcome: ${JSON.stringify(welcomeTranslation)}`,
+        ),
+    );
+
+    const consistentCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const consistentReport = readReport(
+      consistentCheck.stdout || consistentCheck.stderr,
+    );
+    assert.deepEqual(
+      consistencyDiagnostics(consistentReport),
+      [],
+      consistentCheck.stderr || consistentCheck.stdout,
+    );
+
+    const changedTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      changedTarget.replace(
+        JSON.stringify(greetingTranslation),
+        JSON.stringify(greetingTranslation.replace("第一项", "错译")),
+      ),
+    );
+    const divergentCheck = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const divergentReport = readReport(
+      divergentCheck.stdout || divergentCheck.stderr,
+    );
+    const sameSource = consistencyDiagnostics(divergentReport).filter(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.equal(
+      sameSource.length,
+      1,
+      divergentCheck.stderr || divergentCheck.stdout,
+    );
+    const finding = sameSource[0];
+    assert.ok(finding);
+    assert.equal(
+      (finding.expected as { readonly sourceText?: string }).sourceText,
+      "First",
+    );
+    const participants = JSON.stringify(finding.actual);
+    assert.match(participants, /错译/u);
+    assert.match(participants, /第一项/u);
   });
 
   void it("豁免按同组全部必要输入等待，且忽略无关消息", async (t) => {
@@ -558,6 +678,108 @@ void describe("跨消息翻译一致性", () => {
     );
   });
 
+  void it("同步删除列表参与表面后将旧组豁免标为孤立", async (t) => {
+    const project = await createProject(t, {
+      sourceEntries: ["Welcome", "Welcome"],
+    });
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const target = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      target.replace(
+        /^  welcome:.*$/mu,
+        `  welcome: ${JSON.stringify("欢迎")}`,
+      ),
+    );
+
+    const before = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const beforeReport = readReport(before.stdout || before.stderr);
+    const group = consistencyDiagnostics(beforeReport).find(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.ok(group, before.stderr || before.stdout);
+    const exempted = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--diagnostic",
+      String(group.diagnosticId),
+      "--reason",
+      "临时复核列表项删除后的生命周期",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(exempted.status, 0, exempted.stderr || exempted.stdout);
+
+    const jar = unzipSync(await readFile(project.jarFile));
+    const source = strFromU8(jar["lang/en.yml"]!);
+    const shortenedSource = source.replace(
+      /^  entries: \["Welcome", "Welcome"\]$/mu,
+      '  entries: ["Welcome"]',
+    );
+    assert.notEqual(shortenedSource, source);
+    jar["lang/en.yml"] = strToU8(shortenedSource);
+    await writeFile(project.jarFile, zipSync(jar));
+
+    const synchronized = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      synchronized.status,
+      0,
+      synchronized.stderr || synchronized.stdout,
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const exceptions = (
+      report.diagnostics as readonly Record<string, unknown>[]
+    ).filter((diagnostic) => diagnostic.ruleId === "exceptions");
+    assert.ok(
+      exceptions.some((diagnostic) => diagnostic.code === "exception.orphaned"),
+      checked.stderr || checked.stdout,
+    );
+    assert.equal(
+      exceptions.some(
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
+      ),
+      false,
+      checked.stderr || checked.stdout,
+    );
+    assert.deepEqual(consistencyDiagnostics(report), []);
+  });
+
   void it("已解析的参与 hover 表面消失时仍孤立旧组豁免", async (t) => {
     const project = await createProject(t, {
       sourceGreeting: "<hover:show_text:'Welcome'>First</hover>",
@@ -825,6 +1047,65 @@ void describe("跨消息翻译一致性", () => {
     );
   });
 
+  void it("为常用短词构成的相似否定句提供复核候选", async (t) => {
+    const project = await createMessageProject(
+      t,
+      [
+        "You can do it.",
+        "You can not do it.",
+        "Open settings.",
+        "Close the menu.",
+      ],
+      ["你可以这样做。", "你不能这样做。", "打开设置。", "关闭菜单。"],
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const candidates = consistencyDiagnostics(report).filter(
+      (diagnostic) =>
+        diagnostic.code === "translation-consistency.similar-source-candidate",
+    );
+    const negative = candidates.find((diagnostic) => {
+      const actual = diagnostic.actual as {
+        readonly messages?: readonly {
+          readonly source?: { readonly text?: string };
+        }[];
+      };
+      const sources =
+        actual.messages?.map((message) => message.source?.text) ?? [];
+      return (
+        sources.includes("You can do it.") &&
+        sources.includes("You can not do it.")
+      );
+    });
+
+    assert.ok(negative, checked.stderr || checked.stdout);
+    assert.equal(negative.severity, "warning");
+    const actual = negative.actual as {
+      readonly similarity: number;
+      readonly sourceDifferences: {
+        readonly negations: {
+          readonly left: readonly string[];
+          readonly right: readonly string[];
+        };
+      };
+      readonly semanticEquivalence: string;
+    };
+    assert.equal(actual.similarity, 0.8);
+    assert.ok(
+      [
+        ...actual.sourceDifferences.negations.left,
+        ...actual.sourceDifferences.negations.right,
+      ].includes("not"),
+    );
+    assert.equal(actual.semanticEquivalence, "unknown");
+  });
+
   void it("不把待翻译英文种子纳入译文分歧，同时继续检查变量遗漏", async (t) => {
     const project = await createMessageProject(
       t,
@@ -846,6 +1127,179 @@ void describe("跨消息翻译一致性", () => {
       ),
       checked.stderr || checked.stdout,
     );
+  });
+
+  void it("同文确认只解除待翻译原因，部分列表仍保留未处理英文项", async (t) => {
+    const project = await createProject(t, {
+      sourceGreeting: "Lands",
+      sourceEntries: ["Lands", "Lands"],
+    });
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const initialTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      initialTarget
+        .replace(/^  greeting:.*$/mu, `  greeting: ${JSON.stringify("Lands")}`)
+        .replace(
+          /^  entries:\n(?:    - .*\n){2}/mu,
+          "  entries:\n    - Lands\n    - Lands\n",
+        ),
+    );
+
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+      "--output-format",
+      "structured",
+    );
+    assert.equal(
+      initialized.status,
+      0,
+      initialized.stderr || initialized.stdout,
+    );
+
+    const candidateReport = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const candidates = readReport(
+      candidateReport.stdout || candidateReport.stderr,
+    ).sameTextToConfirm as readonly Record<string, unknown>[];
+    const greeting = candidates.find(
+      (candidate) =>
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+        JSON.stringify(["messages", "greeting"]),
+    );
+    assert.ok(greeting, candidateReport.stderr || candidateReport.stdout);
+    if (greeting === undefined) throw new Error("缺少同文待确认消息");
+
+    const confirmed = runCli(
+      "confirm-same-text",
+      "--project",
+      project.directory,
+      "--candidate",
+      String(greeting.candidateId),
+      "--reason",
+      "品牌名在此处保留英文",
+      "--output-format",
+      "structured",
+    );
+    assert.equal(confirmed.status, 0, confirmed.stderr || confirmed.stdout);
+
+    const currentTarget = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      currentTarget.replace(
+        /^  entries:\n    - Lands\n    - Lands$/mu,
+        "  entries:\n    - Lands\n    - 兰德斯",
+      ),
+    );
+
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const sameSource = consistencyDiagnostics(report).filter(
+      (diagnostic) => diagnostic.code === "translation-consistency.same-source",
+    );
+    assert.equal(sameSource.length, 1, checked.stderr || checked.stdout);
+    const finding = sameSource[0];
+    assert.ok(finding);
+    const sameSourceParticipants = (
+      finding.actual as {
+        readonly variants: readonly {
+          readonly messages: readonly {
+            readonly source: {
+              readonly path: readonly (string | number)[];
+              readonly text: string;
+            };
+            readonly target: { readonly text: string };
+          }[];
+        }[];
+      }
+    ).variants.flatMap((variant) => variant.messages);
+    assert.ok(
+      sameSourceParticipants.some(
+        ({ source }) =>
+          JSON.stringify(source.path) ===
+          JSON.stringify(["messages", "greeting"]),
+      ),
+    );
+    assert.deepEqual(
+      sameSourceParticipants
+        .filter(({ source }) => source.path[0] === "list")
+        .map(({ source }) => source.path),
+      [["list", "entries", 1]],
+      "仍为英文的列表项应继续作为待翻译种子排除",
+    );
+    assert.ok(
+      sameSourceParticipants.some(({ target }) => target.text === "兰德斯"),
+    );
+
+    const observeTranslationReview: CheckRule = {
+      id: "translation-review-observer",
+      defaultSeverity: "info",
+      requiredInputs: ["minimessage-parse"],
+      evaluate(view) {
+        return [
+          {
+            code: "observe",
+            identity: { state: "translation-review" },
+            location: { file: "lang/zh.yml", path: [] },
+            reason: "测试从正式检查视图读取待翻译状态",
+            expected: { state: "observed" },
+            actual: {
+              messages: view.messages.map((message) => ({
+                path: message.path,
+                translationReview: message.translationReview ?? null,
+              })),
+            },
+          },
+        ];
+      },
+    };
+    const observed = await inspectProject(project.directory, "check", [
+      observeTranslationReview,
+    ]);
+    const observation = observed.diagnostics.find(
+      (diagnostic) => diagnostic.ruleId === "translation-review-observer",
+    );
+    assert.ok(observation);
+    const messages = (
+      observation.actual as {
+        readonly messages: readonly {
+          readonly path: readonly string[];
+          readonly translationReview: {
+            readonly pendingReason?: string;
+            readonly confirmedSameText: boolean;
+          } | null;
+        }[];
+      }
+    ).messages;
+    const greetingState = messages.find(
+      (message) => JSON.stringify(message.path) === '["messages","greeting"]',
+    )?.translationReview;
+    const entriesState = messages.find(
+      (message) => JSON.stringify(message.path) === '["list","entries"]',
+    )?.translationReview;
+    assert.deepEqual(greetingState, {
+      pendingReason: "same-text-candidate",
+      confirmedSameText: true,
+    });
+    assert.deepEqual(entriesState, {
+      pendingReason: "same-text-candidate",
+      confirmedSameText: false,
+    });
   });
 
   void it("按共享 HTML 上下文分开比较属性与正文", async (t) => {

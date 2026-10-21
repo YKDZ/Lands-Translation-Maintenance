@@ -203,6 +203,77 @@ function logicalDocumentIdentity(record: ComparisonRecord): string {
   ]);
 }
 
+function documentOwnershipIdentity(
+  project: ProjectView,
+  document: TranslatableTextDocument,
+): JsonValue | undefined {
+  if (document.context.length === 0) return [];
+  const parsedDocuments = project.miniMessage?.documents ?? [];
+  const owners: JsonValue[] = [];
+  for (const frame of document.context) {
+    if (frame.kind === "hover-text" || frame.kind === "tag-argument") {
+      owners.push({ kind: frame.kind, name: frame.name });
+      continue;
+    }
+    if (frame.kind !== "tag" || frame.name !== "click") continue;
+    const matchingTags = parsedDocuments
+      .filter(
+        (candidate) =>
+          candidate.message.id === document.message.id &&
+          candidate.origin === document.origin,
+      )
+      .flatMap((candidate) => candidate.nodes)
+      .filter(
+        (node) =>
+          node.kind === "tag" &&
+          node.name === frame.name &&
+          !node.closing &&
+          node.position.start === frame.position.start &&
+          node.position.end === frame.position.end,
+      );
+    if (matchingTags.length !== 1) return undefined;
+    const owner = matchingTags.find((node) => node.kind === "tag");
+    if (owner?.kind !== "tag" || owner.parameters.length === 0)
+      return undefined;
+    owners.push({
+      kind: "tag-owner",
+      name: owner.name,
+      parameters: owner.parameters,
+    });
+  }
+  return owners.length === 0 ? undefined : owners;
+}
+
+function pairedTextDocuments(project: ProjectView): readonly {
+  readonly sourceDocument: TranslatableTextDocument;
+  readonly targetDocument: TranslatableTextDocument;
+}[] {
+  const groups = new Map<
+    string,
+    {
+      readonly source: TranslatableTextDocument[];
+      readonly target: TranslatableTextDocument[];
+    }
+  >();
+  for (const document of project.miniMessage?.translatableText ?? []) {
+    const ownership = documentOwnershipIdentity(project, document);
+    if (ownership === undefined) continue;
+    const key = canonicalJson([document.message.id, document.path, ownership]);
+    let group = groups.get(key);
+    if (group === undefined) {
+      group = { source: [], target: [] };
+      groups.set(key, group);
+    }
+    group[document.origin].push(document);
+  }
+  return [...groups.values()]
+    .filter(({ source, target }) => source.length === 1 && target.length === 1)
+    .map(({ source, target }) => ({
+      sourceDocument: source[0]!,
+      targetDocument: target[0]!,
+    }));
+}
+
 function inputDependencies(
   records: readonly ComparisonRecord[],
 ): readonly RuleInputDependency[] {
@@ -354,6 +425,15 @@ function messageIsPendingSeed(
   const message = project.messages.find(
     (item) => item.id === sourceDocument.message.id,
   );
+  const review = message?.translationReview;
+  if (
+    review?.pendingReason === undefined ||
+    review.confirmedSameText ||
+    message?.targetStatus !== "present" ||
+    message.target === undefined
+  ) {
+    return false;
+  }
   const valueAtPath = (
     value: JsonValue | undefined,
     path: readonly (string | number)[],
@@ -377,43 +457,22 @@ function messageIsPendingSeed(
     }
     return current;
   };
-  const sourcePath = sourceDocument.path.slice(message?.path.length ?? 0);
-  const targetPath = targetDocument.path.slice(message?.path.length ?? 0);
+  const sourcePath = sourceDocument.path.slice(message.path.length);
+  const targetPath = targetDocument.path.slice(message.path.length);
+  const sourceValue = valueAtPath(message.source, sourcePath);
+  const targetValue = valueAtPath(message.target, targetPath);
   return (
-    message?.targetStatus !== "present" ||
-    message.target === undefined ||
-    canonicalJson(valueAtPath(message.source, sourcePath)) ===
-      canonicalJson(valueAtPath(message.target, targetPath))
+    sourceValue !== undefined &&
+    targetValue !== undefined &&
+    canonicalJson(sourceValue) === canonicalJson(targetValue)
   );
 }
 
 function comparisonRecords(project: ProjectView): ComparisonRecord[] {
-  const textDocuments = project.miniMessage?.translatableText ?? [];
-  const documentsByIdentity = new Map<string, TranslatableTextDocument>();
-  for (const document of textDocuments) {
-    documentsByIdentity.set(
-      canonicalJson([
-        document.message.id,
-        document.documentIndex,
-        document.origin,
-        document.path,
-      ]),
-      document,
-    );
-  }
-
   const records: ComparisonRecord[] = [];
-  for (const sourceDocument of textDocuments) {
-    if (sourceDocument.origin !== "source") continue;
-    const targetDocument = documentsByIdentity.get(
-      canonicalJson([
-        sourceDocument.message.id,
-        sourceDocument.documentIndex,
-        "target",
-        sourceDocument.path,
-      ]),
-    );
-    if (targetDocument === undefined) continue;
+  for (const { sourceDocument, targetDocument } of pairedTextDocuments(
+    project,
+  )) {
     if (messageIsPendingSeed(project, sourceDocument, targetDocument)) continue;
 
     const targetRegions = regionsForDocument(targetDocument);
@@ -717,15 +776,39 @@ function commonIndexTokens(tokens: readonly string[]): readonly string[] {
   return [...new Set(tokens.filter((token) => token.length >= 4))];
 }
 
+function candidateIndexKeys(tokens: readonly string[]): readonly string[] {
+  const keys = new Set(
+    commonIndexTokens(tokens).map((token) => `word:${token}`),
+  );
+  if (
+    tokens.length < 4 ||
+    tokens.length > 6 ||
+    tokens.some((token) => token.length >= 4)
+  ) {
+    return [...keys];
+  }
+  const phraseSignatures = new Set<string>([canonicalJson(tokens)]);
+  for (let index = 0; index < tokens.length; index += 1) {
+    phraseSignatures.add(
+      canonicalJson(
+        tokens.filter((_token, tokenIndex) => tokenIndex !== index),
+      ),
+    );
+  }
+  for (const signature of phraseSignatures)
+    keys.add(`short-phrase:${signature}`);
+  return [...keys];
+}
+
 function candidatePairs(
   records: readonly ComparisonRecord[],
 ): readonly (readonly [ComparisonRecord, ComparisonRecord])[] {
   const postings = new Map<string, number[]>();
   for (const [recordIndex, record] of records.entries()) {
-    for (const token of commonIndexTokens(record.source.tokens)) {
-      const posting = postings.get(token) ?? [];
+    for (const key of candidateIndexKeys(record.source.tokens)) {
+      const posting = postings.get(key) ?? [];
       posting.push(recordIndex);
-      postings.set(token, posting);
+      postings.set(key, posting);
     }
   }
 
