@@ -417,16 +417,45 @@ public final class MiniMessageBridge {
     return List.of();
   }
 
+  private static String canonicalNestedTagName(String tagName) {
+    return switch (tagName.toLowerCase(Locale.ROOT)) {
+      case "tr", "lang" -> "translate";
+      case "tr_or", "lang_or" -> "translate_or";
+      case "data" -> "nbt";
+      default -> tagName.toLowerCase(Locale.ROOT);
+    };
+  }
+
+  private static List<String> nestedOwnerParameters(TagNode tag, int argumentIndex) {
+    List<TagPart> parts = tag.parts();
+    if (parts.size() < 2) return List.of();
+    String canonicalName = canonicalNestedTagName(parts.get(0).value());
+    if (canonicalName.equals("translate") || canonicalName.equals("translate_or")) {
+      return List.of(parts.get(1).value());
+    }
+    if (canonicalName.equals("nbt") && argumentIndex == 4 && parts.size() >= 4) {
+      return List.of(
+          parts.get(1).lowerValue(),
+          parts.get(2).value(),
+          parts.get(3).value());
+    }
+    return List.of();
+  }
+
+  private static String nestedOwnerKey(TagNode tag, int argumentIndex) {
+    StringBuilder ownerKey = new StringBuilder();
+    for (String parameter : nestedOwnerParameters(tag, argumentIndex)) {
+      ownerKey.append(parameter.length()).append(':').append(parameter);
+    }
+    return encode(ownerKey.toString());
+  }
+
   private static Frame nestedContentFrame(
-      String tagName,
+      TagNode tag,
       int argumentIndex,
       Position argumentPosition,
       Position tagPosition) {
-    String canonicalName = switch (tagName.toLowerCase(Locale.ROOT)) {
-      case "tr", "lang" -> "translate";
-      case "tr_or", "lang_or" -> "translate_or";
-      default -> tagName.toLowerCase(Locale.ROOT);
-    };
+    String canonicalName = canonicalNestedTagName(tag.name());
     if (canonicalName.equals("hover")) {
       String action = "unknown";
       if (argumentIndex == 2) action = "show_text";
@@ -436,7 +465,10 @@ public final class MiniMessageBridge {
     int argumentNumber = argumentIndex - 2;
     if (canonicalName.equals("translate_or")) argumentNumber = argumentIndex - 3;
     if (canonicalName.equals("nbt") && argumentIndex >= 4) argumentNumber = 0;
-    return new Frame("tag-argument", canonicalName + ":" + argumentNumber, argumentPosition);
+    return new Frame(
+        "tag-argument",
+        canonicalName + ":" + argumentNumber + ":" + nestedOwnerKey(tag, argumentIndex),
+        argumentPosition);
   }
 
   private static String frameFields(List<Frame> frames) {
@@ -581,7 +613,7 @@ public final class MiniMessageBridge {
           SourceMap nestedMap = sourceMap.nested(nestedInput, nestedOffsets, exact, emptyRange);
           List<Frame> nestedContext = new ArrayList<>(currentContext);
           nestedContext.add(nestedContentFrame(
-              name,
+              treeTag,
               contentIndex,
               emptyRange,
               sourceMap.range(treeTag.token().startIndex(), treeTag.token().endIndex())));
