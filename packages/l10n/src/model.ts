@@ -452,39 +452,27 @@ export interface CheckCoverage {
   readonly unavailableCapabilities: readonly string[];
 }
 
-interface ExceptionSubject {
+export interface ConclusionSubject {
   readonly id: string;
   readonly objectId: string;
   readonly contentFingerprint: string;
-  readonly location: DiagnosticLocation;
-}
-
-export interface DiagnosticException extends ExceptionSubject {
-  readonly kind: "diagnostic";
   readonly ruleId: string;
   readonly code: string;
   readonly message?: MessageIdentity;
   readonly origin?: MiniMessageOrigin;
   readonly requiredInputDependencies?: readonly RuleInputDependency[];
+  readonly location: DiagnosticLocation;
 }
 
-export interface SameTextException extends ExceptionSubject {
-  readonly kind: "same-text";
-  readonly pendingReason: SameTextPendingReason;
-  readonly message: MessageIdentity;
+export interface CheckConclusion extends ConclusionSubject {
+  readonly description: string;
+  readonly expected: JsonValue;
+  readonly actual: JsonValue;
 }
 
-export type ExceptionCandidate =
-  | (DiagnosticException & { readonly description: string })
-  | (SameTextException & {
-      readonly description: string;
-      readonly source: JsonValue;
-      readonly target: JsonValue;
-    });
-
-export type ExceptionRecord = (DiagnosticException | SameTextException) & {
+export interface ExceptionRecord extends ConclusionSubject {
   readonly reason: string;
-};
+}
 
 export type SameTextPendingReason = "translation-seed" | "same-text-candidate";
 
@@ -493,7 +481,7 @@ export interface ProjectReport {
   readonly state: "ready" | "issues" | "incomplete";
   readonly summary: ProjectSummary;
   readonly diagnostics: readonly Diagnostic[];
-  readonly exceptionCandidates: readonly ExceptionCandidate[];
+  readonly exceptionCandidates: readonly CheckConclusion[];
   readonly knownExcludedResources: readonly KnownExcludedResource[];
   readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly coverage?: CheckCoverage;

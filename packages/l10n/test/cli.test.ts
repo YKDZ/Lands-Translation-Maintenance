@@ -5566,7 +5566,7 @@ void describe("CLI 制品", () => {
       readReport(status.stdout || status.stderr)
         .exceptionCandidates as readonly Record<string, unknown>[]
     )
-      .filter((candidate) => candidate.kind === "same-text")
+      .filter((candidate) => candidate.ruleId === "translation-review")
       .find(
         (item) =>
           (item.message as Record<string, unknown>).path !== undefined &&
@@ -6004,7 +6004,7 @@ void describe("CLI 制品", () => {
       },
     ]);
   });
-  void it("同一入口和记录集合接受两类例外，分别解除待译和具体诊断", async (t) => {
+  void it("同一例外模型接受不同检查结论，分别派生待译状态和质量报告", async (t) => {
     const project = await createProject(t);
     const targetPath = join(project.directory, "lang/zh.yml");
     await writeFile(
@@ -6042,13 +6042,13 @@ void describe("CLI 制品", () => {
     >[];
     const sameText = candidates.find(
       (candidate) =>
-        candidate.kind === "same-text" &&
+        candidate.ruleId === "translation-review" &&
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
           '["messages","greeting"]',
     );
     const missing = candidates.find(
       (candidate) =>
-        candidate.kind === "diagnostic" &&
+        candidate.ruleId !== "translation-review" &&
         candidate.code === "message.missing" &&
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
           '["messages","welcome"]',
@@ -6073,7 +6073,7 @@ void describe("CLI 制品", () => {
         unknown
       >;
       assert.equal(receipt.id, candidate.id);
-      assert.equal(receipt.kind, candidate.kind);
+      assert.equal(receipt.contentFingerprint, candidate.contentFingerprint);
     }
     const renewed = runCli(
       "exempt",
@@ -6091,11 +6091,11 @@ void describe("CLI 制品", () => {
       schemaVersion: number;
       records: readonly Record<string, unknown>[];
     };
-    assert.equal(saved.schemaVersion, 2);
+    assert.equal(saved.schemaVersion, 3);
     assert.equal(saved.records.length, 2);
     assert.deepEqual(
-      new Set(saved.records.map((record) => record.kind)),
-      new Set(["diagnostic", "same-text"]),
+      new Set(saved.records.map((record) => record.ruleId)),
+      new Set(["structure", "translation-review"]),
     );
     assert.equal(
       saved.records.find((record) => record.id === missing.id)?.reason,
@@ -6384,7 +6384,7 @@ void describe("CLI 制品", () => {
     const oldCandidates = (
       readReport(beforeSync.stdout || beforeSync.stderr)
         .exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     const oldGreeting = oldCandidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -6450,7 +6450,7 @@ void describe("CLI 制品", () => {
     const beforeReport = readReport(before.stdout || before.stderr);
     const candidates = (
       beforeReport.exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     const greeting = candidates.find(
       (candidate) =>
         (candidate.message as Record<string, unknown>).path &&
@@ -6536,7 +6536,7 @@ void describe("CLI 制品", () => {
     assert.equal(summary.pendingTranslations, 0);
     const currentCandidates = (
       afterReport.exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     assert.equal(currentCandidates.length, 0);
     assert.equal(
       (afterReport.diagnostics as readonly Record<string, unknown>[]).some(
@@ -6565,7 +6565,7 @@ void describe("CLI 制品", () => {
     assert.equal(
       (
         checkedReport.exceptionCandidates as readonly Record<string, unknown>[]
-      ).filter((candidate) => candidate.kind === "same-text").length,
+      ).filter((candidate) => candidate.ruleId === "translation-review").length,
       0,
     );
     assert.equal(
@@ -6573,6 +6573,65 @@ void describe("CLI 制品", () => {
         (diagnostic) => diagnostic.code === "message.missing",
       ),
       true,
+    );
+    assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
+
+    await writeJar(candidateJar, {
+      source: [
+        "messages:",
+        "  greeting: Bonjour",
+        "  welcome: Welcome",
+        "  commands:",
+        "    registered: Run",
+        "list:",
+        "  entries: [first, second]",
+        "",
+      ].join("\n"),
+    });
+    const changedSource = runCli(
+      "sync",
+      "--project",
+      project.directory,
+      "--jar",
+      candidateJar,
+    );
+    assert.equal(
+      changedSource.status,
+      0,
+      changedSource.stdout || changedSource.stderr,
+    );
+    const changedStatus = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const changedReport = readReport(
+      changedStatus.stdout || changedStatus.stderr,
+    );
+    assert.ok(
+      (changedReport.diagnostics as readonly Record<string, unknown>[]).some(
+        (diagnostic) => diagnostic.code === "exception.review-required",
+      ),
+    );
+    assert.equal(
+      (changedReport.summary as Record<string, unknown>).confirmedSameText,
+      0,
+    );
+    const changedConclusion = (
+      changedReport.exceptionCandidates as readonly Record<string, unknown>[]
+    ).find(
+      (candidate) =>
+        candidate.ruleId === "translation-review" &&
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+          '["messages","greeting"]',
+    );
+    assert.ok(changedConclusion);
+    assert.notEqual(changedConclusion.id, candidateId);
+    assert.equal(
+      (changedConclusion.actual as Record<string, unknown>).source,
+      "Bonjour",
     );
     assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
 
@@ -6593,7 +6652,7 @@ void describe("CLI 制品", () => {
     ).diagnostics as readonly Record<string, unknown>[];
     assert.equal(
       staleDiagnostics.some(
-        (diagnostic) => diagnostic.code === "exception.review-required",
+        (diagnostic) => diagnostic.code === "exception.orphaned",
       ),
       true,
     );
@@ -6674,7 +6733,7 @@ void describe("CLI 制品", () => {
       readReport(status.stdout || status.stderr)
         .exceptionCandidates as readonly Record<string, unknown>[]
     )
-      .filter((candidate) => candidate.kind === "same-text")
+      .filter((candidate) => candidate.ruleId === "translation-review")
       .find(
         (candidate) =>
           JSON.stringify(

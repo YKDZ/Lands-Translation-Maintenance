@@ -10,9 +10,6 @@ import {
 import {
   emptyExceptionRecords,
   parseExceptionRecords,
-  sameTextCandidateId,
-  sameTextContentFingerprint,
-  sameTextObjectId,
   serializeExceptionRecords,
   type ExceptionRecords,
 } from "#/exceptions";
@@ -31,7 +28,8 @@ import type {
   ConsumerConfiguration,
   Diagnostic,
   DiagnosticLocation,
-  ExceptionCandidate,
+  CheckConclusion,
+  ConclusionSubject,
   ExceptionRecord,
   SameTextPendingReason,
   JsonValue,
@@ -92,6 +90,7 @@ import {
   type FileSnapshot,
   type FileWrite,
 } from "#/transaction";
+import { translationReviewRule } from "#/translation-review";
 import { canonicalJson, compareText, sameValue, sha256 } from "#/value";
 import { parseYaml, setDocumentPath, valueAtPath } from "#/yaml-data";
 
@@ -124,7 +123,6 @@ export interface ExceptionRecordingOptions {
 }
 
 export interface ExceptionReceipt {
-  readonly kind: ExceptionRecord["kind"];
   readonly id: string;
   readonly contentFingerprint: string;
   readonly reason: string;
@@ -559,11 +557,7 @@ async function readTargets(
   return { targets: inputs, snapshots, issues };
 }
 
-function stateSummary(
-  project: ProjectView,
-  lock: SyncLock,
-  confirmedSameTextIds: ReadonlySet<string> = new Set(),
-): ProjectSummary {
+function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
   const messages = new Map(
     project.messages.map((message) => [message.id, message]),
   );
@@ -585,7 +579,8 @@ function stateSummary(
     )
       continue;
     if (sameValue(message.target, message.source)) {
-      if (confirmedSameTextIds.has(message.id)) confirmedSameText += 1;
+      if (message.translationReview?.confirmedSameText === true)
+        confirmedSameText += 1;
       else pendingTranslations += 1;
     } else modifiedTranslations += 1;
   }
@@ -597,7 +592,8 @@ function stateSummary(
       message.target !== undefined &&
       sameValue(message.target, message.source)
     ) {
-      if (confirmedSameTextIds.has(message.id)) confirmedSameText += 1;
+      if (message.translationReview?.confirmedSameText === true)
+        confirmedSameText += 1;
       else sameTextCandidates += 1;
     }
   }
@@ -649,60 +645,18 @@ function diagnostic(
   };
 }
 
-function withoutTranslationReview(
-  message: ObservedMessage,
-): Omit<ObservedMessage, "translationReview"> {
-  const { translationReview, ...reviewIndependent } = message;
-  void translationReview;
-  return reviewIndependent;
-}
-
-function sameTextExceptionCandidates(
-  project: ProjectView,
-  lock: SyncLock,
-  confirmedIds: ReadonlySet<string>,
-): readonly Extract<ExceptionCandidate, { kind: "same-text" }>[] {
-  const seededIds = new Set(lock.translationSeeds.map((seed) => seed.id));
-  const candidateIds = new Set(
-    lock.sameTextCandidates.map((candidate) => candidate.id),
-  );
-  return project.messages
-    .filter(
-      (message) =>
-        (seededIds.has(message.id) || candidateIds.has(message.id)) &&
-        !confirmedIds.has(message.id) &&
-        message.targetStatus === "present" &&
-        message.target !== undefined &&
-        sameValue(message.target, message.source),
-    )
-    .map((message) => {
-      const reviewIndependentMessage = withoutTranslationReview(message);
-      const pendingReason = seededIds.has(message.id)
-        ? ("translation-seed" as const)
-        : ("same-text-candidate" as const);
-      return {
-        message: reviewIndependentMessage,
-        source: message.source,
-        target: message.target!,
-        pendingReason,
-        kind: "same-text" as const,
-        objectId: sameTextObjectId(message),
-        contentFingerprint: sameTextContentFingerprint(
-          reviewIndependentMessage,
-          message.source,
-          message.target!,
-        ),
-        location: { file: message.targetFile, path: message.path },
-        description: "保留原文与译文相同",
-        id: sameTextCandidateId(
-          reviewIndependentMessage,
-          message.source,
-          message.target!,
-          pendingReason,
-        ),
-      };
-    })
-    .sort((left, right) => compareText(left.message.id, right.message.id));
+function checkConclusion(finding: Diagnostic): CheckConclusion {
+  const { diagnosticId, severity, reason, ...subject } = finding;
+  void severity;
+  const requiredInputDependencies = inputDependenciesForDiagnostic(finding);
+  return {
+    ...subject,
+    id: diagnosticId,
+    description: reason,
+    ...(requiredInputDependencies === undefined
+      ? {}
+      : { requiredInputDependencies }),
+  };
 }
 
 function makeReport(
@@ -711,7 +665,7 @@ function makeReport(
   lock: SyncLock,
   diagnostics: readonly Diagnostic[],
   coverage?: CheckCoverage,
-  confirmedSameTextIds: ReadonlySet<string> = new Set(),
+  exceptionCandidates: readonly CheckConclusion[] = [],
 ): ProjectReport {
   const state = diagnostics.some((item) => item.severity === "error")
     ? "issues"
@@ -721,15 +675,11 @@ function makeReport(
   return {
     operation,
     state,
-    summary: stateSummary(project, lock, confirmedSameTextIds),
+    summary: stateSummary(project, lock),
     diagnostics: [...diagnostics].sort((left, right) =>
       compareText(canonicalJson(left), canonicalJson(right)),
     ),
-    exceptionCandidates: sameTextExceptionCandidates(
-      project,
-      lock,
-      confirmedSameTextIds,
-    ),
+    exceptionCandidates,
     knownExcludedResources: project.resources
       .filter(
         (resource): resource is KnownExcludedResource =>
@@ -1644,7 +1594,15 @@ export async function initializeProject(
   const evaluated = evaluateRules(reviewedView, builtInRules, {
     configuration: configuration.rules,
   });
-  return makeReport("init", reviewedView, lock, evaluated.diagnostics);
+  const review = evaluateRules(reviewedView, [translationReviewRule]);
+  return makeReport(
+    "init",
+    reviewedView,
+    lock,
+    evaluated.diagnostics,
+    undefined,
+    review.diagnostics.map(checkConclusion),
+  );
 }
 
 function currentResourceChanges(
@@ -2432,21 +2390,24 @@ interface LoadedSavedProject {
   readonly staticDiagnostics: readonly Diagnostic[];
 }
 
-interface EvaluatedSavedProject extends LoadedSavedProject {
+interface ConclusionContext {
   readonly view: ProjectView;
   readonly diagnostics: readonly Diagnostic[];
   readonly coverage: CheckCoverage;
   readonly registeredRules: readonly CheckRule[];
-  readonly sameTextResolution: SameTextResolution;
 }
 
-interface SameTextResolution {
-  readonly resolutions: readonly ExceptionResolution[];
-  readonly confirmedSameTextIds: ReadonlySet<string>;
+interface EvaluatedSavedProject extends LoadedSavedProject, ConclusionContext {
+  readonly conclusions: readonly CheckConclusion[];
+  readonly qualityCoverage: CheckCoverage;
 }
 
 type ExceptionResolution =
-  | { readonly record: ExceptionRecord; readonly state: "active" }
+  | {
+      readonly record: ExceptionRecord;
+      readonly state: "active";
+      readonly conclusion: CheckConclusion;
+    }
   | {
       readonly record: ExceptionRecord;
       readonly state: "review-required" | "orphaned" | "unable-to-evaluate";
@@ -2594,85 +2555,6 @@ function withTranslationReview(
   };
 }
 
-function resolveSameTextException(
-  record: Extract<ExceptionRecord, { kind: "same-text" }>,
-  view: ProjectView,
-  lock: SyncLock,
-): ExceptionResolution {
-  const message = view.messages.find((item) => item.id === record.message.id);
-  if (message === undefined) {
-    return {
-      record,
-      state: "orphaned",
-      expected: { state: "same source and target" },
-      actual: { state: "message-missing" },
-    };
-  }
-  if (
-    message.targetStatus === "blocked" ||
-    view.fileIssues.some(
-      (issue) =>
-        issue.file === message.targetFile &&
-        ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
-          issue.code,
-        ),
-    )
-  ) {
-    return {
-      record,
-      state: "unable-to-evaluate",
-      expected: { state: "same source and target" },
-      actual: { state: "unable-to-evaluate" },
-    };
-  }
-  const pendingReason = pendingReasonForMessage(message.id, lock);
-  const isSameText =
-    message.targetStatus === "present" &&
-    message.target !== undefined &&
-    sameValue(message.target, message.source);
-  const fingerprint =
-    message.target === undefined
-      ? undefined
-      : sameTextContentFingerprint(message, message.source, message.target);
-  const id =
-    isSameText && pendingReason !== undefined && message.target !== undefined
-      ? sameTextCandidateId(
-          message,
-          message.source,
-          message.target,
-          pendingReason,
-        )
-      : undefined;
-  if (
-    isSameText &&
-    pendingReason !== undefined &&
-    fingerprint === record.contentFingerprint &&
-    id === record.id &&
-    pendingReason === record.pendingReason
-  ) {
-    return { record, state: "active" };
-  }
-  if (pendingReason !== undefined) {
-    return {
-      record,
-      state: "review-required",
-      expected: { contentFingerprint: record.contentFingerprint },
-      actual: {
-        contentFingerprint: fingerprint ?? null,
-        id: id ?? null,
-        pendingReason,
-        targetStatus: message.targetStatus,
-      },
-    };
-  }
-  return {
-    record,
-    state: "orphaned",
-    expected: { state: "pending same-text reason" },
-    actual: { state: "no matching reason" },
-  };
-}
-
 function enabledRulesRequireInput(
   configuration: ConsumerConfiguration,
   input: RuleInput,
@@ -2704,35 +2586,59 @@ async function evaluateSavedProject(
           ),
         }
       : loaded.view;
-  // 同文例外须先派生翻译状态，随后所有质量规则仍按同一正式链路评估。
-  const resolutions = loaded.exceptions.records.flatMap((record) =>
-    record.kind === "same-text"
-      ? [resolveSameTextException(record, view, loaded.lock)]
-      : [],
-  );
-  const sameTextResolution: SameTextResolution = {
-    resolutions,
-    confirmedSameTextIds: new Set(
-      resolutions.flatMap((resolution) =>
-        resolution.state === "active" && resolution.record.kind === "same-text"
-          ? [resolution.record.message.id]
-          : [],
-      ),
-    ),
+  // 翻译状态检查先形成结论；通用例外匹配结果随后参与状态派生和质量检查。
+  const reviewView = withTranslationReview(view, loaded.lock, new Set());
+  const review = evaluateRules(reviewView, [translationReviewRule]);
+  const reviewConclusions = review.diagnostics.map(checkConclusion);
+  const reviewContext: ConclusionContext = {
+    view: reviewView,
+    diagnostics: review.diagnostics,
+    coverage: review.coverage,
+    registeredRules: [translationReviewRule],
   };
+  const reviewResolutions = resolveExceptionRecords(
+    loaded.exceptions.records,
+    reviewConclusions,
+    reviewContext,
+    operation,
+  );
+  const accepted = new Set(
+    reviewResolutions.flatMap((resolution) =>
+      resolution.state === "active" ? [resolution.conclusion.id] : [],
+    ),
+  );
   const reviewedView = withTranslationReview(
     view,
     loaded.lock,
-    sameTextResolution.confirmedSameTextIds,
+    new Set(
+      reviewConclusions.flatMap((conclusion) =>
+        accepted.has(conclusion.id) && conclusion.message !== undefined
+          ? [conclusion.message.id]
+          : [],
+      ),
+    ),
   );
   const evaluation = evaluateProject(reviewedView, loaded.configuration, rules);
+  const diagnostics = [...loaded.staticDiagnostics, ...evaluation.diagnostics];
   return {
     ...loaded,
     view: reviewedView,
-    diagnostics: [...loaded.staticDiagnostics, ...evaluation.diagnostics],
-    coverage: evaluation.coverage,
-    registeredRules: rules,
-    sameTextResolution,
+    diagnostics,
+    coverage: {
+      ...evaluation.coverage,
+      complete: review.coverage.complete && evaluation.coverage.complete,
+      enabledRuleIds: [
+        ...review.coverage.enabledRuleIds,
+        ...evaluation.coverage.enabledRuleIds,
+      ],
+      unsupportedRuleIds: [
+        ...review.coverage.unsupportedRuleIds,
+        ...evaluation.coverage.unsupportedRuleIds,
+      ],
+    },
+    qualityCoverage: evaluation.coverage,
+    registeredRules: [translationReviewRule, ...rules],
+    conclusions: [...reviewConclusions, ...diagnostics.map(checkConclusion)],
   };
 }
 
@@ -2750,7 +2656,7 @@ function isExecutionPrecondition(code: string): boolean {
 }
 
 function requiredInputDependencyUnavailable(
-  project: EvaluatedSavedProject,
+  project: ConclusionContext,
   dependency: RuleInputDependency,
 ): boolean {
   const miniMessage = project.view.miniMessage;
@@ -2836,7 +2742,7 @@ function requiredInputDependencyUnavailable(
 }
 
 function requiredRuleInputUnavailable(
-  project: EvaluatedSavedProject,
+  project: ConclusionContext,
   ruleId: string,
   operation: "status" | "check",
   messageId?: string,
@@ -2883,7 +2789,7 @@ function requiredRuleInputUnavailable(
 }
 
 function ruleUnavailable(
-  project: EvaluatedSavedProject,
+  project: ConclusionContext,
   ruleId: string,
   operation: "status" | "check",
   messageId?: string,
@@ -3021,62 +2927,85 @@ function exceptionNotice(
   );
 }
 
-function resolveDiagnosticException(
-  record: Extract<ExceptionRecord, { kind: "diagnostic" }>,
-  project: EvaluatedSavedProject,
+function conclusionUnavailable(
+  project: ConclusionContext,
+  conclusion: ConclusionSubject,
   operation: "status" | "check",
-): ExceptionResolution {
-  const original = project.diagnostics.find(
-    (item) =>
-      item.objectId === record.objectId &&
-      item.contentFingerprint === record.contentFingerprint,
+): boolean {
+  const message = project.view.messages.find(
+    (item) => item.id === conclusion.message?.id,
   );
-  const requiredInputDependencies =
-    record.requiredInputDependencies ??
-    (original === undefined
-      ? undefined
-      : inputDependenciesForDiagnostic(original));
   if (
-    ruleUnavailable(
-      project,
-      record.ruleId,
-      operation,
-      record.message?.id,
-      record.code,
-      record.location,
-      requiredInputDependencies,
-    )
-  ) {
-    return {
-      record,
-      state: "unable-to-evaluate",
-      expected: { state: "evaluated diagnostic" },
-      actual: { state: "unable-to-evaluate" },
-    };
-  }
-  if (original !== undefined && !isExecutionPrecondition(original.code))
-    return { record, state: "active" };
-  const currentObject = project.diagnostics.find(
-    (item) => item.objectId === record.objectId,
+    message !== undefined &&
+    (message.targetStatus === "blocked" ||
+      project.view.fileIssues.some(
+        (issue) =>
+          issue.file === message.targetFile &&
+          ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
+            issue.code,
+          ),
+      ))
+  )
+    return true;
+  return ruleUnavailable(
+    project,
+    conclusion.ruleId,
+    operation,
+    conclusion.message?.id,
+    conclusion.code,
+    conclusion.location,
+    conclusion.requiredInputDependencies,
   );
-  if (currentObject !== undefined) {
+}
+
+function resolveExceptionRecords(
+  records: readonly ExceptionRecord[],
+  conclusions: readonly CheckConclusion[],
+  project: ConclusionContext,
+  operation: "status" | "check",
+): readonly ExceptionResolution[] {
+  return records.map((record): ExceptionResolution => {
+    if (conclusionUnavailable(project, record, operation)) {
+      return {
+        record,
+        state: "unable-to-evaluate",
+        expected: { state: "evaluated conclusion" },
+        actual: { state: "unable-to-evaluate" },
+      };
+    }
+    const current = conclusions.find(
+      (item) => item.objectId === record.objectId,
+    );
+    if (current !== undefined) {
+      if (
+        current.id === record.id &&
+        current.contentFingerprint === record.contentFingerprint &&
+        !isExecutionPrecondition(current.code)
+      ) {
+        return { record, state: "active", conclusion: current };
+      }
+      return {
+        record,
+        state: "review-required",
+        location: current.location,
+        expected: { contentFingerprint: record.contentFingerprint },
+        actual: { contentFingerprint: current.contentFingerprint },
+      };
+    }
+    const messageExists =
+      record.message === undefined ||
+      project.view.messages.some(
+        (message) => message.id === record.message?.id,
+      );
     return {
       record,
-      state: "review-required",
-      location: currentObject.location,
-      expected: { contentFingerprint: record.contentFingerprint },
-      actual: { contentFingerprint: currentObject.contentFingerprint },
+      state: "orphaned",
+      expected: { state: "matching conclusion" },
+      actual: {
+        state: messageExists ? "conclusion-missing" : "message-missing",
+      },
     };
-  }
-  const messageExists =
-    record.message === undefined ||
-    project.view.messages.some((message) => message.id === record.message?.id);
-  return {
-    record,
-    state: "orphaned",
-    expected: { state: "matching diagnostic" },
-    actual: { state: messageExists ? "diagnostic-missing" : "message-missing" },
-  };
+  });
 }
 
 function applyExceptionRecords(
@@ -3084,17 +3013,15 @@ function applyExceptionRecords(
   operation: "status" | "check",
 ): {
   readonly diagnostics: readonly Diagnostic[];
-  readonly confirmedSameTextIds: ReadonlySet<string>;
+  readonly acceptedConclusionIds: ReadonlySet<string>;
 } {
-  const resolutions = [
-    ...project.sameTextResolution.resolutions,
-    ...project.exceptions.records.flatMap((record) =>
-      record.kind === "diagnostic"
-        ? [resolveDiagnosticException(record, project, operation)]
-        : [],
-    ),
-  ];
-  const suppressed = new Set<string>();
+  const resolutions = resolveExceptionRecords(
+    project.exceptions.records,
+    project.conclusions,
+    project,
+    operation,
+  );
+  const acceptedConclusionIds = new Set<string>();
   const notices: Diagnostic[] = [];
   const stateReasons = {
     "review-required": "例外对象内容或相关条件已变化，需要复核",
@@ -3103,10 +3030,9 @@ function applyExceptionRecords(
       "相关内容无法可靠读取，或规则已禁用、未完成，无法评估此例外",
   } as const;
   for (const resolution of resolutions) {
-    if (resolution.state === "active") {
-      if (resolution.record.kind === "diagnostic")
-        suppressed.add(resolution.record.id);
-    } else {
+    if (resolution.state === "active")
+      acceptedConclusionIds.add(resolution.conclusion.id);
+    else
       notices.push(
         exceptionNotice(
           `exception.${resolution.state}`,
@@ -3116,16 +3042,15 @@ function applyExceptionRecords(
           resolution.actual,
         ),
       );
-    }
   }
   return {
     diagnostics: [
       ...project.diagnostics.filter(
-        (item) => !suppressed.has(item.diagnosticId),
+        (item) => !acceptedConclusionIds.has(item.diagnosticId),
       ),
       ...notices,
     ],
-    confirmedSameTextIds: project.sameTextResolution.confirmedSameTextIds,
+    acceptedConclusionIds,
   };
 }
 
@@ -3191,54 +3116,18 @@ async function persistExceptionRecords(
 
 function exceptionCandidates(
   project: EvaluatedSavedProject,
-  diagnostics: readonly Diagnostic[] = project.diagnostics,
-  confirmedSameTextIds: ReadonlySet<string> = project.sameTextResolution
-    .confirmedSameTextIds,
-): readonly ExceptionCandidate[] {
-  return [
-    ...sameTextExceptionCandidates(
-      project.view,
-      project.lock,
-      confirmedSameTextIds,
-    ),
-    ...diagnostics.flatMap((selected): ExceptionCandidate[] => {
-      const requiredInputDependencies =
-        inputDependenciesForDiagnostic(selected);
-      if (
-        selected.ruleId === "exceptions" ||
-        isExecutionPrecondition(selected.code) ||
-        ruleUnavailable(
-          project,
-          selected.ruleId,
-          "check",
-          selected.message?.id,
-          selected.code,
-          selected.location,
-          requiredInputDependencies,
-        )
-      )
-        return [];
-      return [
-        {
-          kind: "diagnostic",
-          id: selected.diagnosticId,
-          objectId: selected.objectId,
-          contentFingerprint: selected.contentFingerprint,
-          ruleId: selected.ruleId,
-          code: selected.code,
-          ...(selected.message === undefined
-            ? {}
-            : { message: selected.message }),
-          ...(selected.origin === undefined ? {} : { origin: selected.origin }),
-          ...(requiredInputDependencies === undefined
-            ? {}
-            : { requiredInputDependencies }),
-          location: selected.location,
-          description: selected.reason,
-        },
-      ];
-    }),
-  ].sort((left, right) => compareText(left.id, right.id));
+  acceptedConclusionIds: ReadonlySet<string> = new Set(),
+  operation: "status" | "check" = "check",
+): readonly CheckConclusion[] {
+  return project.conclusions
+    .filter(
+      (conclusion) =>
+        !acceptedConclusionIds.has(conclusion.id) &&
+        conclusion.ruleId !== "exceptions" &&
+        !isExecutionPrecondition(conclusion.code) &&
+        !conclusionUnavailable(project, conclusion, operation),
+    )
+    .sort((left, right) => compareText(left.id, right.id));
 }
 
 export async function recordException(
@@ -3257,11 +3146,9 @@ export async function recordException(
   }
   const project = await currentExceptionProject(projectDirectory);
   // 记录时重新评估全部候选，允许维护者为同一有效对象更新理由。
-  const selected = exceptionCandidates(
-    project,
-    project.diagnostics,
-    new Set(),
-  ).find((candidate) => candidate.id === id);
+  const selected = exceptionCandidates(project).find(
+    (candidate) => candidate.id === id,
+  );
   if (selected === undefined) {
     throw new ProjectOperationError(
       "当前找不到此例外候选 ID；内容可能已变化或无法评估",
@@ -3269,20 +3156,13 @@ export async function recordException(
       { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
     );
   }
-  let record: ExceptionRecord;
-  if (selected.kind === "same-text") {
-    const { description, source, target, ...subject } = selected;
-    void description;
-    void source;
-    void target;
-    record = { ...subject, reason: normalizedReason };
-  } else {
-    const { description, ...subject } = selected;
-    void description;
-    record = { ...subject, reason: normalizedReason };
-  }
+  const { description, expected, actual, ...subject } = selected;
+  void description;
+  void expected;
+  void actual;
+  const record: ExceptionRecord = { ...subject, reason: normalizedReason };
   const records: ExceptionRecords = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     records: [
       ...project.exceptions.records.filter(
         (existing) => existing.objectId !== record.objectId,
@@ -3291,11 +3171,7 @@ export async function recordException(
     ].sort((left, right) => compareText(left.objectId, right.objectId)),
   };
   await persistExceptionRecords(project, records, options, (current) => {
-    const stillCurrent = exceptionCandidates(
-      current,
-      current.diagnostics,
-      new Set(),
-    ).find(
+    const stillCurrent = exceptionCandidates(current).find(
       (candidate) =>
         candidate.id === selected.id &&
         candidate.objectId === selected.objectId &&
@@ -3310,7 +3186,6 @@ export async function recordException(
     }
   });
   return {
-    kind: record.kind,
     id: record.id,
     contentFingerprint: record.contentFingerprint,
     reason: record.reason,
@@ -3342,18 +3217,14 @@ export async function inspectProject(
     );
   }
   const resolved = applyExceptionRecords(evaluated, operation);
-  const report = makeReport(
+  return makeReport(
     operation,
     evaluated.view,
     evaluated.lock,
     resolved.diagnostics,
-    operation === "check" ? evaluated.coverage : undefined,
-    resolved.confirmedSameTextIds,
+    operation === "check" ? evaluated.qualityCoverage : undefined,
+    exceptionCandidates(evaluated, resolved.acceptedConclusionIds, operation),
   );
-  return {
-    ...report,
-    exceptionCandidates: exceptionCandidates(evaluated, resolved.diagnostics),
-  };
 }
 
 export function operationExitCode(report: ProjectReport): number {

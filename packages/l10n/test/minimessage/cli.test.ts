@@ -4617,7 +4617,7 @@ void describe("MiniMessage 官方检查制品", () => {
     const candidates = (
       readReport(before.stdout || before.stderr)
         .exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     const greeting = candidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -4644,7 +4644,6 @@ void describe("MiniMessage 官方检查制品", () => {
         readonly exception: Readonly<Record<string, unknown>>;
       };
     };
-    assert.equal(confirmationEnvelope.data.exception.kind, "same-text");
     assert.equal(confirmationEnvelope.data.exception.id, candidateId);
     assert.equal(
       confirmationEnvelope.data.exception.reason,
@@ -5222,7 +5221,7 @@ void describe("MiniMessage 官方检查制品", () => {
     const candidates = (
       readReport(status.stdout || status.stderr)
         .exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     const greeting = candidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -6382,13 +6381,16 @@ void describe("术语和风格正式检查", () => {
     const seed = (
       report.exceptionCandidates as readonly Record<string, unknown>[]
     )
-      .filter((candidate) => candidate.kind === "same-text")
+      .filter((candidate) => candidate.ruleId === "translation-review")
       .find((candidate) => {
         const message = candidate.message as Record<string, unknown>;
         return JSON.stringify(message.path) === '["messages","greeting"]';
       });
     assert.ok(seed, checked.stderr || checked.stdout);
-    assert.equal(seed.pendingReason, "translation-seed");
+    assert.equal(
+      (seed.actual as Record<string, unknown>).pendingReason,
+      "translation-seed",
+    );
     assert.equal(
       diagnostics.some((diagnostic) => diagnostic.ruleId === "terminology"),
       false,
@@ -6432,14 +6434,17 @@ void describe("术语和风格正式检查", () => {
     const beforeReport = readReport(before.stdout || before.stderr);
     const candidates = (
       beforeReport.exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     const greeting = candidates.find((candidate) => {
       const message = candidate.message as Record<string, unknown>;
       return JSON.stringify(message.path) === '["messages","greeting"]';
     });
     assert.ok(greeting, before.stderr || before.stdout);
     if (greeting === undefined) throw new Error("缺少 greeting 同文候选");
-    assert.equal(greeting.pendingReason, "same-text-candidate");
+    assert.equal(
+      (greeting.actual as Record<string, unknown>).pendingReason,
+      "same-text-candidate",
+    );
 
     const beforeTerms = (
       beforeReport.diagnostics as readonly Record<string, unknown>[]

@@ -1,17 +1,11 @@
 import { stringify } from "yaml";
 import { z } from "zod";
 
-import type {
-  ExceptionRecord,
-  JsonValue,
-  MessageIdentity,
-  SameTextPendingReason,
-} from "#/model";
-import { canonicalJson, sha256 } from "#/value";
+import type { ExceptionRecord } from "#/model";
 import { parseYaml } from "#/yaml-data";
 
 export interface ExceptionRecords {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly records: readonly ExceptionRecord[];
 }
 
@@ -45,46 +39,34 @@ const subjectShape = {
   contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   location: locationSchema,
 };
-const diagnosticExceptionSchema = z.object({
+const conclusionSubjectSchema = z.object({
   ...subjectShape,
-  kind: z.literal("diagnostic"),
   ruleId: z.string().min(1),
   code: z.string().min(1),
   message: messageIdentitySchema.optional(),
   origin: z.enum(["source", "target", "theme"]).optional(),
   requiredInputDependencies: z.array(requiredInputDependencySchema).optional(),
 });
-const sameTextExceptionSchema = z.object({
-  ...subjectShape,
-  kind: z.literal("same-text"),
-  pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
-  message: messageIdentitySchema,
-});
-export const exceptionCandidateSchema = z.discriminatedUnion("kind", [
-  diagnosticExceptionSchema.extend({ description: z.string() }).strict(),
-  sameTextExceptionSchema
-    .extend({
-      description: z.string(),
-      source: z.json(),
-      target: z.json(),
-    })
-    .strict(),
-]);
-const recordShape = { reason: z.string().trim().min(1) };
+export const checkConclusionSchema = conclusionSubjectSchema
+  .extend({
+    description: z.string(),
+    expected: z.json(),
+    actual: z.json(),
+  })
+  .strict();
 const exceptionRecordsSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     records: z.array(
-      z.discriminatedUnion("kind", [
-        diagnosticExceptionSchema.extend(recordShape).strict(),
-        sameTextExceptionSchema.extend(recordShape).strict(),
-      ]),
+      conclusionSubjectSchema
+        .extend({ reason: z.string().trim().min(1) })
+        .strict(),
     ),
   })
   .strict();
 
 export function emptyExceptionRecords(): ExceptionRecords {
-  return { schemaVersion: 2, records: [] };
+  return { schemaVersion: 3, records: [] };
 }
 
 export function parseExceptionRecords(source: string): ExceptionRecords {
@@ -116,38 +98,4 @@ export function serializeExceptionRecords(records: ExceptionRecords): string {
     JSON.stringify(records),
   ) as ExceptionRecords;
   return stringify(independentRecords, { lineWidth: 0 });
-}
-
-export function sameTextContentFingerprint(
-  message: MessageIdentity,
-  source: JsonValue,
-  target: JsonValue,
-): string {
-  return sha256(
-    canonicalJson({
-      message,
-      source,
-      target,
-    }),
-  );
-}
-
-export function sameTextCandidateId(
-  message: MessageIdentity,
-  source: JsonValue,
-  target: JsonValue,
-  pendingReason: SameTextPendingReason,
-): string {
-  return sha256(
-    canonicalJson({
-      kind: "same-text-candidate",
-      messageId: message.id,
-      pendingReason,
-      contentFingerprint: sameTextContentFingerprint(message, source, target),
-    }),
-  );
-}
-
-export function sameTextObjectId(message: MessageIdentity): string {
-  return sha256(canonicalJson({ kind: "same-text", messageId: message.id }));
 }

@@ -6,7 +6,7 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
-import { exceptionCandidateSchema } from "#/exceptions";
+import { checkConclusionSchema } from "#/exceptions";
 import {
   translationFieldCategories,
   translationFieldScenes,
@@ -68,7 +68,7 @@ const reportSchema = z.object({
     missingTranslations: z.number().int().nonnegative(),
   }),
   diagnostics: z.array(diagnosticSchema),
-  exceptionCandidates: z.array(exceptionCandidateSchema),
+  exceptionCandidates: z.array(checkConclusionSchema),
   knownExcludedResources: z.array(
     z.object({
       path: z.string(),
@@ -195,7 +195,6 @@ const syncPreviewSchema = z.union([
   }),
 ]);
 const exceptionReceiptSchema = z.object({
-  kind: z.enum(["diagnostic", "same-text"]),
   id: z.string().regex(/^[0-9a-f]{64}$/),
   contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   reason: z.string(),
@@ -240,17 +239,9 @@ function renderReport(report: ReportPayload) {
     `${report.operation}：${stateNames[report.state]}`,
     `资源文件 ${report.summary.resourceFiles} 项；消息 ${report.summary.messages} 条；待翻译 ${report.summary.pendingTranslations} 条；历史同文候选 ${report.summary.sameTextCandidates} 条；已确认同文 ${report.summary.confirmedSameText} 条；已修改 ${report.summary.modifiedTranslations} 条；缺失 ${report.summary.missingTranslations} 条。`,
   ];
-  const pendingReasonNames = {
-    "translation-seed": "同步填入的原文",
-    "same-text-candidate": "历史同文候选",
-  } as const;
   for (const candidate of report.exceptionCandidates) {
-    const detail =
-      candidate.kind === "same-text"
-        ? `（${pendingReasonNames[candidate.pendingReason]}）；原文 ${jsonLine(candidate.source)}；译文 ${jsonLine(candidate.target)}`
-        : `；${textLineValue(candidate.description)}`;
     lines.push(
-      `例外候选 ${candidate.id}：${textLineValue(candidate.location.file)}:${candidate.location.path.map((part) => textLineValue(String(part))).join(".")}${detail}。`,
+      `例外候选 ${candidate.id}：${textLineValue(candidate.location.file)}:${candidate.location.path.map((part) => textLineValue(String(part))).join(".")}；${textLineValue(candidate.description)}；期望 ${jsonLine(candidate.expected)}，实际 ${jsonLine(candidate.actual)}。`,
     );
   }
   if (report.knownExcludedResources.length > 0) {

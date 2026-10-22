@@ -97,7 +97,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     const sameTextCandidate = (
       statusReport.exceptionCandidates as readonly Record<string, unknown>[]
     )
-      .filter((candidate) => candidate.kind === "same-text")
+      .filter((candidate) => candidate.ruleId === "translation-review")
       .find(
         (candidate) =>
           JSON.stringify(
@@ -148,12 +148,15 @@ void describe("无 JAR 保存项目检查旅程", () => {
         string,
         unknown
       >[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     assert.equal(remainingSameTextCandidates.length, 1);
     const remainingSeed = remainingSameTextCandidates[0];
     assert.ok(remainingSeed);
     if (remainingSeed === undefined) throw new Error("英文待翻译项未保留");
-    assert.equal(remainingSeed.pendingReason, "translation-seed");
+    assert.equal(
+      (remainingSeed.actual as Record<string, unknown>).pendingReason,
+      "translation-seed",
+    );
     assert.deepEqual((remainingSeed.message as Record<string, unknown>).path, [
       "messages",
       "draft",
@@ -271,9 +274,11 @@ void describe("无 JAR 保存项目检查旅程", () => {
       1,
     );
     assert.equal(
-      (report.exceptionCandidates as readonly Record<string, unknown>[]).filter(
-        (candidate) => candidate.kind === "same-text",
-      )[0]?.pendingReason,
+      (
+        (report.exceptionCandidates as readonly Record<string, unknown>[]).find(
+          (candidate) => candidate.ruleId === "translation-review",
+        )?.actual as Record<string, unknown> | undefined
+      )?.pendingReason,
       "translation-seed",
     );
     assert.deepEqual(
@@ -666,7 +671,11 @@ void describe("无 JAR 保存项目检查旅程", () => {
       invalidatedReport.diagnostics as readonly Record<string, unknown>[];
     assert.ok(
       invalidatedDiagnostics.some(
-        (diagnostic) => diagnostic.code === "exception.review-required",
+        (diagnostic) =>
+          diagnostic.code === "exception.orphaned" &&
+          JSON.stringify(
+            (diagnostic.location as Record<string, unknown>).path,
+          ) === '["messages","same_brand"]',
       ),
     );
     assert.ok(

@@ -1389,7 +1389,7 @@ void describe("跨消息翻译一致性", () => {
     const candidates = (
       readReport(candidateReport.stdout || candidateReport.stderr)
         .exceptionCandidates as readonly Record<string, unknown>[]
-    ).filter((candidate) => candidate.kind === "same-text");
+    ).filter((candidate) => candidate.ruleId === "translation-review");
     const greeting = candidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===

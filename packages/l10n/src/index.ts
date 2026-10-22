@@ -51,4 +51,4 @@ export type {
 } from "#/model";
 export { formatForScene, sceneMatchesCategory } from "#/field-metadata";
 
-export type { ExceptionCandidate, ExceptionRecord } from "#/model";
+export type { CheckConclusion, ExceptionRecord } from "#/model";
