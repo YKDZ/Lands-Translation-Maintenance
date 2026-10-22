@@ -95,21 +95,24 @@ void describe("无 JAR 保存项目检查旅程", () => {
       },
     ]);
     const sameTextCandidate = (
-      statusReport.sameTextToConfirm as readonly Record<string, unknown>[]
-    ).find(
-      (candidate) =>
-        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
-        '["messages","same_brand"]',
-    );
+      statusReport.exceptionCandidates as readonly Record<string, unknown>[]
+    )
+      .filter((candidate) => candidate.kind === "same-text")
+      .find(
+        (candidate) =>
+          JSON.stringify(
+            (candidate.message as Record<string, unknown>).path,
+          ) === '["messages","same_brand"]',
+      );
     assert.ok(sameTextCandidate);
     if (sameTextCandidate === undefined)
       throw new Error("缺少待确认的同文候选");
-    const candidateId = String(sameTextCandidate.candidateId);
+    const candidateId = String(sameTextCandidate.id);
     const confirmed = runArtifactCliWithoutJava(
-      "confirm-same-text",
+      "exempt",
       "--project",
       projectDirectory,
-      "--candidate",
+      "--id",
       candidateId,
       "--reason",
       "品牌名按约定保留英文",
@@ -140,8 +143,12 @@ void describe("无 JAR 保存项目检查旅程", () => {
         .confirmedSameText,
       1,
     );
-    const remainingSameTextCandidates =
-      missingJavaReport.sameTextToConfirm as readonly Record<string, unknown>[];
+    const remainingSameTextCandidates = (
+      missingJavaReport.exceptionCandidates as readonly Record<
+        string,
+        unknown
+      >[]
+    ).filter((candidate) => candidate.kind === "same-text");
     assert.equal(remainingSameTextCandidates.length, 1);
     const remainingSeed = remainingSameTextCandidates[0];
     assert.ok(remainingSeed);
@@ -264,8 +271,9 @@ void describe("无 JAR 保存项目检查旅程", () => {
       1,
     );
     assert.equal(
-      (report.sameTextToConfirm as readonly Record<string, unknown>[])[0]
-        ?.pendingReason,
+      (report.exceptionCandidates as readonly Record<string, unknown>[]).filter(
+        (candidate) => candidate.kind === "same-text",
+      )[0]?.pendingReason,
       "translation-seed",
     );
     assert.deepEqual(
@@ -557,7 +565,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
       "exempt",
       "--project",
       projectDirectory,
-      "--diagnostic",
+      "--id",
       exemptedDiagnosticId,
       "--reason",
       "此消息的样式差异已按界面约定审核",
@@ -663,7 +671,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
     assert.ok(
       invalidatedDiagnostics.some(
-        (diagnostic) => diagnostic.code === "same-text.review-required",
+        (diagnostic) => diagnostic.code === "exception.review-required",
       ),
     );
     assert.equal(
@@ -881,7 +889,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
           .resourceFiles,
         0,
       );
-      assert.deepEqual(invalidReport.sameTextToConfirm, []);
+      assert.deepEqual(invalidReport.exceptionCandidates, []);
       assert.deepEqual(
         await snapshotProjectFiles(baselineProject),
         changedBaselineFiles,
@@ -920,7 +928,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
           .resourceFiles,
         0,
       );
-      assert.deepEqual(invalidReport.sameTextToConfirm, []);
+      assert.deepEqual(invalidReport.exceptionCandidates, []);
       assert.deepEqual(
         await snapshotProjectFiles(incompleteLockProject),
         incompleteLockFiles,

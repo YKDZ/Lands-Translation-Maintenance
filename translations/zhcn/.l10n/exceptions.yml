@@ -1,6 +1,7 @@
-schemaVersion: 1
-diagnosticExemptions:
-  - diagnosticId: 67d2031cea6ace558510d5f96262deca26c6da3e39e26a75e3670343b124ed48
+schemaVersion: 2
+records:
+  - kind: diagnostic
+    id: 67d2031cea6ace558510d5f96262deca26c6da3e39e26a75e3670343b124ed48
     objectId: 1441b1bcb3269bf013f635a3a79263f6a9ee0a6aeb6ffa52e241817439c8abad
     contentFingerprint: 0ad153d2b56a05af85abb8a1b0d321626b8acb03965f1a863b03109b534323af
     ruleId: translation-consistency
@@ -93,7 +94,8 @@ diagnosticExemptions:
         - child_failure_owner
         - name
     reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。
-  - diagnosticId: 4dd75e637916fc8ecd212486a95336be5344325ad922e132f2f8a0cf8d7caf8e
+  - kind: diagnostic
+    id: 4dd75e637916fc8ecd212486a95336be5344325ad922e132f2f8a0cf8d7caf8e
     objectId: 1a0ac1fda20ea09f897f7519cebbdafb8cbd4412974abedfbc1e6c8f43b519ac
     contentFingerprint: b5217536d9a5dcc6c0fe5deb2493a4f70e9edf63bf684d2569c2667cca92671a
     ruleId: translation-consistency
@@ -318,7 +320,8 @@ diagnosticExemptions:
         - child_failure_access
         - name
     reason: “职位权限不足”的三个条目 lore 均明确 role permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。
-  - diagnosticId: cd084b7103b9e5e2f4b4cdd6f1c90b9d30a366c6f500b7653166a32418d2b236
+  - kind: diagnostic
+    id: cd084b7103b9e5e2f4b4cdd6f1c90b9d30a366c6f500b7653166a32418d2b236
     objectId: 2a8889424526aa6f6b53983093c6472e8d8710cc1790c1b339eb54ed6ce8c358
     contentFingerprint: 17215c870f5e29bcf19adb4a8a636c46ecb8dc3741a7ed3b7499dbc626c39e53
     ruleId: translation-consistency
@@ -400,7 +403,8 @@ diagnosticExemptions:
         - rented
         - 2
     reason: sold 全息图的收受者是买主；rented 租牌的收受者是租客且列出剩余租期。保留两类交易参与者的具体称呼，不把交易类型抹平。
-  - diagnosticId: 059173385563d20c199f882cd5dec8fbaeed631c4d1c53606be111e30b77d46b
+  - kind: diagnostic
+    id: 059173385563d20c199f882cd5dec8fbaeed631c4d1c53606be111e30b77d46b
     objectId: 3c138cc32aab3ef110fc05bd57dad63f61f70ff11e4fd999a8bb7222074a3da4
     contentFingerprint: b1e77202be7187e76d2b74f0428dd6027d7ba39142262fc0c3596ba8f6f0307f
     ruleId: translation-consistency
@@ -463,7 +467,8 @@ diagnosticExemptions:
         - nation
         - name
     reason: levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation 实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。
-  - diagnosticId: 35441aa29e490a866502eb7d84ea5aac84566f455bfa3553fdb032123565ceed
+  - kind: diagnostic
+    id: 35441aa29e490a866502eb7d84ea5aac84566f455bfa3553fdb032123565ceed
     objectId: 69fd9825efa97c5c2179c453820cb51b5c0ac301c699d4ced2a9446e2006b3e8
     contentFingerprint: 6c212b8c4cccb4d10e7ef3042863c73075047354c6d2baa4bfbdeb4cdc66ee0b
     ruleId: translation-consistency
@@ -534,7 +539,8 @@ diagnosticExemptions:
         - members
         - name
     reason: 排行榜 sorting.members 指按成员数量排序，显示“成员数”；player-management 的 Members 项负责管理成员，显示“成员”。
-  - diagnosticId: 876fccd9730f38666f58ad89f615403177bb0d1e893564f04ccfc233c77be89d
+  - kind: diagnostic
+    id: 876fccd9730f38666f58ad89f615403177bb0d1e893564f04ccfc233c77be89d
     objectId: 726353921966e9442fee0fef3588c3a292a911cebab6ca1785041ecb4996a97b
     contentFingerprint: 58d0808dc000e41ed519e336bb6791c58185c9bca5786083b5c55da3f65ad2f4
     ruleId: translation-consistency
@@ -620,7 +626,8 @@ diagnosticExemptions:
         - rented
         - 0
     reason: 出租牌列出剩余租期，显示“已出租”；两个 GUI 错误条目的 lore 明确同时限制 rented or sold，显示“已出租或出售”保留了该按钮实际适用范围。
-  - diagnosticId: 2e19fe841934c87ad50108951bf4705790372bd4aaab97af874712302c97f570
+  - kind: diagnostic
+    id: 2e19fe841934c87ad50108951bf4705790372bd4aaab97af874712302c97f570
     objectId: 7c3c483fce03621ac2c90543d88bb069d0fd478a239bad16878d7574a44b6a6c
     contentFingerprint: e6eb081c4b59c6b4b195aad8639d679165af4d06b2dd4f9727d730905e5825fc
     ruleId: minimessage-tags
@@ -648,7 +655,8 @@ diagnosticExemptions:
         - migrate
         - confirm
     reason: 固定 8.9.2 原文 hover 起首含无匹配打开的 </t>，官方宽容解析会留下可见字面串。保留真实来源基线及摘要，仅就此上游具体 nesting 诊断请求决定；不将来源错误自动视为通过。
-  - diagnosticId: 0e152f8d3df65b646b5d6afdc23266a606112d1403419451e1367f4455a87645
+  - kind: diagnostic
+    id: 0e152f8d3df65b646b5d6afdc23266a606112d1403419451e1367f4455a87645
     objectId: a25c23531f230d411ed3362515e9e67d8c567ee71f58e2e78519bb5e54f3715e
     contentFingerprint: 22e520048b3f570f14909827fddd86eb5efef9529df1b506c0f37695c0d2f6f0
     ruleId: terminology
@@ -674,7 +682,8 @@ diagnosticExemptions:
         - "5"
         - title
     reason: levels.land.levels.5.title 是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。
-  - diagnosticId: 4092f6396c7affac83836150f10d557906d0087d4146591e8f6e3ea5a0882aa4
+  - kind: diagnostic
+    id: 4092f6396c7affac83836150f10d557906d0087d4146591e8f6e3ea5a0882aa4
     objectId: cb1632112357e817b3d0698f8fd4f2eee06ac1e6ff4245dc45b72db78f5126f0
     contentFingerprint: 3b303ac6a54459bebe7d0f1a8a7479ce1f22854d6e58f9f1aaa15bfe09e157f1
     ruleId: terminology
@@ -700,7 +709,8 @@ diagnosticExemptions:
         - "2"
         - title
     reason: levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation 实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。
-  - diagnosticId: 9fb762720c274b1d65105a51df70bebff58a0424fe1a9f5ec15d290a6350bb49
+  - kind: diagnostic
+    id: 9fb762720c274b1d65105a51df70bebff58a0424fe1a9f5ec15d290a6350bb49
     objectId: e1726dd2f15f096d16f31e2ebb335e2715bf16da46d8cca15400053d0ed67d28
     contentFingerprint: a37e3cde83e6dbf0029afcb1dfeb02f0ad52dd9503315ac84646a201c0132abd
     ruleId: minimessage-tags
@@ -735,7 +745,8 @@ diagnosticExemptions:
         - migrate
         - confirm
     reason: target 仅删除 hover 起首会显示为字面文字的孤立 </t>，保持主题、命令和变量。source 仍原样保存，因此 hover-text context 少一个 closing t；只接受这一具体 tag-mismatch，其他标签、变量和语法检查继续生效。
-  - diagnosticId: b9a3f8c4ba45e93feba2a671c14868a4fecefbc28d17cd4a3dc63bf96e995629
+  - kind: diagnostic
+    id: b9a3f8c4ba45e93feba2a671c14868a4fecefbc28d17cd4a3dc63bf96e995629
     objectId: fe5c7ac97114881e0a6ba6fab8564e41f8a2fbe6a07b1a06bebd3fcf7c1499e8
     contentFingerprint: 1bb5cced56b34ecfa27c176767b7d3e64d3741aa768e1d7d48bb8438c4e12f91
     ruleId: translation-consistency
@@ -824,4 +835,3 @@ diagnosticExemptions:
         - land
         - name
     reason: levels.land.levels.5.title 是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。
-sameTextConfirmations: []

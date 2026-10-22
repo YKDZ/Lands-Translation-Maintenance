@@ -156,7 +156,7 @@ void describe("跨消息翻译一致性", () => {
       "exempt",
       "--project",
       divergent.directory,
-      "--diagnostic",
+      "--id",
       String(issues[0]?.diagnosticId),
       "--reason",
       "此场景按业务上下文保留不同译法",
@@ -451,7 +451,7 @@ void describe("跨消息翻译一致性", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(group.diagnosticId),
       "--reason",
       "临时复核具体同源译文组",
@@ -623,7 +623,7 @@ void describe("跨消息翻译一致性", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(group.diagnosticId),
       "--reason",
       "临时复核参与消息删除后的生命周期",
@@ -722,7 +722,7 @@ void describe("跨消息翻译一致性", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(group.diagnosticId),
       "--reason",
       "临时复核列表项删除后的生命周期",
@@ -833,7 +833,7 @@ void describe("跨消息翻译一致性", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(group.diagnosticId),
       "--reason",
       "临时复核列表项 hover 生命周期",
@@ -1002,7 +1002,7 @@ void describe("跨消息翻译一致性", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(group.diagnosticId),
       "--reason",
       "临时复核 hover 表面删除后的生命周期",
@@ -1386,9 +1386,10 @@ void describe("跨消息翻译一致性", () => {
       "--output-format",
       "structured",
     );
-    const candidates = readReport(
-      candidateReport.stdout || candidateReport.stderr,
-    ).sameTextToConfirm as readonly Record<string, unknown>[];
+    const candidates = (
+      readReport(candidateReport.stdout || candidateReport.stderr)
+        .exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     const greeting = candidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -1398,11 +1399,11 @@ void describe("跨消息翻译一致性", () => {
     if (greeting === undefined) throw new Error("缺少同文待确认消息");
 
     const confirmed = runCli(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
-      String(greeting.candidateId),
+      "--id",
+      String(greeting.id),
       "--reason",
       "品牌名在此处保留英文",
       "--output-format",

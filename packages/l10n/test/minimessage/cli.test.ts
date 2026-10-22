@@ -6,6 +6,7 @@ import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { strToU8, unzipSync, zipSync } from "fflate";
+import { parse as parseYaml } from "yaml";
 
 import {
   createProject,
@@ -250,7 +251,7 @@ void describe("MiniMessage 官方检查制品", () => {
         "exempt",
         "--project",
         project.directory,
-        "--diagnostic",
+        "--id",
         String(diagnostic.diagnosticId),
         "--reason",
         "分别覆盖两个标签差异",
@@ -797,7 +798,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(blue.diagnosticId),
       "--reason",
       "覆盖标签豁免生命周期测试",
@@ -4157,7 +4158,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(selected.diagnosticId),
       "--reason",
       "此变量由其他上下文提供",
@@ -4237,7 +4238,7 @@ void describe("MiniMessage 官方检查制品", () => {
         "exempt",
         "--project",
         project.directory,
-        "--diagnostic",
+        "--id",
         String(issue.diagnosticId),
         "--reason",
         `此处命令参数由运行时约定，问题 ${index + 1}`,
@@ -4251,7 +4252,13 @@ void describe("MiniMessage 官方检查制品", () => {
       join(project.directory, ".l10n/exceptions.yml"),
       "utf8",
     );
-    assert.equal(exceptionText.match(/diagnosticId:/gu)?.length, 2);
+    const savedExceptions = parseYaml(exceptionText) as {
+      records: readonly { id: string }[];
+    };
+    assert.deepEqual(
+      new Set(savedExceptions.records.map((record) => record.id)),
+      new Set(issues.map((issue) => issue.diagnosticId)),
+    );
     const afterBoth = runCli(
       "check",
       "--project",
@@ -4346,7 +4353,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(original.diagnosticId),
       "--reason",
       "此遗留 token 由上游运行时支持",
@@ -4415,7 +4422,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(original.diagnosticId),
       "--reason",
       "不得使用消息内容变更前的诊断",
@@ -4471,7 +4478,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(selected.diagnosticId),
       "--reason",
       "解析器不可用时不能确认旧诊断",
@@ -4485,7 +4492,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(selected.diagnosticId),
       "--reason",
       "聊天主题范围内没有此 token 定义",
@@ -4607,8 +4614,10 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    const candidates = readReport(before.stdout || before.stderr)
-      .sameTextToConfirm as readonly Record<string, unknown>[];
+    const candidates = (
+      readReport(before.stdout || before.stderr)
+        .exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     const greeting = candidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -4616,13 +4625,13 @@ void describe("MiniMessage 官方检查制品", () => {
     );
     assert.ok(greeting);
     if (greeting === undefined) throw new Error("缺少同文候选");
-    const candidateId = String(greeting.candidateId);
+    const candidateId = String(greeting.id);
 
     const confirmed = runCliWithoutJava(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
+      "--id",
       candidateId,
       "--reason",
       "此名称按品牌规范保留英文",
@@ -4632,16 +4641,13 @@ void describe("MiniMessage 官方检查制品", () => {
     assert.equal(confirmed.status, 0, confirmed.stderr);
     const confirmationEnvelope = JSON.parse(confirmed.stdout) as {
       readonly data: {
-        readonly confirmation: Readonly<Record<string, unknown>>;
+        readonly exception: Readonly<Record<string, unknown>>;
       };
     };
-    assert.equal(confirmationEnvelope.data.confirmation.kind, "same-text");
+    assert.equal(confirmationEnvelope.data.exception.kind, "same-text");
+    assert.equal(confirmationEnvelope.data.exception.id, candidateId);
     assert.equal(
-      confirmationEnvelope.data.confirmation.candidateId,
-      candidateId,
-    );
-    assert.equal(
-      confirmationEnvelope.data.confirmation.reason,
+      confirmationEnvelope.data.exception.reason,
       "此名称按品牌规范保留英文",
     );
     const exceptionPath = join(project.directory, ".l10n/exceptions.yml");
@@ -4668,7 +4674,7 @@ void describe("MiniMessage 官方检查制品", () => {
       >[];
       assert.equal(
         diagnostics.some(
-          (diagnostic) => diagnostic.code === "same-text.unable-to-evaluate",
+          (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
         ),
         false,
         operation,
@@ -4725,7 +4731,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(variableIssue.diagnosticId),
       "--reason",
       "此变量在当前界面由服务器补齐",
@@ -4833,7 +4839,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(selected.diagnosticId),
       "--reason",
       "此变量由运行时接受",
@@ -4997,7 +5003,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(syntaxIssue.diagnosticId),
       "--reason",
       "此旧颜色码由上游运行时接受",
@@ -5090,7 +5096,7 @@ void describe("MiniMessage 官方检查制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(selected.diagnosticId),
       "--reason",
       "只接受第一处已知主题 token",
@@ -5213,8 +5219,10 @@ void describe("MiniMessage 官方检查制品", () => {
       "--output-format",
       "structured",
     );
-    const candidates = readReport(status.stdout || status.stderr)
-      .sameTextToConfirm as readonly Record<string, unknown>[];
+    const candidates = (
+      readReport(status.stdout || status.stderr)
+        .exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     const greeting = candidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -5224,11 +5232,11 @@ void describe("MiniMessage 官方检查制品", () => {
     if (greeting === undefined) throw new Error("缺少同文候选");
 
     const confirmed = runCli(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
-      String(greeting.candidateId),
+      "--id",
+      String(greeting.id),
       "--reason",
       "测试对象的原文和译文虽相同，仍需保留语法诊断",
       "--output-format",
@@ -6205,7 +6213,7 @@ void describe("术语和风格正式检查", () => {
       "exempt",
       "--project",
       result.project.directory,
-      "--diagnostic",
+      "--id",
       String(issue.diagnosticId),
       "--reason",
       "原译文需要维护者复核",
@@ -6267,7 +6275,7 @@ void describe("术语和风格正式检查", () => {
       "exempt",
       "--project",
       result.project.directory,
-      "--diagnostic",
+      "--id",
       String(issue.diagnosticId),
       "--reason",
       "只适用于原来的悬浮术语对象",
@@ -6372,11 +6380,13 @@ void describe("术语和风格正式检查", () => {
       checked.stderr || checked.stdout,
     );
     const seed = (
-      report.sameTextToConfirm as readonly Record<string, unknown>[]
-    ).find((candidate) => {
-      const message = candidate.message as Record<string, unknown>;
-      return JSON.stringify(message.path) === '["messages","greeting"]';
-    });
+      report.exceptionCandidates as readonly Record<string, unknown>[]
+    )
+      .filter((candidate) => candidate.kind === "same-text")
+      .find((candidate) => {
+        const message = candidate.message as Record<string, unknown>;
+        return JSON.stringify(message.path) === '["messages","greeting"]';
+      });
     assert.ok(seed, checked.stderr || checked.stdout);
     assert.equal(seed.pendingReason, "translation-seed");
     assert.equal(
@@ -6420,10 +6430,9 @@ void describe("术语和风格正式检查", () => {
       "structured",
     );
     const beforeReport = readReport(before.stdout || before.stderr);
-    const candidates = beforeReport.sameTextToConfirm as readonly Record<
-      string,
-      unknown
-    >[];
+    const candidates = (
+      beforeReport.exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     const greeting = candidates.find((candidate) => {
       const message = candidate.message as Record<string, unknown>;
       return JSON.stringify(message.path) === '["messages","greeting"]';
@@ -6439,11 +6448,11 @@ void describe("术语和风格正式检查", () => {
     assert.equal(beforeTerms[0]?.code, "terminology.translation-missing");
 
     const confirmed = runCli(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
-      String(greeting.candidateId),
+      "--id",
+      String(greeting.id),
       "--reason",
       "同文确认不代表术语已经译好",
       "--output-format",

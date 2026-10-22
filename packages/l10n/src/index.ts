@@ -6,8 +6,7 @@ export {
   operationExitCode,
   applySyncProject,
   previewSyncProject,
-  recordDiagnosticExemption,
-  confirmSameText,
+  recordException,
 } from "#/operations";
 export { builtInRules, evaluateRules } from "#/rules";
 export type {
@@ -15,7 +14,7 @@ export type {
   SyncApplyOptions,
   SyncApplyResult,
   ExceptionRecordingOptions,
-  ConfirmationReceipt,
+  ExceptionReceipt,
 } from "#/operations";
 export type { RuleEvaluationOptions } from "#/rules";
 export type {
@@ -51,3 +50,5 @@ export type {
   TranslationMapping,
 } from "#/model";
 export { formatForScene, sceneMatchesCategory } from "#/field-metadata";
+
+export type { ExceptionCandidate, ExceptionRecord } from "#/model";

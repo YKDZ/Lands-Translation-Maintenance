@@ -19,9 +19,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   applySyncProject,
-  confirmSameText,
   initializeProject,
-  recordDiagnosticExemption,
+  recordException,
 } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -447,11 +446,10 @@ void describe("CLI 制品", () => {
     assert.match(result.stdout, /状态/);
     assert.match(result.stdout, /检查/);
     assert.match(result.stdout, /exempt/);
-    assert.match(result.stdout, /confirm-same-text/);
-    const confirmHelp = runCli("confirm-same-text", "--help");
-    assert.equal(confirmHelp.status, 0, confirmHelp.stderr);
-    assert.match(confirmHelp.stdout, /--candidate/);
-    assert.match(confirmHelp.stdout, /--reason/);
+    const exemptHelp = runCli("exempt", "--help");
+    assert.equal(exemptHelp.status, 0, exemptHelp.stderr);
+    assert.match(exemptHelp.stdout, /--id/);
+    assert.match(exemptHelp.stdout, /--reason/);
     assert.match(result.stdout, /sync/);
     assert.match(result.stdout, /schema/);
   });
@@ -2547,8 +2545,8 @@ void describe("CLI 制品", () => {
     assert.equal((envelope as { readonly kind?: unknown }).kind, "data");
     assert.match(result.stdout, /schemaVersion/);
     assert.match(result.stdout, /status/);
-    assert.match(result.stdout, /confirm-same-text/);
-    assert.match(result.stdout, /--candidate/);
+    assert.match(result.stdout, /exceptionCandidates/);
+    assert.match(result.stdout, /--id/);
     assert.match(result.stdout, /knownOutOfScopeVisibleTexts/);
   });
 
@@ -5566,22 +5564,24 @@ void describe("CLI 制品", () => {
     assert.equal(status.status, 0, status.stderr);
     const candidate = (
       readReport(status.stdout || status.stderr)
-        .sameTextToConfirm as readonly Record<string, unknown>[]
-    ).find(
-      (item) =>
-        (item.message as Record<string, unknown>).path !== undefined &&
-        JSON.stringify((item.message as Record<string, unknown>).path) ===
-          '["messages","greeting"]',
-    );
+        .exceptionCandidates as readonly Record<string, unknown>[]
+    )
+      .filter((candidate) => candidate.kind === "same-text")
+      .find(
+        (item) =>
+          (item.message as Record<string, unknown>).path !== undefined &&
+          JSON.stringify((item.message as Record<string, unknown>).path) ===
+            '["messages","greeting"]',
+      );
     assert.ok(candidate);
     if (candidate === undefined) throw new Error("缺少同文候选");
 
     const confirmation = runCli(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
-      String(candidate.candidateId),
+      "--id",
+      String(candidate.id),
       "--reason",
       "结构规则关闭时仍须检查映射前提",
       "--output-format",
@@ -6004,6 +6004,146 @@ void describe("CLI 制品", () => {
       },
     ]);
   });
+  void it("同一入口和记录集合接受两类例外，分别解除待译和具体诊断", async (t) => {
+    const project = await createProject(t);
+    const targetPath = join(project.directory, "lang/zh.yml");
+    await writeFile(
+      targetPath,
+      (await readFile(targetPath, "utf8")).replace(
+        "greeting: 你好",
+        "greeting: Hello",
+      ),
+    );
+    const initialized = runCli(
+      "init",
+      "--project",
+      project.directory,
+      "--jar",
+      project.jarFile,
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    await writeFile(
+      targetPath,
+      (await readFile(targetPath, "utf8"))
+        .replace("  welcome: Welcome\n", "")
+        .replace("  commands:\n    registered: 已注册\n", ""),
+    );
+    const checked = runCli(
+      "check",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const report = readReport(checked.stdout || checked.stderr);
+    const candidates = report.exceptionCandidates as readonly Record<
+      string,
+      unknown
+    >[];
+    const sameText = candidates.find(
+      (candidate) =>
+        candidate.kind === "same-text" &&
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+          '["messages","greeting"]',
+    );
+    const missing = candidates.find(
+      (candidate) =>
+        candidate.kind === "diagnostic" &&
+        candidate.code === "message.missing" &&
+        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
+          '["messages","welcome"]',
+    );
+    assert.ok(sameText);
+    assert.ok(missing);
+    for (const candidate of [sameText, missing]) {
+      const recorded = runCli(
+        "exempt",
+        "--project",
+        project.directory,
+        "--id",
+        String(candidate.id),
+        "--reason",
+        "已复核此具体例外",
+        "--output-format",
+        "structured",
+      );
+      assert.equal(recorded.status, 0, recorded.stdout || recorded.stderr);
+      const receipt = readEnvelope(recorded.stdout).data?.exception as Record<
+        string,
+        unknown
+      >;
+      assert.equal(receipt.id, candidate.id);
+      assert.equal(receipt.kind, candidate.kind);
+    }
+    const renewed = runCli(
+      "exempt",
+      "--project",
+      project.directory,
+      "--id",
+      String(missing.id),
+      "--reason",
+      "补充接受理由",
+    );
+    assert.equal(renewed.status, 0, renewed.stdout || renewed.stderr);
+    const saved = parseYaml(
+      await readFile(join(project.directory, ".l10n/exceptions.yml"), "utf8"),
+    ) as {
+      schemaVersion: number;
+      records: readonly Record<string, unknown>[];
+    };
+    assert.equal(saved.schemaVersion, 2);
+    assert.equal(saved.records.length, 2);
+    assert.deepEqual(
+      new Set(saved.records.map((record) => record.kind)),
+      new Set(["diagnostic", "same-text"]),
+    );
+    assert.equal(
+      saved.records.find((record) => record.id === missing.id)?.reason,
+      "补充接受理由",
+    );
+    const beforeStatus = await snapshotProjectFiles(project.directory);
+    const status = runCli(
+      "status",
+      "--project",
+      project.directory,
+      "--output-format",
+      "structured",
+    );
+    const after = readReport(status.stdout || status.stderr);
+    assert.equal(status.status, 1);
+    const summary = after.summary as Record<string, unknown>;
+    assert.equal(summary.confirmedSameText, 1);
+    assert.equal(summary.sameTextCandidates, 0);
+    assert.equal(summary.pendingTranslations, 0);
+    const remaining = after.exceptionCandidates as readonly Record<
+      string,
+      unknown
+    >[];
+    assert.ok(
+      !remaining.some(
+        (candidate) =>
+          candidate.id === sameText.id || candidate.id === missing.id,
+      ),
+    );
+    const diagnostics = after.diagnostics as readonly Record<string, unknown>[];
+    assert.ok(
+      !diagnostics.some((diagnostic) => diagnostic.diagnosticId === missing.id),
+    );
+    assert.ok(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "message.missing" &&
+          JSON.stringify(
+            (diagnostic.message as Record<string, unknown>).path,
+          ) === '["messages","commands","registered"]',
+      ),
+    );
+    assert.deepEqual(
+      await snapshotProjectFiles(project.directory),
+      beforeStatus,
+    );
+  });
+
   void it("按当前诊断 ID 记录精确豁免，邻近诊断仍然报告", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
@@ -6058,7 +6198,7 @@ void describe("CLI 制品", () => {
       "exempt",
       "--project",
       project.directory,
-      "--diagnostic",
+      "--id",
       String(welcome.diagnosticId),
       "--reason",
       "此提示由维护者决定保留为空",
@@ -6066,10 +6206,10 @@ void describe("CLI 制品", () => {
       "structured",
     );
     assert.equal(added.status, 0, added.stderr);
-    const confirmation = readEnvelope(added.stdout).data?.confirmation as
+    const confirmation = readEnvelope(added.stdout).data?.exception as
       | Record<string, unknown>
       | undefined;
-    assert.equal(confirmation?.diagnosticId, welcome.diagnosticId);
+    assert.equal(confirmation?.id, welcome.diagnosticId);
     assert.equal(confirmation?.contentFingerprint, welcome.contentFingerprint);
 
     const exceptionPath = join(project.directory, ".l10n/exceptions.yml");
@@ -6110,15 +6250,12 @@ void describe("CLI 制品", () => {
     );
     assert.deepEqual(await readFile(exceptionPath), exceptionBytes);
     const exceptionFile = parseYaml(exceptionBytes.toString("utf8")) as {
-      diagnosticExemptions: readonly Record<string, unknown>[];
+      records: readonly Record<string, unknown>[];
     };
-    assert.equal(exceptionFile.diagnosticExemptions.length, 1);
+    assert.equal(exceptionFile.records.length, 1);
+    assert.equal(exceptionFile.records[0]?.id, welcome.diagnosticId);
     assert.equal(
-      exceptionFile.diagnosticExemptions[0]?.diagnosticId,
-      welcome.diagnosticId,
-    );
-    assert.equal(
-      exceptionFile.diagnosticExemptions[0]?.reason,
+      exceptionFile.records[0]?.reason,
       "此提示由维护者决定保留为空",
     );
 
@@ -6244,8 +6381,10 @@ void describe("CLI 制品", () => {
       "structured",
     );
     assert.equal(beforeSync.status, 0, beforeSync.stderr);
-    const oldCandidates = readReport(beforeSync.stdout || beforeSync.stderr)
-      .sameTextToConfirm as readonly Record<string, unknown>[];
+    const oldCandidates = (
+      readReport(beforeSync.stdout || beforeSync.stderr)
+        .exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     const oldGreeting = oldCandidates.find(
       (candidate) =>
         JSON.stringify((candidate.message as Record<string, unknown>).path) ===
@@ -6253,7 +6392,7 @@ void describe("CLI 制品", () => {
     );
     assert.ok(oldGreeting);
     if (oldGreeting === undefined) throw new Error("缺少旧同文候选");
-    const oldCandidateId = String(oldGreeting.candidateId);
+    const oldCandidateId = String(oldGreeting.id);
 
     const candidateJar = join(project.directory, "candidate.jar");
     await writeJar(candidateJar, {
@@ -6280,10 +6419,10 @@ void describe("CLI 制品", () => {
     assert.equal(synced.status, 0, synced.stderr);
 
     const oldSelection = runCli(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
+      "--id",
       oldCandidateId,
       "--reason",
       "不应沿用旧内容选择",
@@ -6309,10 +6448,9 @@ void describe("CLI 制品", () => {
     );
     assert.equal(before.status, 1, before.stderr);
     const beforeReport = readReport(before.stdout || before.stderr);
-    const candidates = beforeReport.sameTextToConfirm as readonly Record<
-      string,
-      unknown
-    >[];
+    const candidates = (
+      beforeReport.exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     const greeting = candidates.find(
       (candidate) =>
         (candidate.message as Record<string, unknown>).path &&
@@ -6323,13 +6461,13 @@ void describe("CLI 制品", () => {
     if (greeting === undefined) throw new Error("缺少同文待确认消息");
     const greetingMessage = greeting.message as Record<string, unknown>;
     const greetingId = String(greetingMessage.id);
-    const candidateId = String(greeting.candidateId);
+    const candidateId = String(greeting.id);
     assert.match(candidateId, /^[0-9a-f]{64}$/u);
     assert.notEqual(candidateId, oldCandidateId);
 
     const beforeRace = await readFile(targetPath, "utf8");
     await assert.rejects(
-      confirmSameText(
+      recordException(
         project.directory,
         candidateId,
         "写入前内容变化时不得确认旧候选",
@@ -6343,7 +6481,7 @@ void describe("CLI 制品", () => {
         },
       ),
       (error: unknown) =>
-        error instanceof Error && /写入前同文候选已变化/u.test(error.message),
+        error instanceof Error && /写入前例外对象已变化/u.test(error.message),
     );
     await assert.rejects(
       readFile(join(project.directory, ".l10n/exceptions.yml")),
@@ -6352,37 +6490,29 @@ void describe("CLI 制品", () => {
     await writeFile(targetPath, beforeRace);
 
     const confirmed = runCli(
-      "confirm-same-text",
+      "exempt",
       "--project",
       project.directory,
-      "--candidate",
+      "--id",
       candidateId,
       "--reason",
       "品牌名在此处保留英文",
     );
     assert.equal(confirmed.status, 0, confirmed.stderr);
-    assert.match(confirmed.stdout, /已确认同文候选/u);
+    assert.match(confirmed.stdout, /已记录例外/u);
     assert.match(confirmed.stdout, new RegExp(candidateId));
     assert.match(confirmed.stdout, /品牌名在此处保留英文/u);
     const exceptionPath = join(project.directory, ".l10n/exceptions.yml");
     const exceptionBytes = await readFile(exceptionPath);
     const savedExceptions = parseYaml(exceptionBytes.toString("utf8")) as {
-      sameTextConfirmations: readonly Record<string, unknown>[];
+      records: readonly Record<string, unknown>[];
     };
-    assert.equal(savedExceptions.sameTextConfirmations.length, 1);
+    assert.equal(savedExceptions.records.length, 1);
     assert.equal(
-      (
-        savedExceptions.sameTextConfirmations[0]?.message as Record<
-          string,
-          unknown
-        >
-      )?.id,
+      (savedExceptions.records[0]?.message as Record<string, unknown>)?.id,
       greetingId,
     );
-    assert.equal(
-      savedExceptions.sameTextConfirmations[0]?.candidateId,
-      candidateId,
-    );
+    assert.equal(savedExceptions.records[0]?.id, candidateId);
 
     const quotedTarget = (await readFile(targetPath, "utf8")).replace(
       "greeting: Hola",
@@ -6404,14 +6534,13 @@ void describe("CLI 制品", () => {
     assert.equal(summary.confirmedSameText, 1, JSON.stringify(afterReport));
     assert.equal(summary.sameTextCandidates, 0);
     assert.equal(summary.pendingTranslations, 0);
-    const currentCandidates = afterReport.sameTextToConfirm as readonly Record<
-      string,
-      unknown
-    >[];
+    const currentCandidates = (
+      afterReport.exceptionCandidates as readonly Record<string, unknown>[]
+    ).filter((candidate) => candidate.kind === "same-text");
     assert.equal(currentCandidates.length, 0);
     assert.equal(
       (afterReport.diagnostics as readonly Record<string, unknown>[]).some(
-        (diagnostic) => diagnostic.code === "same-text.unable-to-evaluate",
+        (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
       ),
       false,
     );
@@ -6434,7 +6563,9 @@ void describe("CLI 制品", () => {
     assert.equal(checkSummary.confirmedSameText, 1);
     assert.equal(checkSummary.pendingTranslations, 0);
     assert.equal(
-      (checkedReport.sameTextToConfirm as readonly unknown[]).length,
+      (
+        checkedReport.exceptionCandidates as readonly Record<string, unknown>[]
+      ).filter((candidate) => candidate.kind === "same-text").length,
       0,
     );
     assert.equal(
@@ -6462,7 +6593,7 @@ void describe("CLI 制品", () => {
     ).diagnostics as readonly Record<string, unknown>[];
     assert.equal(
       staleDiagnostics.some(
-        (diagnostic) => diagnostic.code === "same-text.review-required",
+        (diagnostic) => diagnostic.code === "exception.review-required",
       ),
       true,
     );
@@ -6502,7 +6633,7 @@ void describe("CLI 制品", () => {
     ).diagnostics as readonly Record<string, unknown>[];
     assert.equal(
       deletionDiagnostics.some(
-        (diagnostic) => diagnostic.code === "same-text.orphaned",
+        (diagnostic) => diagnostic.code === "exception.orphaned",
       ),
       true,
     );
@@ -6541,12 +6672,15 @@ void describe("CLI 制品", () => {
     );
     const sameTextCandidate = (
       readReport(status.stdout || status.stderr)
-        .sameTextToConfirm as readonly Record<string, unknown>[]
-    ).find(
-      (candidate) =>
-        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
-        '["messages","greeting"]',
-    );
+        .exceptionCandidates as readonly Record<string, unknown>[]
+    )
+      .filter((candidate) => candidate.kind === "same-text")
+      .find(
+        (candidate) =>
+          JSON.stringify(
+            (candidate.message as Record<string, unknown>).path,
+          ) === '["messages","greeting"]',
+      );
     assert.ok(sameTextCandidate);
     if (sameTextCandidate === undefined)
       throw new Error("缺少待确认的同文候选");
@@ -6583,11 +6717,11 @@ void describe("CLI 制品", () => {
 
     for (const result of [
       runCli(
-        "confirm-same-text",
+        "exempt",
         "--project",
         project.directory,
-        "--candidate",
-        String(sameTextCandidate.candidateId),
+        "--id",
+        String(sameTextCandidate.id),
         "--reason",
         "未同步时不得确认",
         "--output-format",
@@ -6597,7 +6731,7 @@ void describe("CLI 制品", () => {
         "exempt",
         "--project",
         project.directory,
-        "--diagnostic",
+        "--id",
         String(missing.diagnosticId),
         "--reason",
         "未同步时不得豁免",
@@ -6651,7 +6785,7 @@ void describe("CLI 制品", () => {
     if (missing === undefined) throw new Error("缺少待豁免的消息诊断");
 
     await assert.rejects(
-      recordDiagnosticExemption(
+      recordException(
         project.directory,
         String(missing.diagnosticId),
         "写入前对象发生变化",
@@ -6662,7 +6796,7 @@ void describe("CLI 制品", () => {
         },
       ),
       (error: unknown) =>
-        error instanceof Error && /写入前诊断对象已变化/u.test(error.message),
+        error instanceof Error && /写入前例外对象已变化/u.test(error.message),
     );
     await assert.rejects(
       readFile(join(project.directory, ".l10n/exceptions.yml")),

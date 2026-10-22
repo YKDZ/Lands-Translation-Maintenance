@@ -452,18 +452,48 @@ export interface CheckCoverage {
   readonly unavailableCapabilities: readonly string[];
 }
 
+interface ExceptionSubject {
+  readonly id: string;
+  readonly objectId: string;
+  readonly contentFingerprint: string;
+  readonly location: DiagnosticLocation;
+}
+
+export interface DiagnosticException extends ExceptionSubject {
+  readonly kind: "diagnostic";
+  readonly ruleId: string;
+  readonly code: string;
+  readonly message?: MessageIdentity;
+  readonly origin?: MiniMessageOrigin;
+  readonly requiredInputDependencies?: readonly RuleInputDependency[];
+}
+
+export interface SameTextException extends ExceptionSubject {
+  readonly kind: "same-text";
+  readonly pendingReason: SameTextPendingReason;
+  readonly message: MessageIdentity;
+}
+
+export type ExceptionCandidate =
+  | (DiagnosticException & { readonly description: string })
+  | (SameTextException & {
+      readonly description: string;
+      readonly source: JsonValue;
+      readonly target: JsonValue;
+    });
+
+export type ExceptionRecord = (DiagnosticException | SameTextException) & {
+  readonly reason: string;
+};
+
+export type SameTextPendingReason = "translation-seed" | "same-text-candidate";
+
 export interface ProjectReport {
   readonly operation: "init" | "status" | "check";
   readonly state: "ready" | "issues" | "incomplete";
   readonly summary: ProjectSummary;
   readonly diagnostics: readonly Diagnostic[];
-  readonly sameTextToConfirm: readonly {
-    readonly candidateId: string;
-    readonly message: MessageIdentity;
-    readonly source: JsonValue;
-    readonly target: JsonValue;
-    readonly pendingReason: "translation-seed" | "same-text-candidate";
-  }[];
+  readonly exceptionCandidates: readonly ExceptionCandidate[];
   readonly knownExcludedResources: readonly KnownExcludedResource[];
   readonly knownOutOfScopeVisibleTexts: readonly KnownOutOfScopeVisibleText[];
   readonly coverage?: CheckCoverage;

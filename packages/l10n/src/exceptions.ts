@@ -2,42 +2,17 @@ import { stringify } from "yaml";
 import { z } from "zod";
 
 import type {
-  DiagnosticLocation,
+  ExceptionRecord,
   JsonValue,
   MessageIdentity,
-  MiniMessageOrigin,
-  RuleInputDependency,
+  SameTextPendingReason,
 } from "#/model";
 import { canonicalJson, sha256 } from "#/value";
 import { parseYaml } from "#/yaml-data";
 
-export interface DiagnosticExemptionRecord {
-  readonly diagnosticId: string;
-  readonly objectId: string;
-  readonly contentFingerprint: string;
-  readonly ruleId: string;
-  readonly code: string;
-  readonly message?: MessageIdentity;
-  readonly origin?: MiniMessageOrigin;
-  readonly requiredInputDependencies?: readonly RuleInputDependency[];
-  readonly location: DiagnosticLocation;
-  readonly reason: string;
-}
-
-export interface SameTextConfirmationRecord {
-  readonly candidateId: string;
-  readonly pendingReason: "translation-seed" | "same-text-candidate";
-  readonly message: MessageIdentity;
-  readonly contentFingerprint: string;
-  readonly reason: string;
-}
-
-export type SameTextPendingReason = "translation-seed" | "same-text-candidate";
-
 export interface ExceptionRecords {
-  readonly schemaVersion: 1;
-  readonly diagnosticExemptions: readonly DiagnosticExemptionRecord[];
-  readonly sameTextConfirmations: readonly SameTextConfirmationRecord[];
+  readonly schemaVersion: 2;
+  readonly records: readonly ExceptionRecord[];
 }
 
 const messageIdentitySchema = z.object({
@@ -64,45 +39,52 @@ const requiredInputDependencySchema = z
     path: z.array(z.union([z.string(), z.number()])),
   })
   .strict();
-const diagnosticExemptionSchema = z
-  .object({
-    diagnosticId: z.string().regex(/^[0-9a-f]{64}$/),
-    objectId: z.string().regex(/^[0-9a-f]{64}$/),
-    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    ruleId: z.string().min(1),
-    code: z.string().min(1),
-    message: messageIdentitySchema.optional(),
-    origin: z.enum(["source", "target", "theme"]).optional(),
-    requiredInputDependencies: z
-      .array(requiredInputDependencySchema)
-      .optional(),
-    location: locationSchema,
-    reason: z.string().trim().min(1),
-  })
-  .strict();
-const sameTextConfirmationSchema = z
-  .object({
-    candidateId: z.string().regex(/^[0-9a-f]{64}$/),
-    pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
-    message: messageIdentitySchema,
-    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    reason: z.string().trim().min(1),
-  })
-  .strict();
+const subjectShape = {
+  id: z.string().regex(/^[0-9a-f]{64}$/),
+  objectId: z.string().regex(/^[0-9a-f]{64}$/),
+  contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  location: locationSchema,
+};
+const diagnosticExceptionSchema = z.object({
+  ...subjectShape,
+  kind: z.literal("diagnostic"),
+  ruleId: z.string().min(1),
+  code: z.string().min(1),
+  message: messageIdentitySchema.optional(),
+  origin: z.enum(["source", "target", "theme"]).optional(),
+  requiredInputDependencies: z.array(requiredInputDependencySchema).optional(),
+});
+const sameTextExceptionSchema = z.object({
+  ...subjectShape,
+  kind: z.literal("same-text"),
+  pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
+  message: messageIdentitySchema,
+});
+export const exceptionCandidateSchema = z.discriminatedUnion("kind", [
+  diagnosticExceptionSchema.extend({ description: z.string() }).strict(),
+  sameTextExceptionSchema
+    .extend({
+      description: z.string(),
+      source: z.json(),
+      target: z.json(),
+    })
+    .strict(),
+]);
+const recordShape = { reason: z.string().trim().min(1) };
 const exceptionRecordsSchema = z
   .object({
-    schemaVersion: z.literal(1),
-    diagnosticExemptions: z.array(diagnosticExemptionSchema),
-    sameTextConfirmations: z.array(sameTextConfirmationSchema),
+    schemaVersion: z.literal(2),
+    records: z.array(
+      z.discriminatedUnion("kind", [
+        diagnosticExceptionSchema.extend(recordShape).strict(),
+        sameTextExceptionSchema.extend(recordShape).strict(),
+      ]),
+    ),
   })
   .strict();
 
 export function emptyExceptionRecords(): ExceptionRecords {
-  return {
-    schemaVersion: 1,
-    diagnosticExemptions: [],
-    sameTextConfirmations: [],
-  };
+  return { schemaVersion: 2, records: [] };
 }
 
 export function parseExceptionRecords(source: string): ExceptionRecords {
@@ -119,12 +101,12 @@ export function parseExceptionRecords(source: string): ExceptionRecords {
   }
   const records = result.data as ExceptionRecords;
   if (
-    new Set(records.diagnosticExemptions.map((record) => record.objectId))
-      .size !== records.diagnosticExemptions.length ||
-    new Set(records.sameTextConfirmations.map((record) => record.message.id))
-      .size !== records.sameTextConfirmations.length
+    new Set(records.records.map((record) => record.objectId)).size !==
+      records.records.length ||
+    new Set(records.records.map((record) => record.id)).size !==
+      records.records.length
   ) {
-    throw new Error("例外文件包含重复的诊断对象或消息记录");
+    throw new Error("例外文件包含重复的例外对象或 ID");
   }
   return records;
 }
@@ -164,4 +146,8 @@ export function sameTextCandidateId(
       contentFingerprint: sameTextContentFingerprint(message, source, target),
     }),
   );
+}
+
+export function sameTextObjectId(message: MessageIdentity): string {
+  return sha256(canonicalJson({ kind: "same-text", messageId: message.id }));
 }

@@ -12,11 +12,9 @@ import {
   parseExceptionRecords,
   sameTextCandidateId,
   sameTextContentFingerprint,
+  sameTextObjectId,
   serializeExceptionRecords,
-  type DiagnosticExemptionRecord,
   type ExceptionRecords,
-  type SameTextPendingReason,
-  type SameTextConfirmationRecord,
 } from "#/exceptions";
 import { readJarResources } from "#/jar";
 import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
@@ -33,6 +31,9 @@ import type {
   ConsumerConfiguration,
   Diagnostic,
   DiagnosticLocation,
+  ExceptionCandidate,
+  ExceptionRecord,
+  SameTextPendingReason,
   JsonValue,
   KnownExcludedResource,
   KnownOutOfScopeVisibleText,
@@ -122,20 +123,12 @@ export interface ExceptionRecordingOptions {
   readonly beforeApply?: () => Promise<void>;
 }
 
-export type ConfirmationReceipt =
-  | {
-      readonly kind: "diagnostic-exemption";
-      readonly diagnosticId: string;
-      readonly contentFingerprint: string;
-      readonly reason: string;
-    }
-  | {
-      readonly kind: "same-text";
-      readonly messageId: string;
-      readonly candidateId: string;
-      readonly contentFingerprint: string;
-      readonly reason: string;
-    };
+export interface ExceptionReceipt {
+  readonly kind: ExceptionRecord["kind"];
+  readonly id: string;
+  readonly contentFingerprint: string;
+  readonly reason: string;
+}
 
 export type SyncApplyResult =
   | {
@@ -664,11 +657,11 @@ function withoutTranslationReview(
   return reviewIndependent;
 }
 
-function sameTextMessagesToConfirm(
+function sameTextExceptionCandidates(
   project: ProjectView,
   lock: SyncLock,
   confirmedIds: ReadonlySet<string>,
-): ProjectReport["sameTextToConfirm"] {
+): readonly Extract<ExceptionCandidate, { kind: "same-text" }>[] {
   const seededIds = new Set(lock.translationSeeds.map((seed) => seed.id));
   const candidateIds = new Set(
     lock.sameTextCandidates.map((candidate) => candidate.id),
@@ -692,7 +685,16 @@ function sameTextMessagesToConfirm(
         source: message.source,
         target: message.target!,
         pendingReason,
-        candidateId: sameTextCandidateId(
+        kind: "same-text" as const,
+        objectId: sameTextObjectId(message),
+        contentFingerprint: sameTextContentFingerprint(
+          reviewIndependentMessage,
+          message.source,
+          message.target!,
+        ),
+        location: { file: message.targetFile, path: message.path },
+        description: "保留原文与译文相同",
+        id: sameTextCandidateId(
           reviewIndependentMessage,
           message.source,
           message.target!,
@@ -723,7 +725,7 @@ function makeReport(
     diagnostics: [...diagnostics].sort((left, right) =>
       compareText(canonicalJson(left), canonicalJson(right)),
     ),
-    sameTextToConfirm: sameTextMessagesToConfirm(
+    exceptionCandidates: sameTextExceptionCandidates(
       project,
       lock,
       confirmedSameTextIds,
@@ -2439,9 +2441,19 @@ interface EvaluatedSavedProject extends LoadedSavedProject {
 }
 
 interface SameTextResolution {
-  readonly notices: readonly Diagnostic[];
+  readonly resolutions: readonly ExceptionResolution[];
   readonly confirmedSameTextIds: ReadonlySet<string>;
 }
+
+type ExceptionResolution =
+  | { readonly record: ExceptionRecord; readonly state: "active" }
+  | {
+      readonly record: ExceptionRecord;
+      readonly state: "review-required" | "orphaned" | "unable-to-evaluate";
+      readonly expected: JsonValue;
+      readonly actual: JsonValue;
+      readonly location?: DiagnosticLocation;
+    };
 
 async function loadSavedProject(
   projectDirectory: string,
@@ -2582,109 +2594,83 @@ function withTranslationReview(
   };
 }
 
-function resolveSameTextConfirmations(
+function resolveSameTextException(
+  record: Extract<ExceptionRecord, { kind: "same-text" }>,
   view: ProjectView,
   lock: SyncLock,
-  exceptions: ExceptionRecords,
-): SameTextResolution {
-  const notices: Diagnostic[] = [];
-  const confirmedSameTextIds = new Set<string>();
-  const messages = new Map(
-    view.messages.map((message) => [message.id, message]),
-  );
-
-  for (const record of exceptions.sameTextConfirmations) {
-    const message = messages.get(record.message.id);
-    if (message === undefined) {
-      notices.push(
-        exceptionNotice(
-          "same-text.orphaned",
-          `同文消息已删除，请清理此记录；原理由：${record.reason}`,
-          { file: record.message.targetFile, path: record.message.path },
-          { state: "same source and target" },
-          { state: "message-missing" },
-        ),
-      );
-      continue;
-    }
-    if (
-      message.targetStatus === "blocked" ||
-      view.fileIssues.some(
-        (issue) =>
-          issue.file === message.targetFile &&
-          ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
-            issue.code,
-          ),
-      )
-    ) {
-      notices.push(
-        exceptionNotice(
-          "same-text.unable-to-evaluate",
-          `目标 YAML 或映射无法可靠读取，不能评估此同文确认；原理由：${record.reason}`,
-          { file: message.targetFile, path: message.path },
-          { state: "same source and target" },
-          { state: "unable-to-evaluate" },
-        ),
-      );
-      continue;
-    }
-    const pendingReason = pendingReasonForMessage(message.id, lock);
-    const isSameText =
-      message.targetStatus === "present" &&
-      message.target !== undefined &&
-      sameValue(message.target, message.source);
-    const fingerprint =
-      message.target === undefined
-        ? undefined
-        : sameTextContentFingerprint(message, message.source, message.target);
-    const candidateId =
-      isSameText && pendingReason !== undefined && message.target !== undefined
-        ? sameTextCandidateId(
-            message,
-            message.source,
-            message.target,
-            pendingReason,
-          )
-        : undefined;
-    if (
-      isSameText &&
-      pendingReason !== undefined &&
-      fingerprint === record.contentFingerprint &&
-      candidateId === record.candidateId &&
-      pendingReason === record.pendingReason
-    ) {
-      confirmedSameTextIds.add(message.id);
-      continue;
-    }
-    if (pendingReason !== undefined) {
-      notices.push(
-        exceptionNotice(
-          "same-text.review-required",
-          `原文、译文或消息定位已变化，需要重新确认同文；原理由：${record.reason}`,
-          { file: message.targetFile, path: message.path },
-          { contentFingerprint: record.contentFingerprint },
-          {
-            contentFingerprint: fingerprint ?? null,
-            candidateId: candidateId ?? null,
-            pendingReason,
-            targetStatus: message.targetStatus,
-          },
-        ),
-      );
-      continue;
-    }
-    notices.push(
-      exceptionNotice(
-        "same-text.orphaned",
-        `此消息当前没有待确认的同文原因，请清理记录；原理由：${record.reason}`,
-        { file: message.targetFile, path: message.path },
-        { state: "pending same-text reason" },
-        { state: "no matching reason" },
-      ),
-    );
+): ExceptionResolution {
+  const message = view.messages.find((item) => item.id === record.message.id);
+  if (message === undefined) {
+    return {
+      record,
+      state: "orphaned",
+      expected: { state: "same source and target" },
+      actual: { state: "message-missing" },
+    };
   }
-
-  return { notices, confirmedSameTextIds };
+  if (
+    message.targetStatus === "blocked" ||
+    view.fileIssues.some(
+      (issue) =>
+        issue.file === message.targetFile &&
+        ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
+          issue.code,
+        ),
+    )
+  ) {
+    return {
+      record,
+      state: "unable-to-evaluate",
+      expected: { state: "same source and target" },
+      actual: { state: "unable-to-evaluate" },
+    };
+  }
+  const pendingReason = pendingReasonForMessage(message.id, lock);
+  const isSameText =
+    message.targetStatus === "present" &&
+    message.target !== undefined &&
+    sameValue(message.target, message.source);
+  const fingerprint =
+    message.target === undefined
+      ? undefined
+      : sameTextContentFingerprint(message, message.source, message.target);
+  const id =
+    isSameText && pendingReason !== undefined && message.target !== undefined
+      ? sameTextCandidateId(
+          message,
+          message.source,
+          message.target,
+          pendingReason,
+        )
+      : undefined;
+  if (
+    isSameText &&
+    pendingReason !== undefined &&
+    fingerprint === record.contentFingerprint &&
+    id === record.id &&
+    pendingReason === record.pendingReason
+  ) {
+    return { record, state: "active" };
+  }
+  if (pendingReason !== undefined) {
+    return {
+      record,
+      state: "review-required",
+      expected: { contentFingerprint: record.contentFingerprint },
+      actual: {
+        contentFingerprint: fingerprint ?? null,
+        id: id ?? null,
+        pendingReason,
+        targetStatus: message.targetStatus,
+      },
+    };
+  }
+  return {
+    record,
+    state: "orphaned",
+    expected: { state: "pending same-text reason" },
+    actual: { state: "no matching reason" },
+  };
 }
 
 function enabledRulesRequireInput(
@@ -2718,11 +2704,22 @@ async function evaluateSavedProject(
           ),
         }
       : loaded.view;
-  const sameTextResolution = resolveSameTextConfirmations(
-    view,
-    loaded.lock,
-    loaded.exceptions,
+  // 同文例外须先派生翻译状态，随后所有质量规则仍按同一正式链路评估。
+  const resolutions = loaded.exceptions.records.flatMap((record) =>
+    record.kind === "same-text"
+      ? [resolveSameTextException(record, view, loaded.lock)]
+      : [],
   );
+  const sameTextResolution: SameTextResolution = {
+    resolutions,
+    confirmedSameTextIds: new Set(
+      resolutions.flatMap((resolution) =>
+        resolution.state === "active" && resolution.record.kind === "same-text"
+          ? [resolution.record.message.id]
+          : [],
+      ),
+    ),
+  };
   const reviewedView = withTranslationReview(
     view,
     loaded.lock,
@@ -2973,14 +2970,14 @@ function ruleUnavailable(
   );
 }
 
-function assertConfirmationPreconditions(project: EvaluatedSavedProject): void {
+function assertExceptionPreconditions(project: EvaluatedSavedProject): void {
   const mappingIssue = project.view.fileIssues.find((issue) =>
     isExecutionPrecondition(issue.code),
   );
   if (mappingIssue !== undefined) {
     throw new ProjectOperationError(
-      `当前项目存在执行前提问题，不能记录确认：${mappingIssue.reason}`,
-      "confirmation.precondition-failed",
+      `当前项目存在执行前提问题，不能记录例外：${mappingIssue.reason}`,
+      "exception.precondition-failed",
       { file: mappingIssue.file, path: mappingIssue.path },
     );
   }
@@ -2989,8 +2986,8 @@ function assertConfirmationPreconditions(project: EvaluatedSavedProject): void {
   );
   if (blocker !== undefined) {
     throw new ProjectOperationError(
-      `当前项目存在执行前提问题，不能记录确认：${blocker.reason}`,
-      "confirmation.precondition-failed",
+      `当前项目存在执行前提问题，不能记录例外：${blocker.reason}`,
+      "exception.precondition-failed",
       blocker.location,
     );
   }
@@ -2999,18 +2996,11 @@ function assertConfirmationPreconditions(project: EvaluatedSavedProject): void {
   );
   if (blockedMessage !== undefined) {
     throw new ProjectOperationError(
-      "受管理消息的目标路径被现有内容阻断，不能记录确认",
-      "confirmation.precondition-failed",
+      "受管理消息的目标路径被现有内容阻断，不能记录例外",
+      "exception.precondition-failed",
       { file: blockedMessage.targetFile, path: blockedMessage.path },
     );
   }
-}
-
-function sameDiagnosticObject(
-  diagnostic: Diagnostic,
-  record: DiagnosticExemptionRecord,
-): boolean {
-  return diagnostic.objectId === record.objectId;
 }
 
 function exceptionNotice(
@@ -3031,6 +3021,64 @@ function exceptionNotice(
   );
 }
 
+function resolveDiagnosticException(
+  record: Extract<ExceptionRecord, { kind: "diagnostic" }>,
+  project: EvaluatedSavedProject,
+  operation: "status" | "check",
+): ExceptionResolution {
+  const original = project.diagnostics.find(
+    (item) =>
+      item.objectId === record.objectId &&
+      item.contentFingerprint === record.contentFingerprint,
+  );
+  const requiredInputDependencies =
+    record.requiredInputDependencies ??
+    (original === undefined
+      ? undefined
+      : inputDependenciesForDiagnostic(original));
+  if (
+    ruleUnavailable(
+      project,
+      record.ruleId,
+      operation,
+      record.message?.id,
+      record.code,
+      record.location,
+      requiredInputDependencies,
+    )
+  ) {
+    return {
+      record,
+      state: "unable-to-evaluate",
+      expected: { state: "evaluated diagnostic" },
+      actual: { state: "unable-to-evaluate" },
+    };
+  }
+  if (original !== undefined && !isExecutionPrecondition(original.code))
+    return { record, state: "active" };
+  const currentObject = project.diagnostics.find(
+    (item) => item.objectId === record.objectId,
+  );
+  if (currentObject !== undefined) {
+    return {
+      record,
+      state: "review-required",
+      location: currentObject.location,
+      expected: { contentFingerprint: record.contentFingerprint },
+      actual: { contentFingerprint: currentObject.contentFingerprint },
+    };
+  }
+  const messageExists =
+    record.message === undefined ||
+    project.view.messages.some((message) => message.id === record.message?.id);
+  return {
+    record,
+    state: "orphaned",
+    expected: { state: "matching diagnostic" },
+    actual: { state: messageExists ? "diagnostic-missing" : "message-missing" },
+  };
+}
+
 function applyExceptionRecords(
   project: EvaluatedSavedProject,
   operation: "status" | "check",
@@ -3038,102 +3086,38 @@ function applyExceptionRecords(
   readonly diagnostics: readonly Diagnostic[];
   readonly confirmedSameTextIds: ReadonlySet<string>;
 } {
+  const resolutions = [
+    ...project.sameTextResolution.resolutions,
+    ...project.exceptions.records.flatMap((record) =>
+      record.kind === "diagnostic"
+        ? [resolveDiagnosticException(record, project, operation)]
+        : [],
+    ),
+  ];
   const suppressed = new Set<string>();
   const notices: Diagnostic[] = [];
-  const confirmedSameTextIds = project.sameTextResolution.confirmedSameTextIds;
-  const messages = new Map(
-    project.view.messages.map((message) => [message.id, message]),
-  );
-
-  for (const record of project.exceptions.diagnosticExemptions) {
-    const original = project.diagnostics.find(
-      (item) =>
-        item.objectId === record.objectId &&
-        item.contentFingerprint === record.contentFingerprint,
-    );
-    if (original !== undefined && !isExecutionPrecondition(original.code)) {
-      const requiredInputDependencies =
-        record.requiredInputDependencies ??
-        inputDependenciesForDiagnostic(original);
-      if (
-        !ruleUnavailable(
-          project,
-          record.ruleId,
-          operation,
-          record.message?.id,
-          record.code,
-          record.location,
-          requiredInputDependencies,
-        )
-      )
-        suppressed.add(original.diagnosticId);
-      else {
-        notices.push(
-          exceptionNotice(
-            "exception.unable-to-evaluate",
-            `规则 ${record.ruleId} 已禁用或未完成，无法评估此豁免；原理由：${record.reason}`,
-            original.location,
-            { state: "evaluated diagnostic" },
-            { state: "unable-to-evaluate" },
-          ),
-        );
-      }
-      continue;
-    }
-
-    const unavailable = ruleUnavailable(
-      project,
-      record.ruleId,
-      operation,
-      record.message?.id,
-      record.code,
-      record.location,
-      record.requiredInputDependencies,
-    );
-    if (unavailable) {
+  const stateReasons = {
+    "review-required": "例外对象内容或相关条件已变化，需要复核",
+    orphaned: "例外对象已消失或不再有对应原因，请清理此记录",
+    "unable-to-evaluate":
+      "相关内容无法可靠读取，或规则已禁用、未完成，无法评估此例外",
+  } as const;
+  for (const resolution of resolutions) {
+    if (resolution.state === "active") {
+      if (resolution.record.kind === "diagnostic")
+        suppressed.add(resolution.record.id);
+    } else {
       notices.push(
         exceptionNotice(
-          "exception.unable-to-evaluate",
-          `规则 ${record.ruleId} 已禁用或未完成，无法评估此豁免；原理由：${record.reason}`,
-          record.location,
-          { state: "evaluated diagnostic" },
-          { state: "unable-to-evaluate" },
+          `exception.${resolution.state}`,
+          `${stateReasons[resolution.state]}；原理由：${resolution.record.reason}`,
+          resolution.location ?? resolution.record.location,
+          resolution.expected,
+          resolution.actual,
         ),
       );
-      continue;
     }
-
-    const currentObject = project.diagnostics.find((item) =>
-      sameDiagnosticObject(item, record),
-    );
-    if (currentObject !== undefined) {
-      notices.push(
-        exceptionNotice(
-          "exception.review-required",
-          `诊断内容或相关条件已变化，需要复核；原理由：${record.reason}`,
-          currentObject.location,
-          { contentFingerprint: record.contentFingerprint },
-          { contentFingerprint: currentObject.contentFingerprint },
-        ),
-      );
-      continue;
-    }
-
-    const messageExists =
-      record.message === undefined || messages.has(record.message.id);
-    notices.push(
-      exceptionNotice(
-        "exception.orphaned",
-        `诊断已消失或消息已删除，请清理此记录；原理由：${record.reason}`,
-        record.location,
-        { state: "matching diagnostic" },
-        { state: messageExists ? "diagnostic-missing" : "message-missing" },
-      ),
-    );
   }
-
-  notices.push(...project.sameTextResolution.notices);
-
   return {
     diagnostics: [
       ...project.diagnostics.filter(
@@ -3141,7 +3125,7 @@ function applyExceptionRecords(
       ),
       ...notices,
     ],
-    confirmedSameTextIds,
+    confirmedSameTextIds: project.sameTextResolution.confirmedSameTextIds,
   };
 }
 
@@ -3157,14 +3141,14 @@ async function evaluatedProjectForInspection(
   );
 }
 
-async function currentDiagnosticProject(
+async function currentExceptionProject(
   projectDirectory: string,
 ): Promise<EvaluatedSavedProject> {
   const evaluated = await evaluatedProjectForInspection(
     projectDirectory,
     "check",
   );
-  assertConfirmationPreconditions(evaluated);
+  assertExceptionPreconditions(evaluated);
   return evaluated;
 }
 
@@ -3188,7 +3172,7 @@ async function persistExceptionRecords(
       ],
       async () => {
         await options.beforeApply?.();
-        const current = await currentDiagnosticProject(project.project);
+        const current = await currentExceptionProject(project.project);
         revalidate(current);
         await assertFileSnapshots(project.inputSnapshots);
       },
@@ -3197,7 +3181,7 @@ async function persistExceptionRecords(
     if (error instanceof ConcurrentEditError) {
       throw new ProjectOperationError(
         error.message,
-        "confirmation.concurrent-edit",
+        "exception.concurrent-edit",
         { file: error.file, path: [] },
       );
     }
@@ -3205,165 +3189,131 @@ async function persistExceptionRecords(
   }
 }
 
-export async function recordDiagnosticExemption(
+function exceptionCandidates(
+  project: EvaluatedSavedProject,
+  diagnostics: readonly Diagnostic[] = project.diagnostics,
+  confirmedSameTextIds: ReadonlySet<string> = project.sameTextResolution
+    .confirmedSameTextIds,
+): readonly ExceptionCandidate[] {
+  return [
+    ...sameTextExceptionCandidates(
+      project.view,
+      project.lock,
+      confirmedSameTextIds,
+    ),
+    ...diagnostics.flatMap((selected): ExceptionCandidate[] => {
+      const requiredInputDependencies =
+        inputDependenciesForDiagnostic(selected);
+      if (
+        selected.ruleId === "exceptions" ||
+        isExecutionPrecondition(selected.code) ||
+        ruleUnavailable(
+          project,
+          selected.ruleId,
+          "check",
+          selected.message?.id,
+          selected.code,
+          selected.location,
+          requiredInputDependencies,
+        )
+      )
+        return [];
+      return [
+        {
+          kind: "diagnostic",
+          id: selected.diagnosticId,
+          objectId: selected.objectId,
+          contentFingerprint: selected.contentFingerprint,
+          ruleId: selected.ruleId,
+          code: selected.code,
+          ...(selected.message === undefined
+            ? {}
+            : { message: selected.message }),
+          ...(selected.origin === undefined ? {} : { origin: selected.origin }),
+          ...(requiredInputDependencies === undefined
+            ? {}
+            : { requiredInputDependencies }),
+          location: selected.location,
+          description: selected.reason,
+        },
+      ];
+    }),
+  ].sort((left, right) => compareText(left.id, right.id));
+}
+
+export async function recordException(
   projectDirectory: string,
-  diagnosticId: string,
+  id: string,
   reason: string,
   options: ExceptionRecordingOptions = {},
-): Promise<ConfirmationReceipt> {
+): Promise<ExceptionReceipt> {
   const normalizedReason = reason.trim();
   if (normalizedReason.length === 0) {
     throw new ProjectOperationError(
-      "诊断豁免必须提供理由",
-      "confirmation.reason-required",
+      "记录例外必须提供理由",
+      "exception.reason-required",
       { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
     );
   }
-  const project = await currentDiagnosticProject(projectDirectory);
-  const selected = project.diagnostics.find(
-    (item) => item.diagnosticId === diagnosticId,
-  );
+  const project = await currentExceptionProject(projectDirectory);
+  // 记录时重新评估全部候选，允许维护者为同一有效对象更新理由。
+  const selected = exceptionCandidates(
+    project,
+    project.diagnostics,
+    new Set(),
+  ).find((candidate) => candidate.id === id);
   if (selected === undefined) {
     throw new ProjectOperationError(
-      "当前检查中找不到此诊断 ID；诊断对象可能已变化或无法评估",
-      "confirmation.diagnostic-not-current",
+      "当前找不到此例外候选 ID；内容可能已变化或无法评估",
+      "exception.not-current",
       { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
     );
   }
-  const requiredInputDependencies = inputDependenciesForDiagnostic(selected);
-  if (
-    isExecutionPrecondition(selected.code) ||
-    ruleUnavailable(
-      project,
-      selected.ruleId,
-      "check",
-      selected.message?.id,
-      selected.code,
-      selected.location,
-      requiredInputDependencies,
-    )
-  ) {
-    throw new ProjectOperationError(
-      "相关规则未完成评估，不能确认此诊断",
-      "confirmation.unable-to-evaluate",
-      selected.location,
-    );
+  let record: ExceptionRecord;
+  if (selected.kind === "same-text") {
+    const { description, source, target, ...subject } = selected;
+    void description;
+    void source;
+    void target;
+    record = { ...subject, reason: normalizedReason };
+  } else {
+    const { description, ...subject } = selected;
+    void description;
+    record = { ...subject, reason: normalizedReason };
   }
-  const record: DiagnosticExemptionRecord = {
-    diagnosticId: selected.diagnosticId,
-    objectId: selected.objectId,
-    contentFingerprint: selected.contentFingerprint,
-    ruleId: selected.ruleId,
-    code: selected.code,
-    ...(selected.message === undefined ? {} : { message: selected.message }),
-    ...(selected.origin === undefined ? {} : { origin: selected.origin }),
-    ...(requiredInputDependencies === undefined
-      ? {}
-      : { requiredInputDependencies }),
-    location: selected.location,
-    reason: normalizedReason,
-  };
   const records: ExceptionRecords = {
-    ...project.exceptions,
-    diagnosticExemptions: [
-      ...project.exceptions.diagnosticExemptions.filter(
-        (existing) => existing.objectId !== selected.objectId,
+    schemaVersion: 2,
+    records: [
+      ...project.exceptions.records.filter(
+        (existing) => existing.objectId !== record.objectId,
       ),
       record,
     ].sort((left, right) => compareText(left.objectId, right.objectId)),
   };
   await persistExceptionRecords(project, records, options, (current) => {
-    const stillCurrent = current.diagnostics.find(
-      (item) =>
-        item.diagnosticId === selected.diagnosticId &&
-        item.objectId === selected.objectId &&
-        item.contentFingerprint === selected.contentFingerprint,
+    const stillCurrent = exceptionCandidates(
+      current,
+      current.diagnostics,
+      new Set(),
+    ).find(
+      (candidate) =>
+        candidate.id === selected.id &&
+        candidate.objectId === selected.objectId &&
+        candidate.contentFingerprint === selected.contentFingerprint,
     );
     if (stillCurrent === undefined) {
       throw new ProjectOperationError(
-        "写入前诊断对象已变化，未记录豁免",
-        "confirmation.diagnostic-changed",
+        "写入前例外对象已变化，未记录例外",
+        "exception.changed",
         selected.location,
       );
     }
   });
   return {
-    kind: "diagnostic-exemption",
-    diagnosticId: selected.diagnosticId,
-    contentFingerprint: selected.contentFingerprint,
-    reason: normalizedReason,
-  };
-}
-
-export async function confirmSameText(
-  projectDirectory: string,
-  candidateId: string,
-  reason: string,
-  options: ExceptionRecordingOptions = {},
-): Promise<ConfirmationReceipt> {
-  const normalizedReason = reason.trim();
-  if (normalizedReason.length === 0) {
-    throw new ProjectOperationError(
-      "合理同文确认必须提供理由",
-      "confirmation.reason-required",
-      { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
-    );
-  }
-  const project = await currentDiagnosticProject(projectDirectory);
-  const selected = sameTextMessagesToConfirm(
-    project.view,
-    project.lock,
-    new Set(),
-  ).find((candidate) => candidate.candidateId === candidateId);
-  if (selected === undefined) {
-    throw new ProjectOperationError(
-      "当前检查中找不到此同文候选 ID；候选内容或待处理原因可能已变化",
-      "confirmation.same-text-not-current",
-      { file: `${stateDirectoryName}/${exceptionsFileName}`, path: [] },
-    );
-  }
-  const message = selected.message;
-  const contentFingerprint = sameTextContentFingerprint(
-    message,
-    selected.source,
-    selected.target,
-  );
-  const record: SameTextConfirmationRecord = {
-    candidateId,
-    pendingReason: selected.pendingReason,
-    message,
-    contentFingerprint,
-    reason: normalizedReason,
-  };
-  const records: ExceptionRecords = {
-    ...project.exceptions,
-    sameTextConfirmations: [
-      ...project.exceptions.sameTextConfirmations.filter(
-        (existing) => existing.message.id !== message.id,
-      ),
-      record,
-    ].sort((left, right) => compareText(left.message.id, right.message.id)),
-  };
-  await persistExceptionRecords(project, records, options, (current) => {
-    const currentCandidate = sameTextMessagesToConfirm(
-      current.view,
-      current.lock,
-      new Set(),
-    ).find((candidate) => candidate.candidateId === candidateId);
-    if (currentCandidate === undefined) {
-      throw new ProjectOperationError(
-        "写入前同文候选已变化，未记录确认",
-        "confirmation.same-text-changed",
-        { file: message.targetFile, path: message.path },
-      );
-    }
-  });
-  return {
-    kind: "same-text",
-    messageId: message.id,
-    candidateId,
-    contentFingerprint,
-    reason: normalizedReason,
+    kind: record.kind,
+    id: record.id,
+    contentFingerprint: record.contentFingerprint,
+    reason: record.reason,
   };
 }
 
@@ -3392,7 +3342,7 @@ export async function inspectProject(
     );
   }
   const resolved = applyExceptionRecords(evaluated, operation);
-  return makeReport(
+  const report = makeReport(
     operation,
     evaluated.view,
     evaluated.lock,
@@ -3400,6 +3350,10 @@ export async function inspectProject(
     operation === "check" ? evaluated.coverage : undefined,
     resolved.confirmedSameTextIds,
   );
+  return {
+    ...report,
+    exceptionCandidates: exceptionCandidates(evaluated, resolved.diagnostics),
+  };
 }
 
 export function operationExitCode(report: ProjectReport): number {

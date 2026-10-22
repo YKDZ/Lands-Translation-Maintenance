@@ -6,6 +6,7 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { exceptionCandidateSchema } from "#/exceptions";
 import {
   translationFieldCategories,
   translationFieldScenes,
@@ -14,12 +15,11 @@ import {
 import type { ProjectReport, SyncPlan, SyncPreviewResult } from "#/model";
 import {
   applySyncProject,
-  confirmSameText,
   initializeProject,
   inspectProject,
   operationExitCode,
   previewSyncProject,
-  recordDiagnosticExemption,
+  recordException,
 } from "#/operations";
 
 export interface CliDependencies {
@@ -68,15 +68,7 @@ const reportSchema = z.object({
     missingTranslations: z.number().int().nonnegative(),
   }),
   diagnostics: z.array(diagnosticSchema),
-  sameTextToConfirm: z.array(
-    z.object({
-      candidateId: z.string().regex(/^[0-9a-f]{64}$/),
-      message: messageIdentitySchema,
-      source: jsonValueSchema,
-      target: jsonValueSchema,
-      pendingReason: z.enum(["translation-seed", "same-text-candidate"]),
-    }),
-  ),
+  exceptionCandidates: z.array(exceptionCandidateSchema),
   knownExcludedResources: z.array(
     z.object({
       path: z.string(),
@@ -202,21 +194,12 @@ const syncPreviewSchema = z.union([
     resourceChanges: resourceChangesSchema,
   }),
 ]);
-const confirmationReceiptSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("diagnostic-exemption"),
-    diagnosticId: z.string().regex(/^[0-9a-f]{64}$/),
-    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    reason: z.string(),
-  }),
-  z.object({
-    kind: z.literal("same-text"),
-    messageId: z.string().regex(/^[0-9a-f]{64}$/),
-    candidateId: z.string().regex(/^[0-9a-f]{64}$/),
-    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    reason: z.string(),
-  }),
-]);
+const exceptionReceiptSchema = z.object({
+  kind: z.enum(["diagnostic", "same-text"]),
+  id: z.string().regex(/^[0-9a-f]{64}$/),
+  contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  reason: z.string(),
+});
 
 function jsonLine(value: unknown): string {
   return JSON.stringify(value);
@@ -261,9 +244,13 @@ function renderReport(report: ReportPayload) {
     "translation-seed": "同步填入的原文",
     "same-text-candidate": "历史同文候选",
   } as const;
-  for (const candidate of report.sameTextToConfirm) {
+  for (const candidate of report.exceptionCandidates) {
+    const detail =
+      candidate.kind === "same-text"
+        ? `（${pendingReasonNames[candidate.pendingReason]}）；原文 ${jsonLine(candidate.source)}；译文 ${jsonLine(candidate.target)}`
+        : `；${textLineValue(candidate.description)}`;
     lines.push(
-      `待确认同文 ${candidate.candidateId}（${pendingReasonNames[candidate.pendingReason]}）：${candidate.message.targetFile}:${candidate.message.path.join(".")}；原文 ${jsonLine(candidate.source)}；译文 ${jsonLine(candidate.target)}。`,
+      `例外候选 ${candidate.id}：${textLineValue(candidate.location.file)}:${candidate.location.path.map((part) => textLineValue(String(part))).join(".")}${detail}。`,
     );
   }
   if (report.knownExcludedResources.length > 0) {
@@ -624,132 +611,57 @@ const exemptCommand = define.command("exempt")({
   kind: "command",
   parent: "lands",
   name: "exempt",
-  description: "为当前一条具体诊断记录有理由的豁免",
+  description: "为当前一条例外候选记录接受理由",
   fields: {
     project: {
       kind: "valueOption",
       longOption: "--project",
       description: "消费者项目目录",
     },
-    diagnostic: {
+    id: {
       kind: "valueOption",
-      longOption: "--diagnostic",
-      description: "当前 check 输出中的诊断 ID",
+      longOption: "--id",
+      description: "当前 status/check 输出中的例外候选 ID",
     },
     reason: {
       kind: "valueOption",
       longOption: "--reason",
-      description: "接受此具体差异的理由",
+      description: "接受此例外的理由",
     },
   },
   input: z.object({
     project: z.string().min(1),
-    diagnostic: z.string().regex(/^[0-9a-f]{64}$/),
+    id: z.string().regex(/^[0-9a-f]{64}$/),
     reason: z.string().trim().min(1),
   }),
   success: {
     kind: "data",
     variants: {
       recorded: {
-        description: "诊断豁免已记录",
-        schema: z.object({ confirmation: confirmationReceiptSchema }),
+        description: "例外已记录",
+        schema: z.object({ exception: exceptionReceiptSchema }),
         exitCode: 0,
-        text: ({ confirmation }) => {
-          if (confirmation.kind !== "diagnostic-exemption") {
-            throw new Error("诊断豁免返回了不匹配的确认类型");
-          }
-          return text.line(
-            `已记录诊断豁免 ${confirmation.diagnosticId}：${confirmation.reason}`,
-          );
-        },
+        text: ({ exception }) =>
+          text.line(`已记录例外 ${exception.id}：${exception.reason}`),
       },
     },
   },
   failures: {
     rejected: {
-      description: "当前诊断无法确认",
+      description: "当前例外无法记录",
       schema: z.object({ message: z.string() }),
       exitCode: 1,
-      text: ({ message }) => text.line(`诊断豁免失败：${message}`),
+      text: ({ message }) => text.line(`记录例外失败：${message}`),
     },
   },
   async handler({ input, outcome }) {
     try {
-      const confirmation = await recordDiagnosticExemption(
+      const exception = await recordException(
         input.project,
-        input.diagnostic,
+        input.id,
         input.reason,
       );
-      return outcome.data.recorded({ confirmation });
-    } catch (error) {
-      return outcome.failure.rejected({
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  },
-});
-
-const confirmSameTextCommand = define.command("confirmSameText")({
-  kind: "command",
-  parent: "lands",
-  name: "confirm-same-text",
-  description: "为当前同文消息记录有理由的单独确认",
-  fields: {
-    project: {
-      kind: "valueOption",
-      longOption: "--project",
-      description: "消费者项目目录",
-    },
-    candidate: {
-      kind: "valueOption",
-      longOption: "--candidate",
-      description: "当前 status/check 输出中的同文候选 ID",
-    },
-    reason: {
-      kind: "valueOption",
-      longOption: "--reason",
-      description: "保留原文与译文相同的理由",
-    },
-  },
-  input: z.object({
-    project: z.string().min(1),
-    candidate: z.string().regex(/^[0-9a-f]{64}$/),
-    reason: z.string().trim().min(1),
-  }),
-  success: {
-    kind: "data",
-    variants: {
-      recorded: {
-        description: "合理同文确认已记录",
-        schema: z.object({ confirmation: confirmationReceiptSchema }),
-        exitCode: 0,
-        text: ({ confirmation }) => {
-          if (confirmation.kind !== "same-text") {
-            throw new Error("同文确认返回了不匹配的确认类型");
-          }
-          return text.line(
-            `已确认同文候选 ${confirmation.candidateId}：${confirmation.reason}`,
-          );
-        },
-      },
-    },
-  },
-  failures: {
-    rejected: {
-      description: "当前同文状态无法确认",
-      schema: z.object({ message: z.string() }),
-      exitCode: 1,
-      text: ({ message }) => text.line(`同文确认失败：${message}`),
-    },
-  },
-  async handler({ input, outcome }) {
-    try {
-      const confirmation = await confirmSameText(
-        input.project,
-        input.candidate,
-        input.reason,
-      );
-      return outcome.data.recorded({ confirmation });
+      return outcome.data.recorded({ exception });
     } catch (error) {
       return outcome.failure.rejected({
         message: error instanceof Error ? error.message : String(error),
@@ -833,7 +745,6 @@ export const cli = define({
     ...statusCommand,
     ...checkCommand,
     ...exemptCommand,
-    ...confirmSameTextCommand,
     ...schemaCommand,
   },
 });
