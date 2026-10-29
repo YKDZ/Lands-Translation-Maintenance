@@ -13,6 +13,7 @@ import {
   dependenciesOf,
   findingForQuality,
   hasAvailableMiniMessageTranslation,
+  hasMiniMessageDocuments,
   hasMiniMessageInput,
   issueForQuality,
   messageForCandidate,
@@ -28,6 +29,7 @@ function choosePrimaryThemeSourceKey(
 ): string | undefined {
   return dependenciesOf(input.dependencies)
     .messages.filter(usesMiniMessage)
+    .filter(hasMiniMessageDocuments)
     .filter((message) =>
       hasAvailableMiniMessageTranslation(
         input,

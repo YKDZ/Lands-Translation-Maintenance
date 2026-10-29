@@ -60,6 +60,7 @@ export async function createProject(
   options: {
     readonly sourceGreeting?: string;
     readonly sourceEntries?: readonly string[];
+    readonly targetEntries?: readonly string[];
     readonly theme?: string;
     readonly bedrockTheme?: string;
   } = {},
@@ -67,6 +68,7 @@ export async function createProject(
   const directory = await mkdtemp(join(tmpdir(), "lioni-project-"));
   t.after(async () => rm(directory, { force: true, recursive: true }));
 
+  const targetEntries = options.targetEntries ?? ["第一项", "第二项"];
   const jarFile = join(directory, "Lands.jar");
   await mkdir(join(directory, "lang"), { recursive: true });
   await mkdir(join(directory, ".lioni"), { recursive: true });
@@ -132,6 +134,46 @@ export async function createProject(
     }),
     "utf8",
   );
+  await mkdir(join(directory, ".lioni/terms"), { recursive: true });
+  await Promise.all([
+    writeFile(
+      join(directory, ".lioni/terms/concepts.yaml"),
+      [
+        "concepts:",
+        "  test-term:",
+        "    note: 原生配置加载所需的测试术语。",
+        "    sourceRefs:",
+        "      - path: README.md",
+        "        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad",
+        "        section: 测试夹具",
+        "",
+      ].join("\n"),
+    ),
+    writeFile(
+      join(directory, ".lioni/terms/en-US.yaml"),
+      [
+        "concepts:",
+        "  test-term:",
+        "    expressions:",
+        "      - id: en-US-test-term",
+        "        text: test term",
+        "        usage: allowed",
+        "",
+      ].join("\n"),
+    ),
+    writeFile(
+      join(directory, ".lioni/terms/zh-CN.yaml"),
+      [
+        "concepts:",
+        "  test-term:",
+        "    expressions:",
+        "      - id: zh-CN-test-term",
+        "        text: 测试术语",
+        "        usage: allowed",
+        "",
+      ].join("\n"),
+    ),
+  ]);
   await writeFile(
     join(directory, "lang/zh.yml"),
     [
@@ -140,9 +182,12 @@ export async function createProject(
       "  commands:",
       "    registered: 已注册",
       "list:",
-      "  entries:",
-      "    - 第一项",
-      "    - 第二项",
+      ...(targetEntries.length === 0
+        ? ["  entries: []"]
+        : [
+            "  entries:",
+            ...targetEntries.map((entry) => `    - ${JSON.stringify(entry)}`),
+          ]),
       "",
     ].join("\n"),
   );

@@ -285,6 +285,21 @@ export function messageForCandidate(
   return dependencies.messages.find((message) => message.id === sourceKey);
 }
 
+export function hasMiniMessageDocuments(
+  message: MiniMessageInputMessage,
+): boolean {
+  // 空字符串列表没有条目文档，不能要求正文规则提供根消息投影。
+  return !(
+    (message.category === "chat-string-list" ||
+      message.category === "configuration-string-list") &&
+    Array.isArray(message.source) &&
+    message.source.length === 0 &&
+    message.targetStatus === "present" &&
+    Array.isArray(message.target) &&
+    message.target.length === 0
+  );
+}
+
 export function qualityBasis(value: unknown): JsonValue {
   return value as JsonValue;
 }
@@ -294,7 +309,13 @@ export function hasMiniMessageInput(
   dependencies: MiniMessageQualityDependencies,
 ): boolean {
   const message = messageForCandidate(dependencies, input.candidate.sourceKey);
-  if (message === undefined || !usesMiniMessage(message)) return false;
+  if (
+    message === undefined ||
+    !usesMiniMessage(message) ||
+    !hasMiniMessageDocuments(message)
+  ) {
+    return false;
+  }
   return hasAvailableMiniMessageTranslation(
     input,
     input.candidate.sourceKey,
