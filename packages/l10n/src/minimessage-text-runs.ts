@@ -18,6 +18,8 @@ export interface MiniMessageTextRun {
   readonly text: string;
   readonly parts: readonly MiniMessageTextPart[];
   readonly contextKey: string;
+  /** 当前文档内连续同语境区间的编号；离开后再返回会分配新编号。 */
+  readonly continuityIndex: number;
 }
 
 /** 复用正文 runs 的稳定规则，为独立变量和正文片段提供所属上下文。 */
@@ -127,17 +129,35 @@ export function miniMessageTextRuns(
   let text = "";
   let parts: MiniMessageTextPart[] = [];
   let currentContextKey: string | undefined;
+  let previousSegmentContextKey: string | undefined;
+  let continuityIndex = -1;
+  let currentRunContinuityIndex: number | undefined;
 
   const flush = () => {
-    if (text !== "" && currentContextKey !== undefined) {
-      runs.push({ text, parts, contextKey: currentContextKey });
+    if (
+      text !== "" &&
+      currentContextKey !== undefined &&
+      currentRunContinuityIndex !== undefined
+    ) {
+      runs.push({
+        text,
+        parts,
+        contextKey: currentContextKey,
+        continuityIndex: currentRunContinuityIndex,
+      });
     }
     text = "";
     parts = [];
+    currentRunContinuityIndex = undefined;
   };
 
   for (const segment of document.segments) {
     const nextContextKey = contextKey(segment.context);
+    if (previousSegmentContextKey !== nextContextKey) {
+      flush();
+      continuityIndex += 1;
+      previousSegmentContextKey = nextContextKey;
+    }
     if (segment.kind !== "text") {
       flush();
       currentContextKey = nextContextKey;
@@ -150,6 +170,7 @@ export function miniMessageTextRuns(
       flush();
     }
     currentContextKey = nextContextKey;
+    currentRunContinuityIndex ??= continuityIndex;
     const start = text.length;
     text += segment.value;
     parts.push({

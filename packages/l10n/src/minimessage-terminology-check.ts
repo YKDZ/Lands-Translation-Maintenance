@@ -2,6 +2,7 @@ import {
   compileTerms,
   createTermbase,
   createTermChecker,
+  findTerms,
   normalizeText,
   requireAllowedTranslation,
   type NormalizedText,
@@ -10,6 +11,7 @@ import {
   type TermComparisonInput,
   type TermCheckerOptions,
   type TermExpression,
+  type TermTextInput,
   type TermMatchingPolicy,
   type Termbase,
   type TermbaseData,
@@ -47,8 +49,8 @@ import { canonicalJson } from "#/value";
 
 const sourceLanguage = "en-US";
 const targetLanguage = "zh-CN";
-const hostPolicyVersion = "lands-terminology-context-v2";
-const englishPolicyId = "lands-en-us-case-and-space-v2";
+const hostPolicyVersion = "lands-terminology-context-v3";
+const englishPolicyId = "lands-en-us-case-and-space-v3";
 const chinesePolicyId = "lands-zh-cn-literal-boundary-v2";
 const wordCharacter = /[\p{L}\p{N}_]/u;
 const directObjectDeterminers = new Set([
@@ -288,6 +290,7 @@ function isEnglishContextApplicable(input: TermBoundaryInput): boolean {
         "server",
         "world",
         "issue",
+        "data",
       ].includes(after ?? "")
     ) {
       return false;
@@ -426,7 +429,8 @@ function pathProtectedRanges(
 function documentReference(
   document: TranslatableTextDocument,
   contextKey?: string,
-): JsonValue {
+  positions: TextDocumentReference["positions"] = [],
+): TextDocumentReference {
   return {
     messageId: document.message.id,
     documentIndex: document.documentIndex,
@@ -435,85 +439,266 @@ function documentReference(
     path: [...document.path],
     documentRange: { ...document.range },
     ...(contextKey === undefined ? {} : { contextKey }),
-    positions: [],
+    positions,
   };
 }
 
-function runOccurrenceKeys(
+function textFragmentForRuns(
+  document: TranslatableTextDocument,
+  contextKey: string,
   runs: readonly MiniMessageTextRun[],
-): readonly string[] {
-  const counts = new Map<string, number>();
-  return runs.map((run) => {
-    const occurrence = counts.get(run.contextKey) ?? 0;
-    counts.set(run.contextKey, occurrence + 1);
-    return `${run.contextKey}\0${occurrence}`;
-  });
+): TermTextInput["fragments"][number] {
+  let text = "";
+  const positions: NonNullable<TextDocumentReference["positions"]>[number][] =
+    [];
+  const protectedRanges: TermRange[] = [];
+
+  for (const run of runs) {
+    if (text !== "") {
+      // 分隔符保留边界词义上下文，但不允许术语跨越变量拼接。
+      protectedRanges.push({ start: text.length, end: text.length + 1 });
+      text += " ";
+    }
+    const offset = text.length;
+    text += run.text;
+    positions.push(
+      ...run.parts.map(({ start, end, position }) => ({
+        start: offset + start,
+        end: offset + end,
+        position: { ...position },
+      })),
+    );
+    for (const range of pathProtectedRanges(document, run) ?? []) {
+      protectedRanges.push({
+        start: offset + range.start,
+        end: offset + range.end,
+      });
+    }
+  }
+
+  return {
+    ref: { ...documentReference(document, contextKey, positions) },
+    text,
+    ...(protectedRanges.length === 0 ? {} : { protectedRanges }),
+  };
 }
 
-function groupsForPair(
+function sourceTextInputForContext(
+  document: TranslatableTextDocument,
+  contextKey: string,
+  blocks: readonly (readonly MiniMessageTextRun[])[],
+  language: string,
+): TermTextInput {
+  const fragments = blocks.map((runs) =>
+    textFragmentForRuns(document, contextKey, runs),
+  );
+  if (fragments.length === 0) {
+    fragments.push(textFragmentForRuns(document, contextKey, []));
+  }
+  return { language, fragments };
+}
+
+function targetTextInputForContext(
+  document: TranslatableTextDocument,
+  contextKey: string,
+  runs: readonly MiniMessageTextRun[],
+): TermTextInput {
+  const fragments = runs.map((run) => {
+    const protectedRanges = pathProtectedRanges(document, run);
+    return {
+      ref: textRunReference(document, run),
+      text: run.text,
+      ...(protectedRanges === undefined ? {} : { protectedRanges }),
+    };
+  });
+  if (fragments.length === 0) {
+    fragments.push({
+      ref: { ...documentReference(document, contextKey) },
+      text: "",
+    });
+  }
+  return { language: targetLanguage, fragments };
+}
+
+function runBlocksByContext(
+  runs: readonly MiniMessageTextRun[],
+): Map<string, MiniMessageTextRun[][]> {
+  const contexts = new Map<string, MiniMessageTextRun[][]>();
+  for (const run of runs) {
+    const blocks = contexts.get(run.contextKey) ?? [];
+    let block = blocks.at(-1);
+    if (block?.[0]?.continuityIndex !== run.continuityIndex) {
+      block = [];
+      blocks.push(block);
+      contexts.set(run.contextKey, blocks);
+    }
+    block.push(run);
+  }
+  return contexts;
+}
+
+function protectedRangesOutside(
+  text: string,
+  matches: readonly TermRange[],
+): readonly TermRange[] {
+  const protectedRanges: TermRange[] = [];
+  let offset = 0;
+  for (const range of [...matches].sort(
+    (left, right) => left.start - right.start || left.end - right.end,
+  )) {
+    if (offset < range.start)
+      protectedRanges.push({ start: offset, end: range.start });
+    offset = Math.max(offset, range.end);
+  }
+  if (offset < text.length) {
+    protectedRanges.push({ start: offset, end: text.length });
+  }
+  return protectedRanges;
+}
+
+type TermPairProjection =
+  | {
+      readonly status: "ready";
+      readonly groups: readonly TermComparisonInput["groups"][number][];
+    }
+  | {
+      readonly status: "incomplete";
+      readonly issue: ReturnType<typeof issueForQuality>;
+    };
+
+function incompleteSourceScanIssue(
+  source: TranslatableTextDocument,
+  sourceInput: TermTextInput,
+  scan: Awaited<ReturnType<typeof findTerms>>,
+  candidate: MiniMessageCheckInput["candidate"],
+): ReturnType<typeof issueForQuality> {
+  const baseIssue = issueForQuality(
+    {
+      code: "terminology.source-analysis-incomplete",
+      message: source.message,
+      origin: "source",
+      location: { file: source.file, path: source.path },
+      reason: "原生术语扫描未能完整确定该正文范围的源概念",
+    },
+    candidate,
+  );
+  const location = {
+    ...baseIssue.location!,
+    range: sourceInput.fragments.map(({ ref }) => ref),
+  };
+
+  return {
+    ...baseIssue,
+    location,
+    evidence: [
+      {
+        role: "native-source-term-analysis",
+        object: baseIssue.object!,
+        location,
+        value: {
+          scan: {
+            status: scan.status,
+            matches: scan.matches,
+            active: scan.active,
+            certain: scan.certain,
+            suppressed: scan.suppressed,
+            ambiguities: scan.ambiguities,
+            issues: scan.issues,
+          },
+          source: sourceInput.fragments,
+        },
+      },
+    ],
+  };
+}
+
+async function groupsForPair(
   projection: MiniMessageParseProject,
   source: TranslatableTextDocument,
   target: TranslatableTextDocument,
-): readonly TermComparisonInput["groups"][number][] {
-  if (sameTranslatableText(source, target)) return [];
+  terms: ReturnType<typeof compileTerms>,
+  memo: TermProjectInput["memo"],
+  candidate: MiniMessageCheckInput["candidate"],
+): Promise<TermPairProjection> {
+  if (sameTranslatableText(source, target)) {
+    return { status: "ready", groups: [] };
+  }
 
   const sourceRuns = miniMessageTextRuns(projection, source);
   const targetRuns = miniMessageTextRuns(projection, target);
-  const sourceKeys = runOccurrenceKeys(sourceRuns);
-  const targetKeys = runOccurrenceKeys(targetRuns);
-  const targets = new Map(
-    targetRuns.map((run, index) => [targetKeys[index]!, run]),
-  );
+  const targetRunsByContext = new Map<string, MiniMessageTextRun[]>();
+  for (const run of targetRuns) {
+    const contextRuns = targetRunsByContext.get(run.contextKey) ?? [];
+    contextRuns.push(run);
+    targetRunsByContext.set(run.contextKey, contextRuns);
+  }
+  const sourceBlocksByContext = runBlocksByContext(sourceRuns);
 
-  return sourceRuns.map((sourceRun, index) => {
-    const runKey = sourceKeys[index]!;
-    const targetRun = targets.get(runKey);
-    const targetReference =
-      targetRun === undefined
-        ? documentReference(target, sourceRun.contextKey)
-        : textRunReference(target, targetRun);
-    const sourceReference = textRunReference(source, sourceRun);
-    const sourceProtectedRanges = pathProtectedRanges(source, sourceRun);
-    const sourceFragment = {
-      ref: sourceReference,
-      text: sourceRun.text,
-      ...(sourceProtectedRanges === undefined
-        ? {}
-        : { protectedRanges: sourceProtectedRanges }),
-    };
-    const targetProtectedRanges =
-      targetRun === undefined
-        ? undefined
-        : pathProtectedRanges(target, targetRun);
-    const targetFragment = {
-      ref: targetReference,
-      text: targetRun?.text ?? "",
-      ...(targetProtectedRanges === undefined
-        ? {}
-        : { protectedRanges: targetProtectedRanges }),
-    };
-    return {
-      ref: {
-        sourceKey: source.message.id,
-        sourceDocumentIndex: source.documentIndex,
-        targetDocumentIndex: target.documentIndex,
-        sourceFile: source.file,
-        targetFile: target.file,
-        sourcePath: [...source.path],
-        targetPath: [...target.path],
-        contextKey: sourceRun.contextKey,
-        occurrence: index,
-      },
-      source: {
-        language: sourceLanguage,
-        fragments: [sourceFragment],
-      },
-      target: {
-        language: targetLanguage,
-        fragments: [targetFragment],
-      },
-    };
-  });
+  const groups: TermComparisonInput["groups"][number][] = [];
+  for (const [contextKey, sourceContextBlocks] of sourceBlocksByContext) {
+    const sourceInput = sourceTextInputForContext(
+      source,
+      contextKey,
+      sourceContextBlocks,
+      sourceLanguage,
+    );
+    const scan = await findTerms(terms, sourceInput, { memo });
+    if (scan.status !== "complete" || scan.ambiguities.length > 0) {
+      return {
+        status: "incomplete",
+        issue: incompleteSourceScanIssue(source, sourceInput, scan, candidate),
+      };
+    }
+    const targetInput = targetTextInputForContext(
+      target,
+      contextKey,
+      targetRunsByContext.get(contextKey) ?? [],
+    );
+    const concepts = [
+      ...new Set(scan.certain.map(({ conceptId }) => conceptId)),
+    ];
+
+    // 原生边界扫描保留完整正文；每组仅暴露当前概念的命中区间给原生 analyzer。
+    for (const conceptId of concepts) {
+      const sourceFragments = sourceInput.fragments.map(
+        (fragment, fragmentIndex) => ({
+          ...fragment,
+          protectedRanges: protectedRangesOutside(
+            fragment.text,
+            scan.certain
+              .filter(
+                ({
+                  conceptId: matchedConcept,
+                  fragmentIndex: matchedFragment,
+                }) =>
+                  matchedConcept === conceptId &&
+                  matchedFragment === fragmentIndex,
+              )
+              .map(({ range }) => range),
+          ),
+        }),
+      );
+      groups.push({
+        ref: {
+          sourceKey: source.message.id,
+          sourceDocumentIndex: source.documentIndex,
+          targetDocumentIndex: target.documentIndex,
+          sourceFile: source.file,
+          targetFile: target.file,
+          sourcePath: [...source.path],
+          targetPath: [...target.path],
+          contextKey,
+          conceptId,
+        },
+        source: {
+          language: sourceLanguage,
+          fragments: sourceFragments,
+        },
+        target: targetInput,
+      });
+    }
+  }
+  return { status: "ready", groups };
 }
 
 export function matchedMiniMessageTranslation(
@@ -591,12 +776,13 @@ function termSelection(input: TermSelectionInput): TermSelectionResult {
   };
 }
 
-function termProjection(input: TermProjectInput):
+async function termProjection(input: TermProjectInput): Promise<
   | { readonly status: "ready"; readonly value: TermComparisonInput }
   | {
       readonly status: "incomplete";
       readonly issue: ReturnType<typeof issueForQuality>;
-    } {
+    }
+> {
   const miniInput = input as unknown as MiniMessageCheckInput;
   const dependencies = dependenciesOf(miniInput.dependencies);
   const sourceKey = input.candidate.sourceKey;
@@ -652,13 +838,27 @@ function termProjection(input: TermProjectInput):
       ),
     };
   }
+  const terms = compiledTermsFor(
+    termDependencies(miniInput.dependencies).termbaseData,
+  );
+  const groups: TermComparisonInput["groups"][number][] = [];
+  for (const { sourceDocument, targetDocument } of pairs) {
+    const pair = await groupsForPair(
+      dependencies.projection,
+      sourceDocument,
+      targetDocument,
+      terms,
+      miniInput.memo,
+      miniInput.candidate,
+    );
+    if (pair.status === "incomplete") {
+      return { status: "incomplete", issue: pair.issue };
+    }
+    groups.push(...pair.groups);
+  }
   return {
     status: "ready",
-    value: {
-      groups: pairs.flatMap(({ sourceDocument, targetDocument }) =>
-        groupsForPair(dependencies.projection, sourceDocument, targetDocument),
-      ),
-    },
+    value: { groups },
   };
 }
 
@@ -676,6 +876,12 @@ function termFingerprint(input: TermFingerprintInput): JsonValue {
       protectedIdentifier: "claim-worlds-list",
       styleTags: "transparent",
       structureSegments: "separators",
+      contextGrouping: "context-key-and-source-concept-v1",
+      sourceContextContinuity: "new-fragment-on-context-change",
+      sourceRunBoundary: "protected-space",
+      targetFragments: "original-context-runs",
+      incompleteSourceScan: "native-incomplete-with-evidence",
+      landsProductDataContext: "data",
     },
     candidate: {
       sourceKey: input.candidate.sourceKey,

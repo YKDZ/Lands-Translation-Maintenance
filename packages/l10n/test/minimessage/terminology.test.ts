@@ -14,7 +14,7 @@ import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { strToU8, zipSync } from "fflate";
-import { stringify } from "yaml";
+import { parse, stringify } from "yaml";
 
 const packageDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -70,7 +70,13 @@ interface QualityCheckResult {
   readonly checkId: string;
   readonly status: string;
   readonly diagnostics: readonly NativeDiagnostic[];
-  readonly issues: readonly { readonly code: string }[];
+  readonly issues: readonly {
+    readonly code: string;
+    readonly evidence?: readonly {
+      readonly role: string;
+      readonly value: unknown;
+    }[];
+  }[];
   readonly executions: readonly {
     readonly executionId: number;
     readonly sourceKey: string;
@@ -148,6 +154,18 @@ const termFixture = [
     note: "战争。",
     english: ["war", "wars"],
     chinese: ["战争"],
+  },
+  {
+    id: "shield",
+    note: "保护城镇或联邦免于战争的一段时间。",
+    english: ["shield", "shields"],
+    chinese: ["战争护盾"],
+  },
+  {
+    id: "upkeep",
+    note: "维护费用。",
+    english: ["upkeep"],
+    chinese: ["维护费"],
   },
   {
     id: "declare-noun",
@@ -534,6 +552,222 @@ void test("正式 QA 报告术语缺失并按原生位置和消息作用域处�
   ]);
 });
 
+void test("同一正文上下文内的变量换序仍满足维护费译法", async (t) => {
+  const project = await createProject(t, {
+    sourceName:
+      "You need to pay <v:0> in upkeep in <v:1>, but <v:2> has insufficient funds. This will lead to the nation being deleted.",
+    targetName:
+      "你需要在 <v:1> 内支付 <v:0> 维护费, 但 <v:2> 资金不足. 这会导致联邦被删除.",
+  });
+  const terminology = checkResult(
+    qualityReport(runLioni(["qa", project.configPath])).report,
+    "terminology",
+  );
+
+  assert.equal(terminology.status, "complete");
+  assert.deepEqual(
+    terminology.diagnostics.filter(
+      ({ object }) => object.conceptId === "upkeep",
+    ),
+    [],
+  );
+});
+
+void test("一个正文上下文内的重叠术语分别检查且不比较出现次数", async (t) => {
+  const repeated = await createProject(t, {
+    sourceName: "War and war",
+    targetName: "战争",
+  });
+  assert.deepEqual(
+    checkResult(
+      qualityReport(runLioni(["qa", repeated.configPath])).report,
+      "terminology",
+    ).diagnostics,
+    [],
+  );
+
+  const shield = await createProject(t, {
+    sourceName: "war shield",
+    targetName: "战争护盾",
+  });
+  assert.deepEqual(
+    checkResult(
+      qualityReport(runLioni(["qa", shield.configPath])).report,
+      "terminology",
+    ).diagnostics,
+    [],
+  );
+
+  await writeFile(shield.targetPath, targetYaml("战争", ["你好。"], "取消"));
+  const missingShield = checkResult(
+    qualityReport(runLioni(["qa", shield.configPath])).report,
+    "terminology",
+  ).diagnostics;
+  assert.deepEqual(
+    missingShield.map(({ object }) => object.conceptId),
+    ["shield"],
+  );
+  assert.deepEqual(missingShield[0]?.location.range.textPositions, [
+    { start: 0, end: 2, position: { start: 0, end: 2 } },
+  ]);
+
+  await writeFile(shield.targetPath, targetYaml("护盾", ["你好。"], "取消"));
+  const missingBoth = checkResult(
+    qualityReport(runLioni(["qa", shield.configPath])).report,
+    "terminology",
+  ).diagnostics;
+  assert.deepEqual(
+    missingBoth
+      .map(({ object }) => object.conceptId)
+      .sort((left, right) => (left ?? "").localeCompare(right ?? "")),
+    ["shield", "war"],
+  );
+});
+
+void test("变量切断英文术语，且产品名 Lands data 不放宽实体 lands", async (t) => {
+  const split = await createProject(t, {
+    sourceName: "Na<v:player>tion",
+    targetName: "任<v:player>何",
+  });
+  const splitTerminology = checkResult(
+    qualityReport(runLioni(["qa", split.configPath])).report,
+    "terminology",
+  );
+  assert.deepEqual(
+    splitTerminology.diagnostics.filter(
+      ({ object }) => object.conceptId === "nation",
+    ),
+    [],
+  );
+
+  const product = await createProject(t, {
+    sourceName: "Your Lands data couldn't be loaded.",
+    targetName: "你的 Lands 数据无法被加载.",
+  });
+  const productTerminology = checkResult(
+    qualityReport(runLioni(["qa", product.configPath])).report,
+    "terminology",
+  );
+  assert.deepEqual(
+    productTerminology.diagnostics.filter(
+      ({ object }) => object.conceptId === "land",
+    ),
+    [],
+  );
+
+  const entity = await createProject(t, {
+    sourceName: "Your lands",
+    targetName: "你的土地",
+  });
+  assert.deepEqual(
+    checkResult(
+      qualityReport(runLioni(["qa", entity.configPath])).report,
+      "terminology",
+    ).diagnostics.map(({ object }) => object.conceptId),
+    ["land"],
+  );
+});
+
+void test("变量后的外交语境在正文、按钮和悬浮说明中保持完整", async (t) => {
+  const scopes = [
+    {
+      source: "You can't declare land <v:land> as an enemy.",
+      target: "无法将城镇 <v:land> 设为政敌.",
+    },
+    {
+      source:
+        "<click:run_command:'/lands relation enemies add'>✖ Declare nation <v:nation> as an enemy instead: /<v:cmd></click>",
+      target:
+        "<click:run_command:'/lands relation enemies add'>✖ 改为将联邦 <v:nation> 设为政敌: /<v:cmd></click>",
+    },
+    {
+      source:
+        "<hover:show_text:'Click here to declare nation <v:nation> as an enemy.'>Hover</hover>",
+      target:
+        "<hover:show_text:'点击此处将联邦 <v:nation> 设为政敌.'>悬浮</hover>",
+    },
+  ];
+
+  for (const { source, target } of scopes) {
+    const project = await createProject(t, {
+      sourceName: source,
+      targetName: target,
+    });
+    const terminology = checkResult(
+      qualityReport(runLioni(["qa", project.configPath])).report,
+      "terminology",
+    );
+    assert.equal(terminology.status, "complete");
+    assert.deepEqual(
+      terminology.diagnostics.filter(
+        ({ object }) => object.conceptId === "declare-verb",
+      ),
+      [],
+      source,
+    );
+  }
+});
+
+void test("离开 HTML 所属语境后再返回时保留独立正文片段", async (t) => {
+  const project = await createProject(t, {
+    sourceName: "Confirm",
+    targetName: "确认",
+    mapSource: "<div>Declare<span>Nation</span> as an enemy</div>",
+    mapTarget: "<div>宣布<span>联邦</span>设为政敌</div>",
+  });
+  const terminology = checkResult(
+    qualityReport(runLioni(["qa", project.configPath])).report,
+    "terminology",
+  );
+
+  assert.deepEqual(
+    terminology.diagnostics.map(({ object }) => object.conceptId),
+    ["declare-verb"],
+  );
+});
+
+void test("源术语扫描有歧义时保留原生证据并将检查标为不完整", async (t) => {
+  const project = await createProject(t, {
+    sourceName: "war",
+    targetName: "战争",
+  });
+  const sourceTermsPath = join(project.termDirectory, "en-US.yaml");
+  const sourceTerms = parse(await readFile(sourceTermsPath, "utf8")) as {
+    concepts: Record<
+      string,
+      { expressions: { id: string; text: string; usage: "allowed" }[] }
+    >;
+  };
+  const shield = sourceTerms.concepts.shield;
+  assert.ok(shield);
+  shield.expressions.push({
+    id: "en-US-shield-alias",
+    text: "war",
+    usage: "allowed",
+  });
+  await writeFile(sourceTermsPath, stringify(sourceTerms));
+
+  const terminology = checkResult(
+    qualityReport(runLioni(["qa", project.configPath])).report,
+    "terminology",
+  );
+  assert.equal(terminology.status, "incomplete");
+  assert.deepEqual(terminology.diagnostics, []);
+  const issue = terminology.issues.find(
+    ({ code }) => code === "terminology.source-analysis-incomplete",
+  );
+  assert.ok(issue);
+  const evidence = issue.evidence?.find(
+    ({ role }) => role === "native-source-term-analysis",
+  );
+  assert.ok(evidence);
+  const serializedEvidence = JSON.stringify(evidence.value);
+  assert.match(serializedEvidence, /same-span-concepts/u);
+  assert.match(serializedEvidence, /Locale\/en-US_gui\.yml/u);
+  assert.match(serializedEvidence, /contextKey/u);
+  assert.match(serializedEvidence, /positions/u);
+});
+
 void test("原生匹配保留大小写、空白、词义、专名和技术标识语义", async (t) => {
   const project = await createProject(t, {
     sourceName:
@@ -564,6 +798,8 @@ void test("原生分组隔离按钮、列表、hover 和 HTML 属性正文", asy
   const buttons = await createProject(t, {
     sourceName: "Trust",
     targetName: "邀请",
+    sourceLore: ["Trust", "Trust"],
+    targetLore: ["邀请", "错误译法"],
     sourceCancelName: "Trust",
     targetCancelName: "错误译法",
   });
@@ -572,14 +808,14 @@ void test("原生分组隔离按钮、列表、hover 和 HTML 属性正文", asy
     buttonReport.report,
     "terminology",
   ).diagnostics;
-  assert.equal(buttonFindings.length, 1);
-  assert.deepEqual(buttonFindings[0]?.location.range.path, [
-    "gui",
-    "main",
-    "items",
-    "cancel",
-    "name",
-  ]);
+  assert.equal(buttonFindings.length, 2);
+  assert.deepEqual(
+    buttonFindings.map(({ location }) => location.range.path),
+    [
+      ["gui", "main", "items", "cancel", "name"],
+      ["gui", "main", "items", "confirm", "lore", 1],
+    ],
+  );
 
   const hover = await createProject(t, {
     sourceName: "<hover:show_text:'Nation'>Owner</hover>",
