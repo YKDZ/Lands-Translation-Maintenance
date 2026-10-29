@@ -35,11 +35,12 @@ import { parseYaml } from "#/yaml-data";
 const lioniJsonSchema = z.json();
 type LioniJson = z.infer<typeof lioniJsonSchema>;
 
-const unitSchema = z
+const messageUnitSchema = z
   .object({
     source: lioniJsonSchema,
     context: z
       .object({
+        role: z.literal("message"),
         sourceFile: z.string(),
         targetFile: z.string(),
         path: z.array(z.string()),
@@ -53,8 +54,25 @@ const unitSchema = z
   })
   .strict();
 
-const translationSchema = z
+const structureUnitSchema = z
   .object({
+    source: lioniJsonSchema,
+    context: z
+      .object({
+        role: z.literal("structure"),
+        sourceFile: z.string(),
+        targetFile: z.string(),
+        path: z.array(z.string()),
+      })
+      .strict(),
+  })
+  .strict();
+
+const unitSchema = z.union([messageUnitSchema, structureUnitSchema]);
+
+const messageTranslationSchema = z
+  .object({
+    role: z.literal("message"),
     sourceFile: z.string(),
     targetFile: z.string(),
     path: z.array(z.string()),
@@ -63,8 +81,24 @@ const translationSchema = z
   })
   .strict();
 
-const unavailableTranslationSchema = z
+const structureTranslationSchema = z
   .object({
+    role: z.literal("structure"),
+    sourceFile: z.string(),
+    targetFile: z.string(),
+    path: z.array(z.string()),
+    content: lioniJsonSchema,
+  })
+  .strict();
+
+const translationSchema = z.union([
+  messageTranslationSchema,
+  structureTranslationSchema,
+]);
+
+const unavailableMessageSchema = z
+  .object({
+    role: z.literal("message"),
     sourceFile: z.string(),
     targetFile: z.string(),
     path: z.array(z.string()),
@@ -72,6 +106,21 @@ const unavailableTranslationSchema = z
     raw: lioniJsonSchema,
   })
   .strict();
+
+const unavailableStructureSchema = z
+  .object({
+    role: z.literal("structure"),
+    sourceFile: z.string(),
+    targetFile: z.string(),
+    path: z.array(z.string()),
+    raw: lioniJsonSchema,
+  })
+  .strict();
+
+const unavailableTranslationSchema = z.union([
+  unavailableMessageSchema,
+  unavailableStructureSchema,
+]);
 
 type LandsUnit = z.infer<typeof unitSchema>;
 type LandsTranslation = z.infer<typeof translationSchema>;
@@ -106,6 +155,10 @@ function isRecord(
 
 function isJsonArray(value: JsonValue): value is readonly JsonValue[] {
   return Array.isArray(value);
+}
+
+function isString(value: string | undefined): value is string {
+  return typeof value === "string";
 }
 
 function errorText(error: unknown): string {
@@ -368,6 +421,7 @@ function fieldUnits(
     for (const entry of selected.entries) {
       const format = messageFormat(entry.path, field, purpose);
       const context = {
+        role: "message" as const,
         sourceFile: mapping.source,
         targetFile: mapping.target,
         path: [...entry.path],
@@ -409,6 +463,112 @@ function fieldUnits(
   };
 }
 
+type LandsMapping =
+  ConsumerConfiguration["translationScope"]["mappings"][number];
+
+type TranslationPathRelation = "outside" | "ancestor" | "selected";
+
+function translationPathRelation(
+  path: readonly string[],
+  fields: readonly TranslationField[],
+): TranslationPathRelation {
+  let hasAncestor = false;
+  for (const field of fields) {
+    const pattern = field.path;
+    let matchesPrefix = true;
+    for (
+      let index = 0;
+      index < Math.min(path.length, pattern.length);
+      index += 1
+    ) {
+      const segment = pattern[index]!;
+      if (segment === "**") return "selected";
+      if (segment !== "*" && segment !== path[index]) {
+        matchesPrefix = false;
+        break;
+      }
+    }
+    if (!matchesPrefix) continue;
+    if (path.length < pattern.length) hasAncestor = true;
+    else return "selected";
+  }
+  return hasAncestor ? "ancestor" : "outside";
+}
+
+function collectStructuralFields(
+  root: JsonValue,
+  fields: readonly TranslationField[],
+  file: string,
+): {
+  readonly entries: readonly FieldEntry[];
+  readonly issues: readonly string[];
+} {
+  if (!isRecord(root)) {
+    return {
+      entries: [],
+      issues: [`${file} 的结构根节点必须是映射`],
+    };
+  }
+  const entries: FieldEntry[] = [];
+  const issues: string[] = [];
+
+  function visit(value: JsonValue, path: readonly string[]): void {
+    if (!isRecord(value)) return;
+    for (const key of Object.keys(value).sort(compareText)) {
+      const fieldPath = [...path, key];
+      const fieldValue = value[key]!;
+      const relation = translationPathRelation(fieldPath, fields);
+      if (relation === "selected") continue;
+      if (relation === "ancestor") {
+        if (!isRecord(fieldValue) || Object.keys(fieldValue).length === 0) {
+          issues.push(
+            `${file}:${fieldPath.join(".")} 无法与声明的翻译字段路径分开`,
+          );
+          continue;
+        }
+        visit(fieldValue, fieldPath);
+        continue;
+      }
+      entries.push({ path: fieldPath, value: fieldValue });
+    }
+  }
+
+  visit(root, []);
+  return { entries, issues };
+}
+
+function structureUnits(
+  mapping: LandsMapping,
+  root: JsonValue,
+): {
+  readonly records: readonly {
+    readonly key: string;
+    readonly value: LandsUnit;
+    readonly bodyAvailability: "available";
+  }[];
+  readonly issues: readonly string[];
+} {
+  const sourceFile = mapping.definitionsSource;
+  if (sourceFile === undefined) return { records: [], issues: [] };
+  const collected = collectStructuralFields(root, mapping.fields, sourceFile);
+  return {
+    records: collected.entries.map(({ path, value }) => ({
+      key: `structure:${sourceFile}:${canonicalJson(path)}`,
+      value: {
+        source: toLioniJson(value),
+        context: {
+          role: "structure",
+          sourceFile,
+          targetFile: mapping.target,
+          path: [...path],
+        },
+      },
+      bodyAvailability: "available",
+    })),
+    issues: collected.issues,
+  };
+}
+
 function sourceRange(path: string) {
   return {
     kind: "lands-resource",
@@ -447,14 +607,18 @@ async function readSource(
   const resourcePurposes = new Map(
     configuration.resources.map(({ path, purpose }) => [path, purpose]),
   );
-  const mappingsBySource = new Map<
-    string,
-    ConsumerConfiguration["translationScope"]["mappings"][number][]
-  >();
+  const mappingsBySource = new Map<string, LandsMapping[]>();
+  const structuresBySource = new Map<string, LandsMapping[]>();
   for (const mapping of configuration.translationScope.mappings) {
     const mappings = mappingsBySource.get(mapping.source) ?? [];
     mappings.push(mapping);
     mappingsBySource.set(mapping.source, mappings);
+    if (mapping.definitionsSource !== undefined) {
+      const structureMappings =
+        structuresBySource.get(mapping.definitionsSource) ?? [];
+      structureMappings.push(mapping);
+      structuresBySource.set(mapping.definitionsSource, structureMappings);
+    }
   }
 
   const resourcePaths = new Set([
@@ -477,7 +641,8 @@ async function readSource(
     }
 
     const mappings = mappingsBySource.get(path) ?? [];
-    if (mappings.length === 0) {
+    const structureMappings = structuresBySource.get(path) ?? [];
+    if (mappings.length === 0 && structureMappings.length === 0) {
       scopes.push({ range, enumeration: "complete", records: [] });
       continue;
     }
@@ -498,6 +663,11 @@ async function readSource(
     const issues: string[] = [];
     for (const mapping of mappings) {
       const collected = fieldUnits(mapping, parsed.value!, registeredPurpose);
+      issues.push(...collected.issues);
+      records.push(...collected.records);
+    }
+    for (const mapping of structureMappings) {
+      const collected = structureUnits(mapping, parsed.value!);
       issues.push(...collected.issues);
       records.push(...collected.records);
     }
@@ -585,9 +755,6 @@ async function readTargetResource(
   }
   return parseResource(bytes, path);
 }
-
-type LandsMapping =
-  ConsumerConfiguration["translationScope"]["mappings"][number];
 
 interface LandsSourceUnitLocation {
   readonly unit: {
@@ -762,15 +929,25 @@ async function readTranslations(
 
   if (language !== configuration.translationScope.targetLanguage) {
     return {
-      scopes: configuration.translationScope.mappings.map((mapping) => ({
-        range: targetRange(mapping.source, mapping.target),
-        covers: sourceUnits
-          .filter(({ unit }) => unit.context.sourceFile === mapping.source)
-          .map(({ key }) => key),
-        enumeration: "failed",
-        records: [],
-        error: `当前资料配置目标语言为 ${configuration.translationScope.targetLanguage}`,
-      })),
+      scopes: configuration.translationScope.mappings.flatMap((mapping) =>
+        [
+          ...new Set(
+            [mapping.source, mapping.definitionsSource].filter(isString),
+          ),
+        ].map((sourceFile) => ({
+          range: targetRange(sourceFile, mapping.target),
+          covers: sourceUnits
+            .filter(
+              ({ unit }) =>
+                unit.context.sourceFile === sourceFile &&
+                unit.context.targetFile === mapping.target,
+            )
+            .map(({ key }) => key),
+          enumeration: "failed" as const,
+          records: [],
+          error: `当前资料配置目标语言为 ${configuration.translationScope.targetLanguage}`,
+        })),
+      ),
     };
   }
 
@@ -780,24 +957,34 @@ async function readTranslations(
   >["scopes"][number][] = [];
   for (const mapping of configuration.translationScope.mappings) {
     const mappedUnits = sourceUnits.filter(
-      ({ unit }) =>
-        unit.context.sourceFile === mapping.source &&
-        unit.context.targetFile === mapping.target,
+      ({ unit }) => unit.context.targetFile === mapping.target,
     );
-    const covers = mappedUnits.map(({ key }) => key).sort(compareText);
     const target = await readTargetResource(
       paths.projectDirectory,
       mapping.target,
     );
-    const records: TranslationRead<
-      LandsTranslation,
-      UnavailableTranslation
-    >["scopes"][number]["records"][number][] = [];
-    const issues: string[] = [];
+    const recordsBySource = new Map<
+      string,
+      {
+        records: TranslationRead<
+          LandsTranslation,
+          UnavailableTranslation
+        >["scopes"][number]["records"][number][];
+        issues: string[];
+      }
+    >();
+    for (const sourceFile of [mapping.source, mapping.definitionsSource].filter(
+      isString,
+    )) {
+      if (!recordsBySource.has(sourceFile)) {
+        recordsBySource.set(sourceFile, { records: [], issues: [] });
+      }
+    }
 
     if (target.status === "available") {
       const targetRoot = target.value!;
       const selectedTargets = new Map<string, FieldEntry>();
+      const messageGroup = recordsBySource.get(mapping.source)!;
       for (const field of mapping.fields) {
         const selected = collectFieldEntries(
           targetRoot,
@@ -805,11 +992,11 @@ async function readTranslations(
           mapping.target,
           false,
         );
-        issues.push(...selected.issues);
+        messageGroup.issues.push(...selected.issues);
         for (const entry of selected.entries) {
           const key = canonicalJson(entry.path);
           if (selectedTargets.has(key)) {
-            issues.push(
+            messageGroup.issues.push(
               `${mapping.target}:${entry.path.join(".")} 被多个字段约定选中`,
             );
             continue;
@@ -840,45 +1027,81 @@ async function readTranslations(
           category: field.category,
         };
         if (validFieldValue(field, entry.value)) {
-          records.push({
-            value: { ...record, content: toLioniJson(entry.value) },
+          messageGroup.records.push({
+            value: {
+              role: "message",
+              ...record,
+              content: toLioniJson(entry.value),
+            },
             bodyAvailability: "available",
           });
         } else {
-          records.push({
-            value: { ...record, raw: toLioniJson(entry.value) },
+          messageGroup.records.push({
+            value: {
+              role: "message",
+              ...record,
+              raw: toLioniJson(entry.value),
+            },
             bodyAvailability: "unavailable",
+          });
+        }
+      }
+
+      if (mapping.definitionsSource !== undefined) {
+        const structureGroup = recordsBySource.get(mapping.definitionsSource)!;
+        const structuralTargets = collectStructuralFields(
+          targetRoot,
+          mapping.fields,
+          mapping.target,
+        );
+        structureGroup.issues.push(...structuralTargets.issues);
+        for (const entry of structuralTargets.entries) {
+          structureGroup.records.push({
+            value: {
+              role: "structure",
+              sourceFile: mapping.definitionsSource,
+              targetFile: mapping.target,
+              path: [...entry.path],
+              content: toLioniJson(entry.value),
+            },
+            bodyAvailability: "available",
           });
         }
       }
     }
 
-    const structureProjection = mappingStructures(
-      mapping,
-      snapshot,
-      target,
-      sourceUnits,
-    );
-    if (structureProjection.error !== undefined) {
-      issues.push(structureProjection.error);
+    if (mapping.definitionsSource !== undefined) {
+      const definition = mappingDefinitions(mapping, snapshot);
+      if (definition.status === "unavailable") {
+        recordsBySource
+          .get(mapping.definitionsSource)!
+          .issues.push(definition.error);
+      }
     }
 
-    targetScopes.push({
-      range: targetRange(mapping.source, mapping.target),
-      covers,
-      enumeration:
-        target.status === "unavailable"
-          ? "failed"
+    for (const [sourceFile, group] of recordsBySource) {
+      const covers = mappedUnits
+        .filter(({ unit }) => unit.context.sourceFile === sourceFile)
+        .map(({ key }) => key)
+        .sort(compareText);
+      const issues = group.issues;
+      targetScopes.push({
+        range: targetRange(sourceFile, mapping.target),
+        covers,
+        enumeration:
+          target.status === "unavailable"
+            ? "failed"
+            : issues.length === 0
+              ? "complete"
+              : "partial",
+        records: group.records,
+        ...(target.status === "unavailable"
+          ? { error: target.error }
           : issues.length === 0
-            ? "complete"
-            : "partial",
-      records,
-      ...(target.status === "unavailable"
-        ? { error: target.error }
-        : issues.length === 0
-          ? {}
-          : { error: issues.join("；") }),
-    });
+            ? {}
+            : { error: issues.join("；") }),
+      });
+    }
   }
 
   return { scopes: targetScopes };
@@ -915,7 +1138,7 @@ export function landsFactAdapters(entryUrl: string | URL) {
       read: () => readSource(paths),
     },
     keyOf: (unit: LandsUnit) =>
-      `${unit.context.sourceFile}:${canonicalJson(unit.context.path)}`,
+      `${unit.context.role === "structure" ? "structure:" : ""}${unit.context.sourceFile}:${canonicalJson(unit.context.path)}`,
     translations: {
       languages: ["zh-CN"],
       schema: translationSchema,
@@ -930,6 +1153,7 @@ export function landsFactAdapters(entryUrl: string | URL) {
         unit: LandsUnit,
         translation: LandsTranslation | UnavailableTranslation,
       ) =>
+        unit.context.role === translation.role &&
         unit.context.sourceFile === translation.sourceFile &&
         canonicalJson(unit.context.path) === canonicalJson(translation.path),
       read: (

@@ -179,6 +179,12 @@ async function createLoreProject(directory: string): Promise<void> {
       "      target: Locale/zh-CN_gui.yml",
       "      definitionsSource: Locale/definitions_gui.yml",
       "      fields:",
+      "        - path: [gui, main, items, confirm, name]",
+      "          category: gui-string",
+      "          scene: gui-item-name",
+      "        - path: [gui, main, items, confirm, help]",
+      "          category: gui-string",
+      "          scene: gui-general",
       "        - path: [gui, main, items, confirm, lore]",
       "          category: gui-lore",
       "          scene: gui-item-lore",
@@ -208,7 +214,16 @@ function landsJarWithLore(lore: string | readonly string[]): Uint8Array {
     "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
     "Locale/en-US.yml": strToU8("messages:\n  greet: Hello\n"),
     "Locale/en-US_gui.yml": strToU8(
-      `gui:\n  main:\n    items:\n      confirm:\n        lore: ${loreValue}\n`,
+      [
+        "gui:",
+        "  main:",
+        "    items:",
+        "      confirm:",
+        '        name: "Confirm"',
+        '        help: "Help text"',
+        `        lore: ${loreValue}`,
+        "",
+      ].join("\n"),
     ),
     "Locale/definitions_gui.yml": strToU8(
       [
@@ -219,6 +234,37 @@ function landsJarWithLore(lore: string | readonly string[]): Uint8Array {
         "        material: DIAMOND",
         "        slot: 4",
         '        lore: "定义专用结构值"',
+        "",
+      ].join("\n"),
+    ),
+  });
+}
+
+function landsJarWithGuiMaterial(material: string): Uint8Array {
+  return zipSync({
+    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "Locale/en-US.yml": strToU8("messages:\n  greet: Hello\n"),
+    "Locale/en-US_gui.yml": strToU8(
+      [
+        "gui:",
+        "  main:",
+        "    items:",
+        "      confirm:",
+        '        name: "Confirm"',
+        '        help: "Help text"',
+        '        lore: "Old lore"',
+        "",
+      ].join("\n"),
+    ),
+    "Locale/definitions_gui.yml": strToU8(
+      [
+        "gui:",
+        "  main:",
+        "    items:",
+        "      confirm:",
+        `        material: ${material}`,
+        "        slot: 4",
+        '        lore: "Definition-only structure"',
         "",
       ].join("\n"),
     ),
@@ -408,6 +454,56 @@ void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更
     readonly custom: string;
   };
   assert.deepEqual(target.gui.main.items.confirm.lore, ["Same line"]);
+  assert.equal(target.custom, "保留用户配置");
+});
+
+void test("GUI definitions 结构变化进入原生 update 并保留语言译文及自定义字段", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-gui-structure-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLoreProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithGuiMaterial("DIAMOND"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const changedJar = join(project, "Lands-changed.jar");
+  await writeFile(changedJar, landsJarWithGuiMaterial("EMERALD"));
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+
+  const target = parseDocument(
+    await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
+  ).toJS() as {
+    readonly gui: {
+      readonly main: {
+        readonly items: {
+          readonly confirm: {
+            readonly material: string;
+            readonly slot: number;
+            readonly name: string;
+            readonly help: string;
+            readonly lore: string;
+          };
+        };
+      };
+    };
+    readonly custom: string;
+  };
+  assert.equal(target.gui.main.items.confirm.material, "EMERALD");
+  assert.equal(target.gui.main.items.confirm.slot, 4);
+  assert.equal(target.gui.main.items.confirm.name, "确认");
+  assert.equal(target.gui.main.items.confirm.help, "Help text");
+  assert.equal(target.gui.main.items.confirm.lore, "旧译文");
   assert.equal(target.custom, "保留用户配置");
 });
 
