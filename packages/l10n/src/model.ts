@@ -207,10 +207,6 @@ export interface ObservedMessage extends MessageIdentity {
   readonly source: JsonValue;
   readonly target: JsonValue | undefined;
   readonly targetStatus: "present" | "missing" | "blocked";
-  readonly translationReview?: {
-    readonly pendingReason?: "translation-seed" | "same-text-candidate";
-    readonly confirmedSameText: boolean;
-  };
 }
 
 export interface ProjectView {
@@ -322,11 +318,6 @@ export interface CheckRule {
 export interface ProjectSummary {
   readonly resourceFiles: number;
   readonly messages: number;
-  readonly pendingTranslations: number;
-  readonly sameTextCandidates: number;
-  readonly confirmedSameText: number;
-  readonly modifiedTranslations: number;
-  readonly missingTranslations: number;
 }
 
 export interface CheckCoverage {
@@ -358,8 +349,6 @@ export interface CheckConclusion extends ConclusionSubject {
 export interface ExceptionRecord extends ConclusionSubject {
   readonly reason: string;
 }
-
-export type SameTextPendingReason = "translation-seed" | "same-text-candidate";
 
 export interface ProjectReport {
   readonly operation: "init" | "status" | "check";

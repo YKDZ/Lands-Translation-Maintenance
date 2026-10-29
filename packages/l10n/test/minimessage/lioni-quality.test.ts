@@ -51,6 +51,7 @@ interface NativeDiagnostic {
       readonly end?: number;
     };
   };
+  readonly severity: "error" | "warning" | "info";
   readonly handling: { readonly status: string };
 }
 
@@ -58,7 +59,12 @@ interface QualityCheckResult {
   readonly checkId: string;
   readonly status: string;
   readonly diagnostics: readonly NativeDiagnostic[];
-  readonly issues: readonly { readonly code: string }[];
+  readonly issues: readonly {
+    readonly code: string;
+    readonly message: string;
+    readonly object?: { readonly key?: string };
+    readonly location?: { readonly range: Readonly<Record<string, unknown>> };
+  }[];
   readonly executions: readonly {
     readonly executionId: number;
     readonly sourceKey: string;
@@ -67,6 +73,19 @@ interface QualityCheckResult {
 }
 
 interface QualityReport {
+  readonly status: string;
+  readonly candidates: readonly {
+    readonly sourceKey: string;
+    readonly language: string;
+    readonly content: unknown;
+  }[];
+  readonly factCoverage: {
+    readonly associations: readonly {
+      readonly sourceKey: string;
+      readonly status: string;
+      readonly candidateSelected: boolean;
+    }[];
+  };
   readonly checks: readonly QualityCheckResult[];
   readonly diagnostics: readonly NativeDiagnostic[];
   readonly exceptionApplicability: readonly {
@@ -88,6 +107,11 @@ interface QualityProjectOptions {
   readonly targetLore?: readonly string[];
   readonly sourceVersion?: string;
   readonly structureMaterial?: string;
+  readonly targetStructureMaterial?: string;
+  readonly omitTargetMaterial?: boolean;
+  readonly omitTargetAction?: boolean;
+  readonly omitTargetName?: boolean;
+  readonly targetCustomField?: boolean;
   readonly chat?: { readonly source: string; readonly target: string };
 }
 
@@ -122,6 +146,7 @@ function landsJar(
         '        name: "<red>Confirm</red>"',
         `        lore: ${JSON.stringify(sourceLore)}`,
         "        action: confirm",
+        "        customSettings: {}",
         "",
       ].join("\n"),
     ),
@@ -254,7 +279,19 @@ async function createQualityProject(
       "  main:",
       "    items:",
       "      confirm:",
-      `        name: ${JSON.stringify(targetName)}`,
+      ...(options.omitTargetMaterial
+        ? []
+        : [
+            `        material: ${JSON.stringify(options.targetStructureMaterial ?? options.structureMaterial ?? "EMERALD")}`,
+          ]),
+      "        slot: 1",
+      ...(options.omitTargetAction ? [] : ["        action: confirm"]),
+      ...(options.targetCustomField ? ["        customSetting: true"] : []),
+      "        customSettings:",
+      "          pluginValue: true",
+      ...(options.omitTargetName
+        ? []
+        : [`        name: ${JSON.stringify(targetName)}`]),
       `        lore: ${JSON.stringify(targetLore)}`,
       "",
     ].join("\n"),
@@ -350,6 +387,368 @@ function checkResult(
   return result;
 }
 
+void test("原生漏译 QA 按正文、列表项和 hover 位置报告同文与空译文", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red>",
+    "<red>Confirm</red>",
+    {
+      sourceLore: ["First line", "Second line"],
+      targetLore: ["第一行", "Second line"],
+      targetCustomField: true,
+    },
+  );
+  const run = runLioni(["qa", project.configPath]);
+  const report = qualityReport(run).report;
+  assert.equal(
+    run.status,
+    0,
+    JSON.stringify(
+      report.checks.map(({ checkId, status, diagnostics, issues }) => ({
+        checkId,
+        status,
+        diagnostics: diagnostics.map(({ severity, object }) => ({
+          severity,
+          code: object.code,
+        })),
+        issues: issues.map(({ code, message, object, location }) => ({
+          code,
+          message,
+          key: object?.key,
+          location: location?.range,
+        })),
+      })),
+      null,
+      2,
+    ),
+  );
+  const omissions = checkResult(report, "translation-omissions");
+  const structures = checkResult(report, "lands-structure-consistency");
+  assert.equal(structures.status, "complete");
+  assert.equal(structures.diagnostics.length, 0);
+  const sameText = omissions.diagnostics.filter(
+    ({ object }) => object.code === "translation.same-text",
+  );
+  const emptyText = omissions.diagnostics.filter(
+    ({ object }) => object.code === "translation.empty-text",
+  );
+
+  assert.equal(sameText.length, 2, JSON.stringify(omissions, null, 2));
+  assert.equal(emptyText.length, 0, JSON.stringify(omissions, null, 2));
+  assert.ok(
+    [...sameText, ...emptyText].every(
+      ({ severity, handling }) =>
+        severity === "warning" && handling.status === "active",
+    ),
+    JSON.stringify(omissions.diagnostics, null, 2),
+  );
+  assert.ok(
+    sameText.some(
+      ({ location }) =>
+        location.range.file === "Locale/zh-CN_gui.yml" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "lore", 1]) &&
+        location.range.start !== undefined &&
+        location.range.end !== undefined,
+    ),
+    JSON.stringify(sameText, null, 2),
+  );
+
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  await writeFile(
+    targetPath,
+    [
+      "gui:",
+      "  main:",
+      "    items:",
+      "      confirm:",
+      '        material: "EMERALD"',
+      "        slot: 1",
+      "        action: confirm",
+      "        customSetting: true",
+      "        customSettings:",
+      "          pluginValue: true",
+      '        name: "<red>Confirm</red>"',
+      '        lore: ["<t:missing>第一行", "Second line"]',
+      "",
+    ].join("\n"),
+  );
+  const malformedRun = runLioni(["qa", project.configPath]);
+  const malformed = qualityReport(malformedRun);
+  const malformedOmissions = checkResult(
+    malformed.report,
+    "translation-omissions",
+  );
+  const loreSameText = malformedOmissions.diagnostics.find(
+    ({ object, location }) =>
+      object.code === "translation.same-text" &&
+      location.range.path.at(-2) === "lore",
+  );
+  assert.ok(loreSameText, JSON.stringify(malformedOmissions, null, 2));
+  const omissionExecution = malformedOmissions.executions.find(
+    ({ sourceKey }) => sourceKey === loreSameText.object.key,
+  );
+  assert.ok(omissionExecution, JSON.stringify(malformedOmissions, null, 2));
+  const reportPath = join(project.directory, "qa-report.json");
+  await writeFile(reportPath, JSON.stringify(malformed.envelope));
+  const upserted = runLioni([
+    "exceptions",
+    "upsert",
+    project.configPath,
+    reportPath,
+    "--check-id",
+    "translation-omissions",
+    "--execution-id",
+    String(omissionExecution.executionId),
+    "--id",
+    "accepted-lore-same-text",
+    "--reason",
+    "此处由 Lands 的文本预处理保留",
+  ]);
+  assert.equal(upserted.status, 0, upserted.stderr || upserted.stdout);
+
+  const acceptedRun = runLioni(["qa", project.configPath]);
+  const accepted = qualityReport(acceptedRun).report;
+  const acceptedSameText = checkResult(
+    accepted,
+    "translation-omissions",
+  ).diagnostics.find(
+    ({ object }) =>
+      object.key === loreSameText.object.key &&
+      object.code === "translation.same-text",
+  );
+  const activeFormat = checkResult(
+    accepted,
+    "minimessage-theme",
+  ).diagnostics.find(
+    ({ object }) => object.code === "minimessage.theme-unknown",
+  );
+  assert.equal(acceptedRun.status === 0, false);
+  assert.equal(acceptedSameText?.handling.status, "excepted");
+  assert.equal(activeFormat?.handling.status, "active");
+
+  const changedTarget = (await readFile(targetPath, "utf8")).replace(
+    "Second line",
+    "译文第二行",
+  );
+  await writeFile(targetPath, changedTarget);
+  const changed = qualityReport(runLioni(["qa", project.configPath]));
+  assert.equal(
+    changed.report.exceptionApplicability.find(
+      ({ checkId }) => checkId === "translation-omissions",
+    )?.status,
+    "basis-changed",
+  );
+  await writeFile(
+    targetPath,
+    changedTarget.replace("译文第二行", "Second line"),
+  );
+  const restored = qualityReport(runLioni(["qa", project.configPath]));
+  assert.equal(
+    restored.report.exceptionApplicability.find(
+      ({ checkId }) => checkId === "translation-omissions",
+    )?.status,
+    "applicable",
+  );
+
+  const nonText = await createQualityProject(
+    t,
+    undefined,
+    "<red><v:player></red>",
+    "<red><v:player></red>",
+    {
+      sourceLore: ["  ", "<red><v:player></red>", "<red><bold></bold></red>"],
+      targetLore: ["  ", "<red><v:player></red>", "<red><bold></bold></red>"],
+    },
+  );
+  const nonTextRun = runLioni(["qa", nonText.configPath]);
+  assert.equal(nonTextRun.status, 0, nonTextRun.stdout || nonTextRun.stderr);
+  assert.deepEqual(
+    checkResult(qualityReport(nonTextRun).report, "translation-omissions")
+      .diagnostics,
+    [],
+  );
+});
+
+void test("hover 同文与空译文沿用原生警告且不使 QA 单独失败", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm<hover:show_text:'More information'>Info</hover></red>",
+    "<red>确认<hover:show_text:'More information'>说明</hover></red>",
+    { chat: { source: "Welcome to Lands", target: "" } },
+  );
+  const run = runLioni(["qa", project.configPath]);
+  const report = qualityReport(run).report;
+  assert.equal(
+    run.status,
+    0,
+    JSON.stringify(
+      report.checks.map(({ checkId, status, diagnostics, issues }) => ({
+        checkId,
+        status,
+        diagnostics: diagnostics.map(({ severity, object }) => ({
+          severity,
+          code: object.code,
+        })),
+        issues: issues.map(({ code, message }) => ({ code, message })),
+      })),
+      null,
+      2,
+    ),
+  );
+  const omissions = checkResult(report, "translation-omissions");
+  const hover = omissions.diagnostics.find(
+    ({ object, location }) =>
+      object.code === "translation.same-text" &&
+      JSON.stringify(location.range.path) ===
+        JSON.stringify(["gui", "main", "items", "confirm", "name"]),
+  );
+  const empty = omissions.diagnostics.find(
+    ({ object }) => object.code === "translation.empty-text",
+  );
+  assert.ok(hover, JSON.stringify(omissions.diagnostics, null, 2));
+  assert.ok(empty, JSON.stringify(omissions.diagnostics, null, 2));
+  assert.ok(hover.location.range.start !== undefined);
+  assert.deepEqual(empty.location.range.path, ["messages", "greeting"]);
+  assert.equal(hover.severity, "warning");
+  assert.equal(empty.severity, "warning");
+});
+
+void test("结构一致性 QA 只读检查受管值并允许自定义字段", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    { targetStructureMaterial: "DIAMOND", targetCustomField: true },
+  );
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  const before = await readFile(targetPath);
+  const result = runLioni(["qa", project.configPath]);
+  const report = qualityReport(result).report;
+  const structures = checkResult(report, "lands-structure-consistency");
+  const mismatch = structures.diagnostics.find(
+    ({ object }) => object.code === "lands.structure-mismatch",
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.ok(mismatch, JSON.stringify(structures, null, 2));
+  assert.equal(mismatch.severity, "error");
+  assert.deepEqual(mismatch.location.range.path, [
+    "gui",
+    "main",
+    "items",
+    "confirm",
+    "material",
+  ]);
+  assert.deepEqual(await readFile(targetPath), before);
+});
+
+void test("结构和正文缺失由漏译 QA 各报告一次且 QA 不写入目标", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      omitTargetMaterial: true,
+      omitTargetAction: true,
+      omitTargetName: true,
+    },
+  );
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  const before = await readFile(targetPath);
+  const result = runLioni(["qa", project.configPath]);
+  const report = qualityReport(result).report;
+  const omissions = checkResult(report, "translation-omissions");
+  const missing = omissions.diagnostics.filter(
+    ({ object }) => object.code === "translation.missing",
+  );
+  const structures = checkResult(report, "lands-structure-consistency");
+
+  assert.notEqual(result.status, 0);
+  assert.equal(missing.length, 3, JSON.stringify(omissions, null, 2));
+  for (const diagnostic of missing) {
+    const sourceKey = diagnostic.object.key;
+    const candidate = report.candidates.find(
+      ({ sourceKey: candidateSourceKey }) => candidateSourceKey === sourceKey,
+    );
+    const association = report.factCoverage.associations.find(
+      ({ sourceKey: associationSourceKey }) =>
+        associationSourceKey === sourceKey,
+    );
+    const field = diagnostic.location.range.path.at(-1);
+    assert.equal(association?.status, "missing");
+    assert.equal(association?.candidateSelected, true);
+    assert.equal(
+      candidate?.content,
+      field === "material"
+        ? "EMERALD"
+        : field === "action"
+          ? "confirm"
+          : "<red>Confirm</red>",
+    );
+  }
+  assert.equal(
+    structures.diagnostics.some(
+      ({ object }) => object.code === "translation.missing",
+    ),
+    false,
+  );
+  assert.deepEqual(await readFile(targetPath), before);
+});
+
+void test("目标读取缺口或正文不可用会使原生漏译 QA 不完整", async (t) => {
+  const project = await createQualityProject(t);
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  await writeFile(targetPath, "gui: [\n");
+  const unreadable = qualityReport(runLioni(["qa", project.configPath]));
+  const unreadableOmissions = checkResult(
+    unreadable.report,
+    "translation-omissions",
+  );
+  assert.notEqual(unreadable.report.status, "complete");
+  assert.equal(unreadableOmissions.diagnostics.length, 0);
+
+  await writeFile(
+    targetPath,
+    [
+      "gui:",
+      "  main:",
+      "    items:",
+      "      confirm:",
+      '        material: "EMERALD"',
+      "        slot: 1",
+      "        action: confirm",
+      "        customSettings:",
+      "          pluginValue: true",
+      "        name: {unavailable: true}",
+      '        lore: ["第一行", "第二行"]',
+      "",
+    ].join("\n"),
+  );
+  const unavailable = qualityReport(runLioni(["qa", project.configPath]));
+  const unavailableOmissions = checkResult(
+    unavailable.report,
+    "translation-omissions",
+  );
+  assert.notEqual(unavailable.report.status, "complete");
+  assert.equal(
+    unavailableOmissions.diagnostics.some(
+      ({ object }) => object.code === "translation.missing",
+    ),
+    false,
+  );
+  assert.ok(
+    unavailableOmissions.issues.some(
+      ({ code }) => code === "translation.body-unavailable",
+    ),
+    JSON.stringify(unavailableOmissions.issues, null, 2),
+  );
+});
+
 void test("原生 QA 用官方解析器报告语法与主题并独立应用原生例外", async (t) => {
   const project = await createQualityProject(t);
   const valid = qualityReport(runLioni(["qa", project.configPath]));
@@ -372,6 +771,11 @@ void test("原生 QA 用官方解析器报告语法与主题并独立应用原�
     "  main:",
     "    items:",
     "      confirm:",
+    '        material: "EMERALD"',
+    "        slot: 1",
+    "        action: confirm",
+    "        customSettings:",
+    "          pluginValue: true",
     '        name: "你好 §c世界"',
     '        lore: ["<red>第一行", "<t:missing>第二行</red>"]',
     "",
@@ -481,11 +885,19 @@ void test("原生 QA 用官方解析器报告语法与主题并独立应用原�
 
   await rm(targetPath);
   const unverified = qualityReport(runLioni(["qa", project.configPath]));
+  const missing = checkResult(
+    unverified.report,
+    "translation-omissions",
+  ).diagnostics.find(({ object }) => object.code === "translation.missing");
+  assert.ok(missing);
+  assert.equal(missing.severity, "error");
+  assert.equal(missing.handling.status, "active");
   assert.ok(
     unverified.report.exceptionApplicability.some(
       ({ checkId, status }) =>
-        checkId === "minimessage-syntax" && status === "not-verified",
+        checkId === "minimessage-syntax" && status === "basis-changed",
     ),
+    JSON.stringify(unverified.report.exceptionApplicability, null, 2),
   );
 });
 

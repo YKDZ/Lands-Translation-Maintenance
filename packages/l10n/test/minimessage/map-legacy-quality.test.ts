@@ -173,6 +173,7 @@ async function writeGuiTranslation(
     [
       "physical:",
       "  selection:",
+      "    material: GOLDEN_HOE",
       `    name: ${JSON.stringify(name)}`,
       '    lore: ["说明"]',
       "",

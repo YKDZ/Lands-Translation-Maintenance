@@ -59,11 +59,6 @@ const reportSchema = z.object({
   summary: z.object({
     resourceFiles: z.number().int().nonnegative(),
     messages: z.number().int().nonnegative(),
-    pendingTranslations: z.number().int().nonnegative(),
-    sameTextCandidates: z.number().int().nonnegative(),
-    confirmedSameText: z.number().int().nonnegative(),
-    modifiedTranslations: z.number().int().nonnegative(),
-    missingTranslations: z.number().int().nonnegative(),
   }),
   diagnostics: z.array(diagnosticSchema),
   exceptionCandidates: z.array(checkConclusionSchema),
@@ -122,7 +117,7 @@ function renderReport(report: ReportPayload) {
   } as const;
   const lines = [
     `${report.operation}：${stateNames[report.state]}`,
-    `资源文件 ${report.summary.resourceFiles} 项；消息 ${report.summary.messages} 条；待翻译 ${report.summary.pendingTranslations} 条；历史同文候选 ${report.summary.sameTextCandidates} 条；已确认同文 ${report.summary.confirmedSameText} 条；已修改 ${report.summary.modifiedTranslations} 条；缺失 ${report.summary.missingTranslations} 条。`,
+    `资源文件 ${report.summary.resourceFiles} 项；消息 ${report.summary.messages} 条。`,
   ];
   for (const candidate of report.exceptionCandidates) {
     lines.push(

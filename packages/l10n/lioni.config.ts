@@ -4,6 +4,7 @@ import {
   loadTermbaseYaml,
 } from "@lioni/lioni/node";
 
+import { landsStructureConsistencyCheck } from "#/lands-structure-consistency-check";
 import { legacyFormatCheck } from "#/legacy-format-check";
 import { legacyVariableCheck } from "#/legacy-variable-check";
 import { landsFactAdapters } from "#/lioni/lands-facts";
@@ -26,6 +27,10 @@ import {
 } from "#/minimessage-terminology-check";
 import { miniMessageThemeCheck } from "#/minimessage-theme-check";
 import { miniMessageVariableCorrespondenceCheck } from "#/minimessage-variable-correspondence-check";
+import {
+  buildTranslationOmissionCandidates,
+  translationOmissionsCheck,
+} from "#/translation-omissions-check";
 
 /** 根据翻译项目入口构造唯一的 Lands 配置。 */
 export function createLandsConfig(entryUrl: string | URL) {
@@ -34,6 +39,7 @@ export function createLandsConfig(entryUrl: string | URL) {
     ...landsFactAdapters(entryUrl),
     updatePolicy: landsUpdatePolicy,
     quality: {
+      buildCandidates: buildTranslationOmissionCandidates,
       checks: [
         miniMessageSyntaxCheck,
         miniMessageThemeCheck,
@@ -50,6 +56,8 @@ export function createLandsConfig(entryUrl: string | URL) {
         miniMessageVariableCorrespondenceCheck,
         miniMessageClickBehaviorCheck,
         miniMessageInteractionDistributionCheck,
+        translationOmissionsCheck,
+        landsStructureConsistencyCheck,
       ],
       exceptionStore: createFileQualityExceptionStore(paths.exceptionFile),
       loadDependencies: async ({ facts }) => {

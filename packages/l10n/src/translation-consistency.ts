@@ -347,57 +347,6 @@ function hasTranslatableContent(content: RegionContent): boolean {
   return content.text.length > 0 || content.variables.length > 0;
 }
 
-function messageIsPendingSeed(
-  project: ProjectView,
-  sourceDocument: TranslatableTextDocument,
-  targetDocument: TranslatableTextDocument,
-): boolean {
-  const message = project.messages.find(
-    (item) => item.id === sourceDocument.message.id,
-  );
-  const review = message?.translationReview;
-  if (
-    review?.pendingReason === undefined ||
-    review.confirmedSameText ||
-    message?.targetStatus !== "present" ||
-    message.target === undefined
-  ) {
-    return false;
-  }
-  const valueAtPath = (
-    value: JsonValue | undefined,
-    path: readonly (string | number)[],
-  ): JsonValue | undefined => {
-    let current = value;
-    for (const part of path) {
-      if (typeof part === "number") {
-        if (!Array.isArray(current)) return undefined;
-        current = current[part];
-      } else {
-        if (
-          current === null ||
-          typeof current !== "object" ||
-          Array.isArray(current) ||
-          !Object.hasOwn(current, part)
-        ) {
-          return undefined;
-        }
-        current = (current as { readonly [key: string]: JsonValue })[part];
-      }
-    }
-    return current;
-  };
-  const sourcePath = sourceDocument.path.slice(message.path.length);
-  const targetPath = targetDocument.path.slice(message.path.length);
-  const sourceValue = valueAtPath(message.source, sourcePath);
-  const targetValue = valueAtPath(message.target, targetPath);
-  return (
-    sourceValue !== undefined &&
-    targetValue !== undefined &&
-    canonicalJson(sourceValue) === canonicalJson(targetValue)
-  );
-}
-
 function comparisonRecords(project: ProjectView): ComparisonRecord[] {
   const records: ComparisonRecord[] = [];
   const miniMessage = project.miniMessage;
@@ -406,8 +355,6 @@ function comparisonRecords(project: ProjectView): ComparisonRecord[] {
     sourceDocument,
     targetDocument,
   } of pairTranslatableTextDocuments(miniMessage).pairs) {
-    if (messageIsPendingSeed(project, sourceDocument, targetDocument)) continue;
-
     const targetRegions = regionsForDocument(targetDocument);
     const sourceRegions = regionsForDocument(sourceDocument);
     const sourceTechnical = technicalSegments(sourceDocument);

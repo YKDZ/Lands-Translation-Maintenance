@@ -108,6 +108,13 @@ export function pairTranslatableTextDocuments(
       pairs.push({ sourceDocument: source[0]!, targetDocument: target[0]! });
       continue;
     }
+    if (
+      source.length === 1 &&
+      target.length === 0 &&
+      hasExplicitEmptyTranslation(source[0]!)
+    ) {
+      continue;
+    }
     for (const document of [...source, ...target]) {
       incomplete.push({
         code: "minimessage.text-pair-not-unique",
@@ -122,4 +129,31 @@ export function pairTranslatableTextDocuments(
     }
   }
   return { pairs, incomplete };
+}
+
+export function hasExplicitEmptyTranslation(
+  document: TranslatableTextDocument,
+): boolean {
+  const { message, path } = document;
+  if (message.targetStatus !== "present") return false;
+  if (
+    path.length === message.path.length &&
+    canonicalJson(path) === canonicalJson(message.path)
+  ) {
+    return message.target === "";
+  }
+  if (
+    !Array.isArray(message.source) ||
+    !Array.isArray(message.target) ||
+    path.length !== message.path.length + 1 ||
+    canonicalJson(path.slice(0, message.path.length)) !==
+      canonicalJson(message.path)
+  ) {
+    return false;
+  }
+  const itemIndex = path.at(-1);
+  return (
+    typeof itemIndex === "number" &&
+    (itemIndex >= message.target.length || message.target[itemIndex] === "")
+  );
 }
