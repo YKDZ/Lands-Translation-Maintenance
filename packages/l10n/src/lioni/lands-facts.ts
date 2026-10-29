@@ -523,7 +523,7 @@ function collectStructuralFields(
       const relation = translationPathRelation(fieldPath, fields);
       if (relation === "selected") continue;
       if (relation === "ancestor") {
-        if (!isRecord(fieldValue) || Object.keys(fieldValue).length === 0) {
+        if (!isRecord(fieldValue)) {
           issues.push(
             `${file}:${fieldPath.join(".")} 无法与声明的翻译字段路径分开`,
           );

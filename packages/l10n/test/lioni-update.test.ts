@@ -285,6 +285,31 @@ function landsJarWithCategories(
   });
 }
 
+function landsJarWithDialog(
+  action: string,
+  visible: boolean,
+  enabled: boolean,
+): Uint8Array {
+  return zipSync({
+    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "Locale/en-US_dialogs.yml": strToU8(
+      [
+        "dialogs:",
+        "  confirm:",
+        '    title: "Confirm"',
+        "    buttons:",
+        "      accept:",
+        '        label: "Accept"',
+        `        action: ${action}`,
+        `        visible: ${visible}`,
+        "        options:",
+        `          enabled: ${enabled}`,
+        "",
+      ].join("\n"),
+    ),
+  });
+}
+
 async function createMixedConfigurationProject(
   directory: string,
 ): Promise<void> {
@@ -334,6 +359,57 @@ async function createMixedConfigurationProject(
       "        permission: lands.category.agriculture",
       "        customSetting: true",
       "      customField: keep",
+      "customRoot: keep",
+      "",
+    ].join("\n"),
+  );
+}
+
+async function createDialogProject(directory: string): Promise<void> {
+  await createProject(directory);
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.9.2"',
+      '  translationHistory: "fixture-history"',
+      "resources:",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: Locale/en-US_dialogs.yml",
+      "    purpose: dialog-language",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      "    - source: Locale/en-US_dialogs.yml",
+      "      target: Locale/zh-CN_dialogs.yml",
+      "      definitionsSource: Locale/en-US_dialogs.yml",
+      "      fields:",
+      '        - path: [dialogs, "*", title]',
+      "          category: dialog-string",
+      "          scene: dialog-title",
+      '        - path: [dialogs, "*", buttons, "*", label]',
+      "          category: dialog-string",
+      "          scene: dialog-button-label",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(directory, "Locale/zh-CN_dialogs.yml"),
+    [
+      "dialogs:",
+      "  confirm:",
+      '    title: "确认"',
+      "    buttons:",
+      "      accept:",
+      '        label: "接受"',
+      "        action: confirm",
+      "        visible: true",
+      "        options:",
+      "          enabled: true",
+      "          customSetting: keep",
       "customRoot: keep",
       "",
     ].join("\n"),
@@ -945,6 +1021,62 @@ void test("混合配置按声明路径保留译文并更新结构字段与用户
     customSetting: true,
   });
   assert.equal(target.land.categories.agriculture.customField, "keep");
+  assert.equal(target.customRoot, "keep");
+});
+
+void test("对话文件的结构字段与译文通过同一更新链合并", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-dialog-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createDialogProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithDialog("confirm", true, true));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const changedJar = join(project, "Lands-dialog-structure-changed.jar");
+  await writeFile(changedJar, landsJarWithDialog("submit", false, false));
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+
+  const target = parseDocument(
+    await readFile(join(project, "Locale/zh-CN_dialogs.yml"), "utf8"),
+  ).toJS() as {
+    readonly dialogs: {
+      readonly confirm: {
+        readonly title: string;
+        readonly buttons: {
+          readonly accept: {
+            readonly label: string;
+            readonly action: string;
+            readonly visible: boolean;
+            readonly options: {
+              readonly enabled: boolean;
+              readonly customSetting: string;
+            };
+          };
+        };
+      };
+    };
+    readonly customRoot: string;
+  };
+  assert.equal(target.dialogs.confirm.title, "确认");
+  assert.equal(target.dialogs.confirm.buttons.accept.label, "接受");
+  assert.equal(target.dialogs.confirm.buttons.accept.action, "submit");
+  assert.equal(target.dialogs.confirm.buttons.accept.visible, false);
+  assert.deepEqual(target.dialogs.confirm.buttons.accept.options, {
+    enabled: false,
+    customSetting: "keep",
+  });
   assert.equal(target.customRoot, "keep");
 });
 
