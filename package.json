@@ -9,8 +9,8 @@
     "check:heavy": "node --conditions=source scripts/task-gates.ts check:heavy",
     "check:l10n": "lands-l10n check --project translations/zhcn",
     "fix": "node --conditions=source scripts/task-gates.ts fix",
-    "format:check": "oxfmt --list-different --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json *.config.ts .pnpmfile.mjs .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts",
-    "format:write": "oxfmt --write --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json *.config.ts .pnpmfile.mjs .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts",
+    "format:check": "oxfmt --list-different --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json *.config.ts .pnpmfile.mjs .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/terms",
+    "format:write": "oxfmt --write --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json *.config.ts .pnpmfile.mjs .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/terms",
     "lint": "oxlint --quiet --format=unix --no-error-on-unmatched-pattern *.config.ts .pnpmfile.mjs scripts",
     "lint:fix": "oxlint --format=unix --no-error-on-unmatched-pattern *.config.ts .pnpmfile.mjs scripts --fix",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"

@@ -1,13 +1,22 @@
 import { defaultUpdatePolicy, defineConfig } from "@lioni/lioni";
-import { createFileQualityExceptionStore } from "@lioni/lioni/node";
+import {
+  createFileQualityExceptionStore,
+  loadTermbaseYaml,
+} from "@lioni/lioni/node";
 
 import {
   hasLandsStructureMappings,
   landsFactAdapters,
 } from "#/lioni/lands-facts";
 import { landsProjectPaths } from "#/lioni/project-paths";
+import { miniMessageHonorificCheck } from "#/minimessage-honorific-check";
+import { miniMessagePunctuationCheck } from "#/minimessage-punctuation-check";
 import { loadMiniMessageQualityDependencies } from "#/minimessage-quality";
 import { miniMessageSyntaxCheck } from "#/minimessage-syntax-check";
+import {
+  landsTermbaseData,
+  landsTerminologyCheck,
+} from "#/minimessage-terminology-check";
 import { miniMessageThemeCheck } from "#/minimessage-theme-check";
 
 /** 根据翻译项目入口构造唯一的 Lands 配置。 */
@@ -32,12 +41,21 @@ export function createLandsConfig(entryUrl: string | URL) {
       ];
     },
     quality: {
-      checks: [miniMessageSyntaxCheck, miniMessageThemeCheck],
+      checks: [
+        miniMessageSyntaxCheck,
+        miniMessageThemeCheck,
+        landsTerminologyCheck,
+        miniMessagePunctuationCheck,
+        miniMessageHonorificCheck,
+      ],
       exceptionStore: createFileQualityExceptionStore(paths.exceptionFile),
-      loadDependencies: async ({ facts }) => ({
-        ...(await loadMiniMessageQualityDependencies(entryUrl, facts)),
-        termbaseDirectory: paths.termbaseDirectory,
-      }),
+      loadDependencies: async ({ facts }) => {
+        const [miniMessage, termbase] = await Promise.all([
+          loadMiniMessageQualityDependencies(entryUrl, facts),
+          loadTermbaseYaml(paths.termbaseDirectory),
+        ]);
+        return { ...miniMessage, termbaseData: landsTermbaseData(termbase) };
+      },
     },
   });
 }

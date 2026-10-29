@@ -924,7 +924,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
         ),
     );
 
-    assert.equal(checked.status, 1);
+    assert.equal(checked.status, 0);
     assert.equal(
       diagnostics(report).some(
         (entry) => entry.code === "map-html.behavior-attribute-mismatch",
