@@ -19,6 +19,8 @@ import { miniMessageLandsControlsCheck } from "#/minimessage-lands-controls-chec
 import { miniMessageNestingCheck } from "#/minimessage-nesting-check";
 import { miniMessagePunctuationCheck } from "#/minimessage-punctuation-check";
 import { loadMiniMessageQualityDependencies } from "#/minimessage-quality";
+import { miniMessageSameSourceFamilyCheck } from "#/minimessage-same-source-family-check";
+import { miniMessageSameTemplateFamilyCheck } from "#/minimessage-same-template-family-check";
 import { miniMessageSyntaxCheck } from "#/minimessage-syntax-check";
 import { miniMessageTagCorrespondenceCheck } from "#/minimessage-tag-correspondence-check";
 import {
@@ -58,6 +60,8 @@ export function createLandsConfig(entryUrl: string | URL) {
         miniMessageInteractionDistributionCheck,
         translationOmissionsCheck,
         landsStructureConsistencyCheck,
+        miniMessageSameSourceFamilyCheck,
+        miniMessageSameTemplateFamilyCheck,
       ],
       exceptionStore: createFileQualityExceptionStore(paths.exceptionFile),
       loadDependencies: async ({ facts }) => {

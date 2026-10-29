@@ -23,6 +23,8 @@ import type {
   MiniMessageParseProject,
   MiniMessageProjectionInput,
   MiniMessageThemeInput,
+  ParsedMiniMessageDocument,
+  TranslatableTextDocument,
 } from "#/mini-message-model";
 import { parseMiniMessages, usesMiniMessage } from "#/minimessage";
 import {
@@ -68,10 +70,24 @@ export interface MiniMessageQualityDependencies {
   readonly themeInput: MiniMessageThemeInput;
   readonly projection: MiniMessageParseProject;
   readonly pairing: TranslatableTextPairing;
+  /** 按稳定消息身份查找正式解析投影，不建立跨消息族索引。 */
+  readonly miniMessageViews: Readonly<
+    Record<string, MiniMessageQualityMessageView>
+  >;
+  readonly globalProjectionIssues: readonly MiniMessageIncompleteFact[];
   readonly tags: MiniMessageTagAnalysis;
   readonly behaviorChecks: readonly MiniMessageBehaviorChecks[];
   readonly landsProjection?: LandsStructureProjection;
   readonly readIssues: readonly MiniMessageIncompleteFact[];
+}
+
+export interface MiniMessageQualityMessageView {
+  readonly message: MiniMessageInputMessage;
+  readonly documents: readonly ParsedMiniMessageDocument[];
+  readonly translatableText: readonly TranslatableTextDocument[];
+  readonly pairs: TranslatableTextPairing["pairs"];
+  readonly pairingIssues: readonly MiniMessageIncompleteFact[];
+  readonly incompleteFacts: readonly MiniMessageIncompleteFact[];
 }
 
 export const miniMessageQualityConfigurationSchema = z.object({});
@@ -315,13 +331,58 @@ export async function projectMiniMessageQualityInputs(
   } = {},
 ): Promise<MiniMessageQualityDependencies> {
   const projection = await parseMiniMessages(input);
+  const pairing = pairTranslatableTextDocuments(projection);
+  const miniMessageViews = new Map<
+    string,
+    {
+      readonly message: MiniMessageInputMessage;
+      readonly documents: ParsedMiniMessageDocument[];
+      readonly translatableText: TranslatableTextDocument[];
+      readonly pairs: TranslatableTextPairing["pairs"][number][];
+      readonly pairingIssues: MiniMessageIncompleteFact[];
+      readonly incompleteFacts: MiniMessageIncompleteFact[];
+    }
+  >();
+  for (const message of input.messages) {
+    miniMessageViews.set(message.id, {
+      message,
+      documents: [],
+      translatableText: [],
+      pairs: [],
+      pairingIssues: [],
+      incompleteFacts: [],
+    });
+  }
+  for (const document of projection.documents) {
+    miniMessageViews.get(document.message.id)?.documents.push(document);
+  }
+  for (const document of projection.translatableText) {
+    miniMessageViews.get(document.message.id)?.translatableText.push(document);
+  }
+  for (const pair of pairing.pairs) {
+    miniMessageViews.get(pair.sourceDocument.message.id)?.pairs.push(pair);
+  }
+  for (const issue of pairing.incomplete) {
+    if (issue.message !== undefined) {
+      miniMessageViews.get(issue.message.id)?.pairingIssues.push(issue);
+    }
+  }
+  for (const issue of projection.incompleteFacts) {
+    if (issue.message !== undefined) {
+      miniMessageViews.get(issue.message.id)?.incompleteFacts.push(issue);
+    }
+  }
   return {
     sourceVersion: input.sourceVersion,
     resources: input.resources,
     messages: input.messages,
     themeInput: input.theme,
     projection,
-    pairing: pairTranslatableTextDocuments(projection),
+    pairing,
+    miniMessageViews: Object.fromEntries(miniMessageViews),
+    globalProjectionIssues: projection.incompleteFacts.filter(
+      ({ message, origin }) => message === undefined && origin !== "theme",
+    ),
     tags: analyzeMiniMessageTagQuality(input.messages, projection),
     behaviorChecks: compareMiniMessageBehavior(
       extractMiniMessageBehavior(projection),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  copyFile,
   mkdir,
   mkdtemp,
   readFile,
@@ -631,6 +632,40 @@ void test("hover 同文与空译文沿用原生警告且不使 QA 单独失败",
   assert.deepEqual(empty.location.range.path, ["messages", "greeting"]);
   assert.equal(hover.severity, "warning");
   assert.equal(empty.severity, "warning");
+});
+
+void test("多个 hover 按解析出的 click 行为配对并支持换序", async (t) => {
+  const source =
+    "<hover:show_text:'Click here to accept invitation.'><click:run_command:\"/accept\">Accept</click></hover> " +
+    "<hover:show_text:'Click here to deny invitation.'><click:run_command:\"/deny\">Deny</click></hover>";
+  const target =
+    "<hover:show_text:'Click here to deny invitation.'><click:run_command:\"/deny\">拒绝</click></hover> " +
+    "<hover:show_text:'Click here to accept invitation.'><click:run_command:\"/accept\">接受</click></hover>";
+  const project = await createQualityProject(t, undefined, source, target);
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const omissions = checkResult(report, "translation-omissions");
+  const hoverSameText = omissions.diagnostics.filter(
+    ({ object, location }) =>
+      object.code === "translation.same-text" &&
+      location.range.path.at(-1) === "name",
+  );
+
+  assert.equal(
+    omissions.status,
+    "complete",
+    JSON.stringify(omissions, null, 2),
+  );
+  assert.deepEqual(omissions.issues, []);
+  assert.equal(hoverSameText.length, 2, JSON.stringify(omissions, null, 2));
+  assert.ok(
+    hoverSameText.every(
+      ({ location }) =>
+        location.range.file === "Locale/zh-CN_gui.yml" &&
+        location.range.start !== undefined &&
+        location.range.end !== undefined,
+    ),
+    JSON.stringify(hoverSameText, null, 2),
+  );
 });
 
 void test("结构一致性 QA 只读检查受管值并允许自定义字段", async (t) => {
@@ -1795,4 +1830,261 @@ void test("标记为结构的字符串不进入 MiniMessage 正文检查", async
   const syntax = checkResult(report.report, "minimessage-syntax");
   assert.equal(syntax.status, "complete", JSON.stringify(syntax, null, 2));
   assert.deepEqual(syntax.diagnostics, []);
+});
+
+void test("消息族职责分别接受，并只随相关族依据变化失效", async (t) => {
+  const sourceName = "You cannot claim <v:land>.";
+  const targetName = "你不能认领<v:land>。";
+  const project = await createQualityProject(
+    t,
+    undefined,
+    sourceName,
+    targetName,
+    {
+      sourceLore: [sourceName, "You cannot claim <v:nation>."],
+      targetLore: ["无法认领<v:land>。", "不能认领<v:nation>。"],
+      chat: { source: "Unrelated message", target: "无关消息" },
+    },
+  );
+  const sourceKey =
+    'Locale/en-US_gui.yml:["gui","main","items","confirm","name"]';
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  const initialTarget = await readFile(targetPath, "utf8");
+  const initial = qualityReport(runLioni(["qa", project.configPath]));
+  const sameSource = checkResult(initial.report, "message-family-same-source");
+  const sameTemplate = checkResult(
+    initial.report,
+    "message-family-same-template",
+  );
+  assert.ok(
+    sameSource.diagnostics.some(({ object }) => object.key === sourceKey),
+    JSON.stringify(sameSource, null, 2),
+  );
+  assert.ok(
+    sameTemplate.diagnostics.some(({ object }) => object.key === sourceKey),
+    JSON.stringify(sameTemplate, null, 2),
+  );
+
+  const reportPath = join(project.directory, "qa-report.json");
+  await writeFile(reportPath, JSON.stringify(initial.envelope));
+  const sameSourceExecution = sameSource.executions.find(
+    ({ sourceKey: key }) => key === sourceKey,
+  );
+  const sameTemplateExecution = sameTemplate.executions.find(
+    ({ sourceKey: key }) => key === sourceKey,
+  );
+  assert.ok(sameSourceExecution);
+  assert.ok(sameTemplateExecution);
+
+  const acceptSameSource = runLioni([
+    "exceptions",
+    "upsert",
+    project.configPath,
+    reportPath,
+    "--check-id",
+    "message-family-same-source",
+    "--execution-id",
+    String(sameSourceExecution.executionId),
+    "--id",
+    "accepted-same-source",
+    "--reason",
+    "此原文在名称与说明中按场景使用不同译法。",
+  ]);
+  assert.equal(
+    acceptSameSource.status,
+    0,
+    acceptSameSource.stderr || acceptSameSource.stdout,
+  );
+
+  const afterSameSource = qualityReport(runLioni(["qa", project.configPath]));
+  assert.equal(
+    checkResult(
+      afterSameSource.report,
+      "message-family-same-source",
+    ).diagnostics.find(({ object }) => object.key === sourceKey)?.handling
+      .status,
+    "excepted",
+  );
+  assert.equal(
+    checkResult(
+      afterSameSource.report,
+      "message-family-same-template",
+    ).diagnostics.find(({ object }) => object.key === sourceKey)?.handling
+      .status,
+    "active",
+  );
+
+  const acceptSameTemplate = runLioni([
+    "exceptions",
+    "upsert",
+    project.configPath,
+    reportPath,
+    "--check-id",
+    "message-family-same-template",
+    "--execution-id",
+    String(sameTemplateExecution.executionId),
+    "--id",
+    "accepted-same-template",
+    "--reason",
+    "占位符模板的具体表达保留各自语境。",
+  ]);
+  assert.equal(
+    acceptSameTemplate.status,
+    0,
+    acceptSameTemplate.stderr || acceptSameTemplate.stdout,
+  );
+
+  const accepted = qualityReport(runLioni(["qa", project.configPath]));
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      checkResult(accepted.report, checkId).diagnostics.find(
+        ({ object }) => object.key === sourceKey,
+      )?.handling.status,
+      "excepted",
+    );
+  }
+
+  const changedPolicyProject = await createQualityProject(
+    t,
+    undefined,
+    sourceName,
+    targetName,
+    {
+      sourceVersion: "8.0.1",
+      sourceLore: [sourceName, "You cannot claim <v:nation>."],
+      targetLore: ["无法认领<v:land>。", "不能认领<v:nation>。"],
+      chat: { source: "Unrelated message", target: "无关消息" },
+    },
+  );
+  await copyFile(
+    join(project.directory, ".lioni/lioni.exceptions.yaml"),
+    join(changedPolicyProject.directory, ".lioni/lioni.exceptions.yaml"),
+  );
+  const changedPolicy = qualityReport(
+    runLioni(["qa", changedPolicyProject.configPath]),
+  );
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      changedPolicy.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "basis-changed",
+    );
+  }
+
+  await writeFile(
+    targetPath,
+    initialTarget.replace('"无法认领<v:land>。"', "42"),
+  );
+  const unavailableReference = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      checkResult(unavailableReference.report, checkId).status,
+      "incomplete",
+    );
+    assert.equal(
+      unavailableReference.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "basis-changed",
+    );
+  }
+
+  await writeFile(
+    targetPath,
+    initialTarget.replace("无法认领<v:land>。", "不可认领<v:land>。"),
+  );
+  const changedMember = qualityReport(runLioni(["qa", project.configPath]));
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      changedMember.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "basis-changed",
+    );
+  }
+
+  await writeFile(targetPath, initialTarget);
+  const restored = qualityReport(runLioni(["qa", project.configPath]));
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      restored.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "applicable",
+    );
+  }
+
+  const chatPath = join(project.directory, "Locale/zh-CN_messages.yml");
+  const initialChat = await readFile(chatPath, "utf8");
+  await writeFile(chatPath, initialChat.replace("无关消息", "其他消息"));
+  const unrelated = qualityReport(runLioni(["qa", project.configPath]));
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      unrelated.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "applicable",
+    );
+  }
+
+  await writeFile(chatPath, initialChat.replace('"无关消息"', "42"));
+  const unrelatedUnavailable = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      unrelatedUnavailable.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "applicable",
+    );
+  }
+
+  await writeFile(
+    targetPath,
+    initialTarget.replace(`        name: ${JSON.stringify(targetName)}\n`, ""),
+  );
+  const unverified = qualityReport(runLioni(["qa", project.configPath]));
+  for (const checkId of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      unverified.report.exceptionApplicability.find(
+        ({ checkId: id, sourceKey: key }) =>
+          id === checkId && key === sourceKey,
+      )?.status,
+      "not-verified",
+    );
+  }
 });
