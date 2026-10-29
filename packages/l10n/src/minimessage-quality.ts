@@ -1,5 +1,4 @@
 import {
-  defineQualityCheck,
   type FrameworkFacts,
   type QualityCheckInput,
   type QualityCheckOutcome,
@@ -33,13 +32,13 @@ import {
 } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 
-type LandsFacts = FrameworkFacts<
+export type LandsFacts = FrameworkFacts<
   LandsUnit,
   LandsTranslation,
   LandsJson,
   UnavailableTranslation
 >;
-type MiniMessageCheckInput = QualityCheckInput<
+export type MiniMessageCheckInput = QualityCheckInput<
   LandsUnit,
   LandsTranslation,
   Record<string, never>,
@@ -47,7 +46,7 @@ type MiniMessageCheckInput = QualityCheckInput<
   UnavailableTranslation
 >;
 
-interface MiniMessageQualityObject extends QualityObject {
+export interface MiniMessageQualityObject extends QualityObject {
   readonly origin?: string;
   readonly code?: string;
 }
@@ -63,9 +62,9 @@ export interface MiniMessageQualityDependencies {
   readonly readIssues: readonly MiniMessageIncompleteFact[];
 }
 
-const checkConfigurationSchema = z.object({});
+export const miniMessageQualityConfigurationSchema = z.object({});
 
-function dependenciesOf(value: unknown): MiniMessageQualityDependencies {
+export function dependenciesOf(value: unknown): MiniMessageQualityDependencies {
   return value as MiniMessageQualityDependencies;
 }
 
@@ -110,7 +109,7 @@ function locationForFinding(
   };
 }
 
-function findingForQuality(
+export function findingForQuality(
   finding: MiniMessageQualityDependencies["projection"]["findings"][number],
   candidate: MiniMessageCheckInput["candidate"],
 ): QualityFinding<MiniMessageQualityObject> {
@@ -128,7 +127,7 @@ function findingForQuality(
   };
 }
 
-function issueForQuality(
+export function issueForQuality(
   issue: MiniMessageIncompleteFact,
   candidate: MiniMessageCheckInput["candidate"],
 ): QualityIssue<MiniMessageQualityObject> {
@@ -166,7 +165,7 @@ function issueForQuality(
   };
 }
 
-function outcome(
+export function outcome(
   status: QualityCheckOutcome["status"],
   diagnostics: readonly QualityFinding<MiniMessageQualityObject>[],
   issues: readonly QualityIssue<MiniMessageQualityObject>[],
@@ -185,179 +184,23 @@ function outcome(
   };
 }
 
-function messageForCandidate(
+export function messageForCandidate(
   dependencies: MiniMessageQualityDependencies,
   sourceKey: string,
 ): MiniMessageInputMessage | undefined {
   return dependencies.messages.find((message) => message.id === sourceKey);
 }
 
-function qualityBasis(value: unknown): JsonValue {
+export function qualityBasis(value: unknown): JsonValue {
   return value as JsonValue;
 }
 
-function hasMiniMessageInput(
+export function hasMiniMessageInput(
   input: MiniMessageCheckInput,
   dependencies: MiniMessageQualityDependencies,
 ): boolean {
   const message = messageForCandidate(dependencies, input.candidate.sourceKey);
   return message !== undefined && usesMiniMessage(message);
-}
-
-function relevantSyntaxIssues(
-  input: MiniMessageCheckInput,
-  dependencies: MiniMessageQualityDependencies,
-): readonly MiniMessageIncompleteFact[] {
-  const sourceKey = input.candidate.sourceKey;
-  return [
-    ...dependencies.readIssues,
-    ...dependencies.projection.incompleteFacts,
-  ].filter(
-    (issue) => issue.message === undefined || issue.message.id === sourceKey,
-  );
-}
-
-function relevantThemeIssues(
-  input: MiniMessageCheckInput,
-  dependencies: MiniMessageQualityDependencies,
-): readonly MiniMessageIncompleteFact[] {
-  const sourceKey = input.candidate.sourceKey;
-  const projectIssueOwner = primaryThemeSourceKey(dependencies);
-  return [
-    ...dependencies.readIssues,
-    ...dependencies.projection.incompleteFacts,
-  ].filter(
-    (issue) =>
-      (issue.message === undefined
-        ? sourceKey === projectIssueOwner
-        : issue.message.id === sourceKey) &&
-      (issue.origin === "theme" ||
-        issue.code.startsWith("minimessage.theme-") ||
-        issue.code === "minimessage.java-unavailable" ||
-        issue.code === "minimessage.result-missing" ||
-        issue.code === "minimessage.parser-failed" ||
-        issue.code === "minimessage.project-input-unavailable"),
-  );
-}
-
-function primaryThemeSourceKey(
-  dependencies: MiniMessageQualityDependencies,
-): string | undefined {
-  return dependencies.messages
-    .filter(usesMiniMessage)
-    .map(({ id }) => id)
-    .sort()[0];
-}
-
-function syntaxFindingsFor(
-  input: MiniMessageCheckInput,
-  dependencies: MiniMessageQualityDependencies,
-) {
-  return dependencies.projection.syntaxFindings.filter(
-    (finding) => finding.message?.id === input.candidate.sourceKey,
-  );
-}
-
-function themeFindingsFor(
-  input: MiniMessageCheckInput,
-  dependencies: MiniMessageQualityDependencies,
-) {
-  const projectIssueOwner = primaryThemeSourceKey(dependencies);
-  return dependencies.projection.themeFindings.filter((finding) => {
-    if (finding.message === undefined)
-      return input.candidate.sourceKey === projectIssueOwner;
-    return finding.message.id === input.candidate.sourceKey;
-  });
-}
-
-function syntaxBasis(
-  input: MiniMessageCheckInput,
-  dependencies: MiniMessageQualityDependencies,
-): JsonValue {
-  const message = messageForCandidate(dependencies, input.candidate.sourceKey);
-  return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
-    message:
-      message === undefined
-        ? null
-        : {
-            id: message.id,
-            sourceFile: message.sourceFile,
-            targetFile: message.targetFile,
-            path: message.path,
-            category: message.category,
-            scene: message.scene ?? null,
-            format: message.format ?? null,
-            source: message.source,
-            target:
-              input.candidate.content === undefined
-                ? { state: "unavailable" }
-                : input.candidate.content,
-          },
-    findings: syntaxFindingsFor(input, dependencies).map((finding) => ({
-      code: finding.code,
-      origin: finding.origin,
-      location: finding.location,
-      position: finding.position ?? null,
-      reason: finding.reason,
-      expected: finding.expected,
-      actual: finding.actual,
-    })),
-    incomplete: relevantSyntaxIssues(input, dependencies).map(
-      ({ code, reason, location }) => ({
-        code,
-        reason,
-        location: location ?? null,
-      }),
-    ),
-  });
-}
-
-function themeBasis(
-  input: MiniMessageCheckInput,
-  dependencies: MiniMessageQualityDependencies,
-): JsonValue {
-  const message = messageForCandidate(dependencies, input.candidate.sourceKey);
-  return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
-    message:
-      message === undefined
-        ? null
-        : {
-            id: message.id,
-            sourceFile: message.sourceFile,
-            targetFile: message.targetFile,
-            path: message.path,
-            category: message.category,
-            scene: message.scene ?? null,
-            format: message.format ?? null,
-            source: message.source,
-            target: input.candidate.content,
-          },
-    theme:
-      dependencies.themeInput.theme === undefined
-        ? null
-        : {
-            file: dependencies.themeInput.theme.file,
-            source: dependencies.themeInput.theme.source,
-          },
-    themeFindings: themeFindingsFor(input, dependencies).map((finding) => ({
-      code: finding.code,
-      origin: finding.origin,
-      location: finding.location,
-      position: finding.position ?? null,
-      reason: finding.reason,
-      expected: finding.expected,
-      actual: finding.actual,
-    })),
-    incomplete: relevantThemeIssues(input, dependencies).map(
-      ({ code, reason, location }) => ({
-        code,
-        reason,
-        location: location ?? null,
-      }),
-    ),
-  });
 }
 
 export async function projectMiniMessageQualityInputs(
@@ -472,97 +315,6 @@ export async function loadMiniMessageQualityDependencies(
   return projected;
 }
 
-export const miniMessageSyntaxCheck = defineQualityCheck<
-  LandsUnit,
-  LandsTranslation,
-  typeof checkConfigurationSchema,
-  MiniMessageQualityObject,
-  LandsJson,
-  UnavailableTranslation
->({
-  id: "minimessage-syntax",
-  version: "1",
-  configurationSchema: checkConfigurationSchema,
-  configuration: {},
-  fingerprintInput: (input) =>
-    syntaxBasis(input, dependenciesOf(input.dependencies)),
-  check(input) {
-    const dependencies = dependenciesOf(input.dependencies);
-    if (!hasMiniMessageInput(input, dependencies))
-      return outcome("not-applicable", [], []);
-    if (input.sourceUnit === null) {
-      const issue: MiniMessageIncompleteFact = {
-        code: "minimessage.source-unit-unavailable",
-        reason: "原生 QA 候选没有对应 Lands 原文事实",
-      };
-      return outcome(
-        "incomplete",
-        [],
-        [issueForQuality(issue, input.candidate)],
-      );
-    }
-    const diagnostics = syntaxFindingsFor(input, dependencies).map((finding) =>
-      findingForQuality(finding, input.candidate),
-    );
-    const issues = relevantSyntaxIssues(input, dependencies).map((issue) =>
-      issueForQuality(issue, input.candidate),
-    );
-    return outcome(
-      issues.length === 0 ? "complete" : "incomplete",
-      diagnostics,
-      issues,
-    );
-  },
-});
-
-export const miniMessageThemeCheck = defineQualityCheck<
-  LandsUnit,
-  LandsTranslation,
-  typeof checkConfigurationSchema,
-  MiniMessageQualityObject,
-  LandsJson,
-  UnavailableTranslation
->({
-  id: "minimessage-theme",
-  version: "1",
-  configurationSchema: checkConfigurationSchema,
-  configuration: {},
-  fingerprintInput: (input) =>
-    themeBasis(input, dependenciesOf(input.dependencies)),
-  check(input) {
-    const dependencies = dependenciesOf(input.dependencies);
-    if (!hasMiniMessageInput(input, dependencies))
-      return outcome("not-applicable", [], []);
-    if (input.sourceUnit === null) {
-      const issue: MiniMessageIncompleteFact = {
-        code: "minimessage.source-unit-unavailable",
-        reason: "原生 QA 候选没有对应 Lands 原文事实",
-      };
-      return outcome(
-        "incomplete",
-        [],
-        [issueForQuality(issue, input.candidate)],
-      );
-    }
-    const diagnostics = themeFindingsFor(input, dependencies).map((finding) =>
-      findingForQuality(finding, input.candidate),
-    );
-    const issues = relevantThemeIssues(input, dependencies).map((issue) =>
-      issueForQuality(issue, input.candidate),
-    );
-    return outcome(
-      issues.length === 0 ? "complete" : "incomplete",
-      diagnostics,
-      issues,
-    );
-  },
-});
-
-export const miniMessageQualityChecks = [
-  miniMessageSyntaxCheck,
-  miniMessageThemeCheck,
-] as const;
-
 export function miniMessageFactsInput(
   facts: LandsFacts,
   resources: readonly ResourceInventoryEntry[],
@@ -614,5 +366,3 @@ export function miniMessageFactsInput(
   });
   return { messages, resources };
 }
-
-export type { LandsFacts, MiniMessageCheckInput };

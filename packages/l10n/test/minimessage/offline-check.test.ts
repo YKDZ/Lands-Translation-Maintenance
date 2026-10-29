@@ -844,7 +844,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
     assert.match(
       changedDeclarationText.stdout || changedDeclarationText.stderr,
-      /lands-l10n sync --project <项目目录> --jar <候选 JAR>/u,
+      /Lioni 原生 `update <配置入口>`/u,
     );
     assert.deepEqual(
       await snapshotProjectFiles(declarationProject),
