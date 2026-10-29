@@ -29,11 +29,12 @@ import {
   translationFieldScenes,
   translationFormats,
 } from "#/model";
-import { canonicalJson, compareText } from "#/value";
+import { canonicalJson, compareText, sha256 } from "#/value";
 import { parseYaml } from "#/yaml-data";
 
 const lioniJsonSchema = z.json();
 type LioniJson = z.infer<typeof lioniJsonSchema>;
+export type LandsJson = LioniJson;
 
 const messageUnitSchema = z
   .object({
@@ -122,9 +123,11 @@ const unavailableTranslationSchema = z.union([
   unavailableStructureSchema,
 ]);
 
-type LandsUnit = z.infer<typeof unitSchema>;
-type LandsTranslation = z.infer<typeof translationSchema>;
-type UnavailableTranslation = z.infer<typeof unavailableTranslationSchema>;
+export type LandsUnit = z.infer<typeof unitSchema>;
+export type LandsTranslation = z.infer<typeof translationSchema>;
+export type UnavailableTranslation = z.infer<
+  typeof unavailableTranslationSchema
+>;
 
 interface FieldEntry {
   readonly path: readonly string[];
@@ -373,18 +376,6 @@ async function readProjectInput(paths: LandsProjectPaths): Promise<{
     ),
     snapshot,
   };
-}
-
-/** 判断项目配置是否包含尚未接入更新计划的结构映射。 */
-export async function hasLandsStructureMappings(
-  entryUrl: string | URL,
-): Promise<boolean> {
-  const paths = landsProjectPaths(entryUrl);
-  const source = await readFile(paths.legacyManifestFile, "utf8");
-  const configuration = configurationFrom(source, paths.legacyManifestFile);
-  return configuration.translationScope.mappings.some(
-    ({ definitionsSource }) => definitionsSource !== undefined,
-  );
 }
 
 function parseResource(bytes: Uint8Array, path: string): ReadResourceResult {
@@ -640,17 +631,24 @@ async function readSource(
   const scopes: SourceRead<LandsUnit>["scopes"][number][] = [];
   for (const path of [...resourcePaths].sort(compareText)) {
     const registeredPurpose = resourcePurposes.get(path);
-    const range = sourceRange(path);
     const bytes = snapshot.resources.get(path);
     if (bytes === undefined) {
       scopes.push({
-        range,
+        range: sourceRange(path),
         enumeration: "failed",
         records: [],
         error: "已登记资源在保存的 JAR 来源中缺失",
       });
       continue;
     }
+    const range =
+      registeredPurpose === undefined
+        ? {
+            kind: "lands-unregistered-resource",
+            path,
+            sha256: sha256(bytes),
+          }
+        : sourceRange(path);
 
     const mappings = mappingsBySource.get(path) ?? [];
     const structureMappings = structuresBySource.get(path) ?? [];

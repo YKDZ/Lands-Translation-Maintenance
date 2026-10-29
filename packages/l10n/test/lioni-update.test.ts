@@ -148,6 +148,14 @@ function landsJar(messages: string, version = "8.9.2"): Uint8Array {
   });
 }
 
+function landsJarWithUnregisteredResource(messages: string): Uint8Array {
+  return zipSync({
+    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "Locale/en-US.yml": strToU8(messages),
+    "docs/NOTICE.yml": strToU8("title: New optional notice\n"),
+  });
+}
+
 async function createLoreProject(directory: string): Promise<void> {
   await createProject(directory);
   await writeFile(
@@ -179,6 +187,12 @@ async function createLoreProject(directory: string): Promise<void> {
       "      target: Locale/zh-CN_gui.yml",
       "      definitionsSource: Locale/definitions_gui.yml",
       "      fields:",
+      "        - path: [gui, main, items, confirm, name]",
+      "          category: gui-string",
+      "          scene: gui-item-name",
+      "        - path: [gui, main, items, confirm, help]",
+      "          category: gui-string",
+      "          scene: gui-general",
       "        - path: [gui, main, items, confirm, lore]",
       "          category: gui-lore",
       "          scene: gui-item-lore",
@@ -195,6 +209,9 @@ async function createLoreProject(directory: string): Promise<void> {
       "        material: DIAMOND",
       "        slot: 4",
       '        name: "确认"',
+      "        flags:",
+      "          managed: true",
+      "          customSetting: true",
       '        lore: "旧译文"',
       "custom: 保留用户配置",
       "",
@@ -206,27 +223,121 @@ function landsJarWithLore(
   lore: string | readonly string[],
   material = "DIAMOND",
   slot = 4,
+  flagsShape: "mapping" | "scalar" | "omitted" = "mapping",
 ): Uint8Array {
   const loreValue = JSON.stringify(lore);
+  const structure = [
+    "gui:",
+    "  main:",
+    "    items:",
+    "      confirm:",
+    `        material: ${material}`,
+    `        slot: ${slot}`,
+    ...(flagsShape === "mapping"
+      ? ["        flags:", "          managed: true"]
+      : flagsShape === "scalar"
+        ? ['        flags: "external"']
+        : []),
+    '        lore: "定义专用结构值"',
+    "",
+  ];
   return zipSync({
     "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
     "Locale/en-US.yml": strToU8("messages:\n  greet: Hello\n"),
     "Locale/en-US_gui.yml": strToU8(
-      `gui:\n  main:\n    items:\n      confirm:\n        lore: ${loreValue}\n`,
-    ),
-    "Locale/definitions_gui.yml": strToU8(
       [
         "gui:",
         "  main:",
         "    items:",
         "      confirm:",
-        `        material: ${material}`,
-        `        slot: ${slot}`,
-        '        lore: "定义专用结构值"',
+        '        name: "Confirm"',
+        '        help: "Help text"',
+        `        lore: ${loreValue}`,
+        "",
+      ].join("\n"),
+    ),
+    "Locale/definitions_gui.yml": strToU8(structure.join("\n")),
+  });
+}
+
+function landsJarWithCategories(
+  material: string,
+  enabled: boolean,
+): Uint8Array {
+  return zipSync({
+    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "categories.yml": strToU8(
+      [
+        "land:",
+        "  categories:",
+        "    agriculture:",
+        '      name: "Agriculture"',
+        "      description:",
+        '        - "Grows crops"',
+        '        - "Raises animals"',
+        `      material: ${material}`,
+        "      rules:",
+        `        enabled: ${enabled}`,
+        "        permission: lands.category.agriculture",
         "",
       ].join("\n"),
     ),
   });
+}
+
+async function createMixedConfigurationProject(
+  directory: string,
+): Promise<void> {
+  await createProject(directory);
+  await writeFile(
+    join(directory, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.9.2"',
+      '  translationHistory: "fixture-history"',
+      "resources:",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: categories.yml",
+      "    purpose: configuration",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      "    - source: categories.yml",
+      "      target: categories-zh.yml",
+      "      definitionsSource: categories.yml",
+      "      fields:",
+      '        - path: [land, categories, "*", name]',
+      "          category: configuration-string",
+      "          scene: category-name",
+      '        - path: [land, categories, "*", description]',
+      "          category: configuration-string-list",
+      "          scene: category-description",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(directory, "categories-zh.yml"),
+    [
+      "land:",
+      "  categories:",
+      "    agriculture:",
+      '      name: "农业"',
+      "      description:",
+      '        - "种植作物"',
+      '        - "饲养动物"',
+      "      material: WHEAT",
+      "      rules:",
+      "        enabled: true",
+      "        permission: lands.category.agriculture",
+      "        customSetting: true",
+      "      customField: keep",
+      "customRoot: keep",
+      "",
+    ].join("\n"),
+  );
 }
 
 async function prepareBaselineUpdate(
@@ -375,22 +486,154 @@ void test("无比较基线时保留已有中文并只填入缺失消息", async 
   await assert.rejects(readFile(join(project, ".lioni/lioni.baseline.json")));
 });
 
-void test("GUI lore 严格更新整体字段，但结构映射仍待处理", async (t) => {
-  const project = await mkdtemp(join(tmpdir(), "lioni-update-lore-type-"));
+void test("上游删除已编辑的受管消息并在重复同步后保持幂等", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-message-delete-"));
   t.after(async () => rm(project, { force: true, recursive: true }));
-  await createLoreProject(project);
+  await createProject(project);
 
   const configPath = join(project, ".lioni/lioni.config.ts");
   const initialJar = join(project, "Lands-initial.jar");
-  await writeFile(initialJar, landsJarWithLore("Same line"));
+  await writeFile(
+    initialJar,
+    landsJar(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
+    ),
+  );
   await prepareSource(configPath, initialJar);
   await rm(initialJar);
   runLioni(["baseline", configPath, "--output-format", "structured"]);
 
-  const changedJar = join(project, "Lands-changed.jar");
-  await writeFile(changedJar, landsJarWithLore(["Same line"]));
+  const targetPath = join(project, "Locale/zh-CN.yml");
+  await writeFile(
+    targetPath,
+    (await readFile(targetPath, "utf8")).replace(
+      "leave: 再见",
+      "leave: 人工校订",
+    ),
+  );
+  const changedJar = join(project, "Lands-message-removed.jar");
+  await writeFile(
+    changedJar,
+    landsJar("messages:\n  greet: Hello\n  legacy: Parting\n"),
+  );
   await prepareSource(configPath, changedJar);
   await rm(changedJar);
+
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  const afterDelete = parseDocument(
+    await readFile(targetPath, "utf8"),
+  ).toJS() as { readonly messages: Record<string, unknown> };
+  assert.equal(Object.hasOwn(afterDelete.messages, "leave"), false);
+
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  const afterRepeat = parseDocument(
+    await readFile(targetPath, "utf8"),
+  ).toJS() as { readonly messages: Record<string, unknown> };
+  assert.equal(Object.hasOwn(afterRepeat.messages, "leave"), false);
+});
+
+void test("新增范围外普通资源只提示、不扩大翻译范围并可推进基线", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-new-resource-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(
+    initialJar,
+    landsJar(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
+    ),
+  );
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const targetPath = join(project, "Locale/zh-CN.yml");
+  const originalTarget = await readFile(targetPath);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  const changedJar = join(project, "Lands-with-ordinary-resource.jar");
+  await writeFile(
+    changedJar,
+    landsJarWithUnregisteredResource(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
+    ),
+  );
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+
+  const output = runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  assert.match(output, /docs\/NOTICE\.yml/u);
+  assert.match(output, /不自动加入翻译维护范围/u);
+  assert.deepEqual(await readFile(targetPath), originalTarget);
+  assert.notDeepEqual(await readFile(baselinePath), originalBaseline);
+  await assert.rejects(readFile(join(project, "docs/NOTICE-zh.yml")));
+});
+
+void test("整份退出翻译范围的目标文件留给维护者且未读取时不推进基线", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-scope-exit-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const jarPath = join(project, "Lands.jar");
+  await writeFile(
+    jarPath,
+    landsJar(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
+    ),
+  );
+  await prepareSource(configPath, jarPath);
+  await rm(jarPath);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const targetPath = join(project, "Locale/zh-CN.yml");
+  const originalTarget = Buffer.from(
+    (await readFile(targetPath, "utf8")).replace(
+      "leave: 再见",
+      "leave: 人工保留",
+    ),
+  );
+  await writeFile(targetPath, originalTarget);
+  await writeFile(
+    join(project, ".l10n/config.yml"),
+    [
+      "schemaVersion: 1",
+      "source:",
+      '  version: "8.9.2"',
+      '  translationHistory: "fixture-history"',
+      "resources:",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: Locale/en-US.yml",
+      "    purpose: chat-language",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings: []",
+      "",
+    ].join("\n"),
+  );
+
   const baselinePath = join(project, ".lioni/lioni.baseline.json");
   const originalBaseline = await readFile(baselinePath);
   const updateResult = spawnSync(
@@ -413,23 +656,41 @@ void test("GUI lore 严格更新整体字段，但结构映射仍待处理", asy
   const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
     readonly data: {
       readonly status: string;
-      readonly plan: {
-        readonly items: readonly {
-          readonly action: string;
-          readonly after?: { readonly content: unknown };
-        }[];
-      };
       readonly baseline?: { readonly outcome: string };
     };
   };
   assert.equal(envelope.data.status, "failed");
-  const fieldUpdate = envelope.data.plan.items.find(
-    ({ action }) => action === "write",
-  );
-  assert.ok(fieldUpdate);
-  assert.deepEqual(fieldUpdate.after?.content, ["Same line"]);
   assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
   assert.deepEqual(await readFile(baselinePath), originalBaseline);
+  assert.deepEqual(await readFile(targetPath), originalTarget);
+});
+
+void test("GUI lore 类型变化整体更新后可推进结构比较基线", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-lore-type-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLoreProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithLore("Same line"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const changedJar = join(project, "Lands-changed.jar");
+  await writeFile(changedJar, landsJarWithLore(["Same line"]));
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  assert.notDeepEqual(await readFile(baselinePath), originalBaseline);
 
   const target = parseDocument(
     await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
@@ -480,13 +741,289 @@ void test("GUI 定义结构变化由原生 update 写回并保留译文与自定
           readonly confirm: {
             readonly material: unknown;
             readonly slot: unknown;
+            readonly name: unknown;
+            readonly help: unknown;
+            readonly lore: unknown;
+          };
+        };
+      };
+    };
+    readonly custom: string;
+  };
+  assert.equal(target.gui.main.items.confirm.material, "EMERALD");
+  assert.equal(target.gui.main.items.confirm.slot, 4);
+  assert.equal(target.gui.main.items.confirm.name, "确认");
+  assert.equal(target.gui.main.items.confirm.help, "Help text");
+  assert.equal(target.gui.main.items.confirm.lore, "旧译文");
+  assert.equal(target.custom, "保留用户配置");
+});
+
+void test("GUI definitions 来源缺失时保留结构并阻止比较基线推进", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-gui-definitions-missing-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLoreProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithLore("Same line"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const targetPath = join(project, "Locale/zh-CN_gui.yml");
+  const originalTarget = await readFile(targetPath);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  const changedJar = join(project, "Lands-missing-definitions.jar");
+  await writeFile(
+    changedJar,
+    zipSync({
+      "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+      "Locale/en-US.yml": strToU8("messages:\n  greet: Hello\n"),
+      "Locale/en-US_gui.yml": strToU8(
+        [
+          "gui:",
+          "  main:",
+          "    items:",
+          "      confirm:",
+          '        name: "Confirm"',
+          '        help: "Help text"',
+          '        lore: "Same line"',
+          "",
+        ].join("\n"),
+      ),
+    }),
+  );
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+
+  const updateResult = spawnSync(
+    process.execPath,
+    [
+      nativeCli,
+      "update",
+      configPath,
+      "--record-baseline",
+      "--output-format",
+      "structured",
+    ],
+    { cwd: tmpdir(), encoding: "utf8" },
+  );
+  assert.equal(
+    updateResult.status,
+    1,
+    updateResult.stderr || updateResult.stdout,
+  );
+  const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
+    readonly data: {
+      readonly status: string;
+      readonly baseline?: { readonly outcome: string };
+    };
+  };
+  assert.equal(envelope.data.status, "failed");
+  assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
+  assert.deepEqual(await readFile(baselinePath), originalBaseline);
+  const target = parseDocument(await readFile(targetPath, "utf8")).toJS() as {
+    readonly gui: {
+      readonly main: {
+        readonly items: {
+          readonly confirm: {
+            readonly material: string;
+            readonly slot: number;
+            readonly name: string;
+            readonly lore: string;
           };
         };
       };
     };
   };
-  assert.equal(target.gui.main.items.confirm.material, "EMERALD");
+  assert.equal(target.gui.main.items.confirm.material, "DIAMOND");
   assert.equal(target.gui.main.items.confirm.slot, 4);
+  assert.equal(target.gui.main.items.confirm.name, "确认");
+  assert.equal(target.gui.main.items.confirm.lore, "旧译文");
+  assert.notDeepEqual(await readFile(targetPath), originalTarget);
+});
+
+void test("移除结构字段时只删受管键并保留结构对象中的自定义键", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-structure-delete-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLoreProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithLore("Same line"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const changedJar = join(project, "Lands-structure-removed.jar");
+  await writeFile(
+    changedJar,
+    landsJarWithLore("Same line", "DIAMOND", 4, "omitted"),
+  );
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+
+  const target = parseDocument(
+    await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
+  ).toJS() as {
+    readonly gui: {
+      readonly main: {
+        readonly items: {
+          readonly confirm: {
+            readonly flags: Record<string, unknown>;
+          };
+        };
+      };
+    };
+  };
+  assert.deepEqual(target.gui.main.items.confirm.flags, {
+    customSetting: true,
+  });
+});
+
+void test("混合配置按声明路径保留译文并更新结构字段与用户自定义键", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-mixed-config-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createMixedConfigurationProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithCategories("WHEAT", true));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const changedJar = join(project, "Lands-configuration-changed.jar");
+  await writeFile(changedJar, landsJarWithCategories("CARROT", false));
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+
+  const target = parseDocument(
+    await readFile(join(project, "categories-zh.yml"), "utf8"),
+  ).toJS() as {
+    readonly land: {
+      readonly categories: {
+        readonly agriculture: {
+          readonly name: string;
+          readonly description: readonly string[];
+          readonly material: string;
+          readonly rules: Record<string, unknown>;
+          readonly customField: string;
+        };
+      };
+    };
+    readonly customRoot: string;
+  };
+  assert.equal(target.land.categories.agriculture.name, "农业");
+  assert.deepEqual(target.land.categories.agriculture.description, [
+    "种植作物",
+    "饲养动物",
+  ]);
+  assert.equal(target.land.categories.agriculture.material, "CARROT");
+  assert.deepEqual(target.land.categories.agriculture.rules, {
+    enabled: false,
+    permission: "lands.category.agriculture",
+    customSetting: true,
+  });
+  assert.equal(target.land.categories.agriculture.customField, "keep");
+  assert.equal(target.customRoot, "keep");
+});
+
+void test("结构字段类型变化只在目标仍等于历史来源时安全替换", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-structure-type-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLoreProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithLore("Same line"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  const changedJar = join(project, "Lands-structure-type-changed.jar");
+  await writeFile(
+    changedJar,
+    landsJarWithLore("Same line", "DIAMOND", 4, "scalar"),
+  );
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+
+  const updateResult = spawnSync(
+    process.execPath,
+    [
+      nativeCli,
+      "update",
+      configPath,
+      "--record-baseline",
+      "--output-format",
+      "structured",
+    ],
+    { cwd: tmpdir(), encoding: "utf8" },
+  );
+  assert.equal(
+    updateResult.status,
+    1,
+    updateResult.stderr || updateResult.stdout,
+  );
+  const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
+    readonly data: {
+      readonly status: string;
+      readonly plan: {
+        readonly items: readonly {
+          readonly action: string;
+          readonly reason: string;
+        }[];
+      };
+      readonly baseline?: { readonly outcome: string };
+    };
+  };
+  assert.equal(envelope.data.status, "failed");
+  assert.ok(
+    envelope.data.plan.items.some(
+      ({ action, reason }) =>
+        action === "review" && reason.includes("目标类型变化"),
+    ),
+  );
+  assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
+  assert.deepEqual(await readFile(baselinePath), originalBaseline);
+
+  const target = parseDocument(
+    await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
+  ).toJS() as {
+    readonly gui: {
+      readonly main: {
+        readonly items: {
+          readonly confirm: { readonly flags: Record<string, unknown> };
+        };
+      };
+    };
+  };
+  assert.deepEqual(target.gui.main.items.confirm.flags, {
+    managed: true,
+    customSetting: true,
+  });
 });
 
 void test("writeBatch 部分失败后逐项真实回读且不推进比较基线", async (t) => {
