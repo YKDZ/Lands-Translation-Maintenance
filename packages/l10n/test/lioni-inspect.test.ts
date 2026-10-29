@@ -16,16 +16,12 @@ const sourcePreparer = join(
 );
 
 async function createProject(directory: string): Promise<void> {
-  await mkdir(join(directory, ".l10n"), { recursive: true });
   await mkdir(join(directory, ".lioni"), { recursive: true });
   await mkdir(join(directory, "Locale"), { recursive: true });
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",

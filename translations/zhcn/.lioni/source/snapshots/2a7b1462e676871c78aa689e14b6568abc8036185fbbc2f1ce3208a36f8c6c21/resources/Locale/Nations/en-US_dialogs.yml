@@ -1,0 +1,23 @@
+dialogs:
+  nation_create:
+    title: Create a New Nation
+    inputs:
+      name:
+        label: Name
+      tag:
+        label: Tag
+    bodies:
+      info:
+        text: Creating this nation will cost you<t:cost> <v:cost></t>.
+      tag:
+        text: The tag is the short version of your nation's name.
+        item:
+          material: NAME_TAG
+          hide-tooltip: true
+    buttons:
+      confirm:
+        label: <t:positive>Create
+        tooltip: Click here to create a new nation.
+      discard:
+        label: <t:negative>Discard
+        tooltip: Click to discard the nation creation.

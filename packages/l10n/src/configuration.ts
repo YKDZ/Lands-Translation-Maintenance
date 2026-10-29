@@ -20,58 +20,66 @@ const safePathSchema = z
     "必须是项目内的规范相对路径",
   );
 
-const configurationSchema = z
+const resourceInventorySchema = z
+  .array(
+    z
+      .object({
+        path: safePathSchema,
+        purpose: z.enum([
+          "chat-language",
+          "gui-language",
+          "dialog-language",
+          "configuration",
+          "metadata",
+          "documentation",
+          "bedrock-excluded",
+          "other-excluded",
+        ]),
+      })
+      .strict(),
+  )
+  .min(1);
+const translationScopeSchema = z
   .object({
+    sourceLanguage: z.string().trim().min(1),
+    targetLanguage: z.string().trim().min(1),
+    mappings: z.array(
+      z
+        .object({
+          source: safePathSchema,
+          target: safePathSchema,
+          definitionsSource: safePathSchema.optional(),
+          fields: z
+            .array(
+              z
+                .object({
+                  path: z.array(z.string().min(1)).min(1),
+                  category: z.enum(translationFieldCategories),
+                  scene: z.enum(translationFieldScenes).optional(),
+                })
+                .strict(),
+            )
+            .min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+const projectConfigurationSchema = z
+  .object({
+    resources: resourceInventorySchema,
+    translationScope: translationScopeSchema,
+  })
+  .strict();
+
+const configurationSchema = projectConfigurationSchema
+  .extend({
     schemaVersion: z.literal(1),
     source: z
       .object({
         version: z.string().trim().min(1),
         translationHistory: z.string().trim().min(1),
-      })
-      .strict(),
-    resources: z
-      .array(
-        z
-          .object({
-            path: safePathSchema,
-            purpose: z.enum([
-              "chat-language",
-              "gui-language",
-              "dialog-language",
-              "configuration",
-              "metadata",
-              "documentation",
-              "bedrock-excluded",
-              "other-excluded",
-            ]),
-          })
-          .strict(),
-      )
-      .min(1),
-    translationScope: z
-      .object({
-        sourceLanguage: z.string().trim().min(1),
-        targetLanguage: z.string().trim().min(1),
-        mappings: z.array(
-          z
-            .object({
-              source: safePathSchema,
-              target: safePathSchema,
-              definitionsSource: safePathSchema.optional(),
-              fields: z
-                .array(
-                  z
-                    .object({
-                      path: z.array(z.string().min(1)).min(1),
-                      category: z.enum(translationFieldCategories),
-                      scene: z.enum(translationFieldScenes).optional(),
-                    })
-                    .strict(),
-                )
-                .min(1),
-            })
-            .strict(),
-        ),
       })
       .strict(),
     rules: z
@@ -89,6 +97,8 @@ const configurationSchema = z
   })
   .strict();
 
+export const landsProjectFieldsSchema = projectConfigurationSchema;
+
 export interface ConfigurationIssue {
   readonly code: string;
   readonly path: readonly (string | number)[];
@@ -101,7 +111,7 @@ export type ParsedConfiguration =
   | { readonly ok: false; readonly issues: readonly ConfigurationIssue[] };
 
 export function validateConfiguration(
-  configuration: ConsumerConfiguration,
+  configuration: Pick<ConsumerConfiguration, "resources" | "translationScope">,
 ): readonly ConfigurationIssue[] {
   const issues: ConfigurationIssue[] = [];
   const resources = new Map<string, number>();

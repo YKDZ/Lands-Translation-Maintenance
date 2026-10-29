@@ -89,16 +89,12 @@ async function prepareSource(
 }
 
 async function createProject(directory: string): Promise<void> {
-  await mkdir(join(directory, ".l10n"), { recursive: true });
   await mkdir(join(directory, ".lioni"), { recursive: true });
   await mkdir(join(directory, "Locale"), { recursive: true });
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",
@@ -175,12 +171,9 @@ function landsJarWithUnregisteredFile(
 async function createLoreProject(directory: string): Promise<void> {
   await createProject(directory);
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",
@@ -331,12 +324,9 @@ async function createMixedConfigurationProject(
 ): Promise<void> {
   await createProject(directory);
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",
@@ -384,12 +374,9 @@ async function createMixedConfigurationProject(
 async function createDialogProject(directory: string): Promise<void> {
   await createProject(directory);
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",
@@ -571,7 +558,7 @@ void test("调整声明字段选择器不重置正文未变的中文", async (t)
   const baselinePath = join(project, ".lioni/lioni.baseline.json");
   const originalBaseline = await readFile(baselinePath);
 
-  const manifestPath = join(project, ".l10n/config.yml");
+  const manifestPath = join(project, ".lioni/project.yml");
   const previousConfiguration = await readFile(manifestPath, "utf8");
   const currentConfiguration = previousConfiguration.replace(
     "        - path: [messages]\n",
@@ -952,7 +939,7 @@ void test("显式排除用途优先于未登记语言资源命名", async (t) =>
   await rm(initialJar);
   runLioni(["baseline", configPath, "--output-format", "structured"]);
 
-  const manifestPath = join(project, ".l10n/config.yml");
+  const manifestPath = join(project, ".lioni/project.yml");
   const configuration = await readFile(manifestPath, "utf8");
   await writeFile(
     manifestPath,
@@ -1050,12 +1037,9 @@ void test("整份退出翻译范围的目标文件留给维护者且未读取时
   );
   await writeFile(targetPath, originalTarget);
   await writeFile(
-    join(project, ".l10n/config.yml"),
+    join(project, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",

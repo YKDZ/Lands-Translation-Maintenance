@@ -13,6 +13,9 @@ import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { strToU8, zipSync } from "fflate";
+import { stringify } from "yaml";
+
+import { parseConfiguration } from "../src/configuration.ts";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
@@ -28,6 +31,28 @@ export function runCliWithoutJava(...args: string[]) {
     encoding: "utf8",
     env: { ...process.env, PATH: "/lands-l10n-missing-java" },
   });
+}
+
+export async function writeLioniProjectDeclaration(
+  projectDirectory: string,
+): Promise<void> {
+  const legacyConfiguration = parseConfiguration(
+    await readFile(join(projectDirectory, ".l10n/config.yml"), "utf8"),
+  );
+  if (!legacyConfiguration.ok) {
+    throw new Error("测试夹具的旧维护配置无效。");
+  }
+  const { resources, translationScope } = legacyConfiguration.value;
+  await mkdir(join(projectDirectory, ".lioni"), { recursive: true });
+  await writeFile(
+    join(projectDirectory, ".lioni/project.yml"),
+    stringify({
+      format: "lands-l10n-project/v1",
+      resources,
+      translationScope,
+    }),
+    "utf8",
+  );
 }
 
 export async function snapshotProjectFiles(projectDirectory: string) {

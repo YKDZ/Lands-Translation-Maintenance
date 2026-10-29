@@ -14,6 +14,7 @@ import {
   createFormatProject,
   createGuiProject,
   runCli,
+  writeLioniProjectDeclaration,
 } from "../cli-fixtures.ts";
 
 const packageDirectory = resolve(new URL("../..", import.meta.url).pathname);
@@ -39,6 +40,7 @@ async function inspectFormatProjection(project: {
   readonly directory: string;
   readonly jarFile: string;
 }) {
+  await writeLioniProjectDeclaration(project.directory);
   const maintenanceDirectory = join(project.directory, ".lioni");
   const configPath = join(maintenanceDirectory, "lioni.config.ts");
   await mkdir(maintenanceDirectory, { recursive: true });
