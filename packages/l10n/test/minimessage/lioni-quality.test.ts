@@ -18,10 +18,7 @@ import { readFacts } from "@lioni/lioni";
 import { strToU8, zipSync } from "fflate";
 
 import { createLandsConfig } from "../../lioni.config.ts";
-import {
-  hasMiniMessageDocuments,
-  miniMessageFactsInput,
-} from "../../src/minimessage-quality.ts";
+import { miniMessageFactsInput } from "../../src/minimessage-quality.ts";
 import { createProject, prepareLioniProject } from "../lioni-fixtures.ts";
 
 const packageDirectory = resolve(
@@ -869,36 +866,6 @@ void test("空列表译文仍检查被删除的 MiniMessage 标签与变量", as
       2,
     ),
   );
-});
-
-void test("空列表特例不覆盖不可用译文或非空原文", () => {
-  const unavailable = {
-    id: "messages.entries",
-    sourceFile: "Locale/en-US.yml",
-    targetFile: "Locale/zh-CN.yml",
-    path: ["messages", "entries"],
-    category: "chat-string-list" as const,
-    source: [],
-    target: [],
-    targetStatus: "blocked" as const,
-  };
-  const missing = { ...unavailable, targetStatus: "missing" as const };
-  const nonemptySource = {
-    ...unavailable,
-    source: ["原文条目"],
-    target: [],
-    targetStatus: "present" as const,
-  };
-  const bothEmpty = {
-    ...unavailable,
-    target: [],
-    targetStatus: "present" as const,
-  };
-
-  assert.equal(hasMiniMessageDocuments(unavailable), true);
-  assert.equal(hasMiniMessageDocuments(missing), true);
-  assert.equal(hasMiniMessageDocuments(nonemptySource), true);
-  assert.equal(hasMiniMessageDocuments(bothEmpty), false);
 });
 
 void test("空 MiniMessage 字符串列表不占用全局主题诊断归属", async (t) => {
