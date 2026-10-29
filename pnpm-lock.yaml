@@ -217,6 +217,9 @@ importers:
 
   packages/l10n:
     dependencies:
+      '@lioni/lioni':
+        specifier: 0.2.0
+        version: 0.2.0
       '@ykdz/cli-contract':
         specifier: 0.3.0
         version: 0.3.0
@@ -259,6 +262,19 @@ importers:
         version: 0.71.0
 
 packages:
+
+  '@intlify/message-compiler@11.2.8':
+    resolution: {integrity: sha512-A5n33doOjmHsBtCN421386cG1tWp5rpOjOYPNsnpjIJbQ4POF0QY2ezhZR9kr0boKwaHjbOifvyQvHj2UTrDFQ==}
+    engines: {node: '>= 16'}
+
+  '@intlify/shared@11.2.8':
+    resolution: {integrity: sha512-l6e4NZyUgv8VyXXH4DbuucFOBmxLF56C/mqh2tvApbzl2Hrhi1aTDcuv5TKdxzfHYmpO3UB0Cz04fgDT9vszfw==}
+    engines: {node: '>= 16'}
+
+  '@lioni/lioni@0.2.0':
+    resolution: {integrity: sha512-s3E8fyy6gIwSVnbV44llLp4VfqsbitvObDg5utJwWG/H5D6y+u4ynF4DJjerDtp0T+SDDnmgUsy1lNBAAhrgZg==}
+    engines: {node: ^24.21.0}
+    hasBin: true
 
   '@oxfmt/binding-android-arm-eabi@0.71.0':
     resolution: {integrity: sha512-l31EyBfB4egJeFua11aQFEUE9nnDtfpWCadqQovm0WL30t/yUHtdFl/5HyFXvd5xT8Ewh3U4TI9f30GowrQ1fw==}
@@ -738,6 +754,10 @@ packages:
     resolution: {integrity: sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==}
     engines: {node: '>= 18'}
 
+  source-map-js@1.2.2:
+    resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
+    engines: {node: '>=0.10.0'}
+
   tinypool@2.2.0:
     resolution: {integrity: sha512-jBrmx4lYmaC9k/mgPbylxs7kBUxHtD8256up+HjLaDFfXScKJQyil+SWXSvhAtT7XHo+yTVlpB81PGmHP8oLSQ==}
     engines: {node: ^20.0.0 || >=22.0.0}
@@ -763,6 +783,21 @@ packages:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
+
+  '@intlify/message-compiler@11.2.8':
+    dependencies:
+      '@intlify/shared': 11.2.8
+      source-map-js: 1.2.2
+
+  '@intlify/shared@11.2.8': {}
+
+  '@lioni/lioni@0.2.0':
+    dependencies:
+      '@intlify/message-compiler': 11.2.8
+      '@standard-schema/spec': 1.1.0
+      '@ykdz/cli-contract': 0.3.0
+      yaml: 2.9.1
+      zod: 4.6.7
 
   '@oxfmt/binding-android-arm-eabi@0.71.0':
     optional: true
@@ -1050,6 +1085,8 @@ snapshots:
       entities: 8.1.0
 
   smol-toml@1.9.1: {}
+
+  source-map-js@1.2.2: {}
 
   tinypool@2.2.0: {}
 
