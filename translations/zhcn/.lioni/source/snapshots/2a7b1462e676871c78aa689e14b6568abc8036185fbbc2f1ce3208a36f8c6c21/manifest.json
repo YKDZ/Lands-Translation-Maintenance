@@ -1,0 +1,127 @@
+{
+  "format": "lands-source/v1",
+  "sourceVersion": "8.9.2",
+  "jarSha256": "2a7b1462e676871c78aa689e14b6568abc8036185fbbc2f1ce3208a36f8c6c21",
+  "resources": [
+    {
+      "path": "Locale/Nations/definitions_gui.yml",
+      "sha256": "a5d203a3256f77e1217eb9e58fc6849ba4936b60834744c22c1423f03557cd57"
+    },
+    {
+      "path": "Locale/Nations/en-US.yml",
+      "sha256": "e48c4fa6c167ab1305a66b85ddcd30e098184a56955ecd74a0e2cbe5ab8fbf74"
+    },
+    {
+      "path": "Locale/Nations/en-US_dialogs.yml",
+      "sha256": "9a89bf5bdaa014d745d041668b8862dccca5c63c1744647d549971ea8977bc23"
+    },
+    {
+      "path": "Locale/Nations/en-US_gui.yml",
+      "sha256": "9174459111a5e0e00d6e0fd0c89b89693b1923ff7f5fa72344be6773050e10f6"
+    },
+    {
+      "path": "Locale/Wars/definitions_gui.yml",
+      "sha256": "60f8c8a76f3e5445a082dbc8b5a88c4ecffecc3bf2bde35c25680d2b605944dd"
+    },
+    {
+      "path": "Locale/Wars/en-US.yml",
+      "sha256": "d810902a4481f8904a3e1aceb9c8eebfe7f2f81e2e86ab971bd6d18ce2c859e7"
+    },
+    {
+      "path": "Locale/Wars/en-US_gui.yml",
+      "sha256": "50d0b5afb96686e581c61f20a0594b4b6b7b3fd305e2348cbb61748bfa9b0489"
+    },
+    {
+      "path": "Locale/definitions_gui-bedrock.yml",
+      "sha256": "b10e4ed73bf2156f68465b103d8d4236833e47fa68e1326e82d0f499341bbff6"
+    },
+    {
+      "path": "Locale/definitions_gui.yml",
+      "sha256": "01814875ce051867dd147d04a07ec79ee3eaa0dc76c1117ea1266646b78b468d"
+    },
+    {
+      "path": "Locale/en-US.yml",
+      "sha256": "1446bd53169fcb5aa23ee9c5cb5bc54785734e63caa3c2636284bcd54835b772"
+    },
+    {
+      "path": "Locale/en-US_dialogs.yml",
+      "sha256": "1e6cf56403b446a819f0b13f9b18ba9e8444de0018c9625ea2b162196a2475fd"
+    },
+    {
+      "path": "Locale/en-US_gui-bedrock.yml",
+      "sha256": "eaf00e7991bb57f7f5d565a3f22d378c0d3b9dce2f494329407936985b80be96"
+    },
+    {
+      "path": "Locale/en-US_gui.yml",
+      "sha256": "ed31193d4f7cea507526036b19cacd6259c44e6d98d804ffd079ea3d22f634f9"
+    },
+    {
+      "path": "Locale/theme.yml",
+      "sha256": "1cd8b0c8a6557ff03ba4620802c608b57277f621eae08127d6a660cac13e8fe1"
+    },
+    {
+      "path": "META-INF/MANIFEST.MF",
+      "sha256": "1729f28d5139ab469aa991094f23189d5df4c243eee31af36aa9c04673245850"
+    },
+    {
+      "path": "Modules/Nations/nations.yml",
+      "sha256": "ce6dc16d42153b9f50a114243a62d4933981d5328b03dc61b6939192ce3d49c5"
+    },
+    {
+      "path": "Modules/RandomTeleport/rtp.yml",
+      "sha256": "782f667727c263a9fae1c4bd607b02cfcb97fa6ddbae7c614f2fccd63f289f95"
+    },
+    {
+      "path": "Modules/Wars/modes.yml",
+      "sha256": "1035b1046999c4bee13528194e0467643d5967e60626e74465e54b02a740787e"
+    },
+    {
+      "path": "Modules/Wars/wars.yml",
+      "sha256": "c5119c08bf54a4cb213cb0098563124456fe7168a085bbec6873e1374b2dc87e"
+    },
+    {
+      "path": "README.md",
+      "sha256": "04ea07030f5e8449502981a1586253f84a4d5d3bcbefaf2e89da7318edd9beb3"
+    },
+    {
+      "path": "categories.yml",
+      "sha256": "79579b87c94406512d3b23290dfefb22292ddb63e62121a04ad093603212de01"
+    },
+    {
+      "path": "changelog.txt",
+      "sha256": "32440e42503a6fc6629875345be2363f790e62ba3d3bc6bbff9c727a26c09140"
+    },
+    {
+      "path": "config.yml",
+      "sha256": "53eee13e6c1c0d5a7117e6defda2547dce59521f72dcf797b055fa741603a295"
+    },
+    {
+      "path": "events.yml",
+      "sha256": "5b9e8e2b1ccdd683633cfd69e72028ac67009a581b37ca80b74489c1ced2f393"
+    },
+    {
+      "path": "levels.yml",
+      "sha256": "3ad61396acfd9c1006aa416bab27ef97c0b5aebf95da769d58910091956700c2"
+    },
+    {
+      "path": "player-limits.yml",
+      "sha256": "b241fcdaabbe4fa013677ffdb38b4b26a759b9cac8edf1a19657a3fc4608a745"
+    },
+    {
+      "path": "plugin.yml",
+      "sha256": "57070d81a58e7d6b5b16a9ed17a327f1f9e4f2fd3ccae893bfaced24dd2790eb"
+    },
+    {
+      "path": "roles.yml",
+      "sha256": "2e76d827310bcaed283b503b9b5c8f1377eb2b9163d86b42f8a33008cac98264"
+    },
+    {
+      "path": "server-name.yml",
+      "sha256": "d55fd35f0f694dde74794ff7c05d2c124b3e51aca98b4e797b62603f45376237"
+    },
+    {
+      "path": "web.yml",
+      "sha256": "71f7de055531ac777a7d4674873dab4808bc750eefad97ecfeb089eb3e7dc4e8"
+    }
+  ]
+}

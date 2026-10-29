@@ -1,0 +1,2451 @@
+general:
+  all: <green>All</green>
+  previous: <t:regular>previous</t>
+  nation:
+    managed:
+      nation: <t:error>Managed by Nation</t>
+      land: <t:error>Managed by Lands</t>
+  inbox-filter:
+    general: <t:regular>General</t>
+    members: <t:cmd>Members ☺</t>
+    economy: <t:cost>Economy $</t>
+    relations: <t:regular_value>Relations</t>
+    posts: <t:regular>Posts</t>
+    storage: <t:regular>Storage</t>
+  wYes: <green>Yes</green>
+  wnormal: <t:regular>member</t>
+  wvassal: <t:negative>vassal</t>
+  search-by:
+    name: <t:regular>Name</t>
+    tag: <t:regular>Tag</t>
+  war:
+    name:
+      nation: '<t:entity_nation>Nation</t> '
+      land: '<t:entity_land>Land</t> '
+  value:
+    none: <red>None</red>
+    unlimited: <green>unlimited</green>
+    click:
+      primary: <t:decoration>✖</t> <t:click>LEFT CLICK<newline>   </t>
+      secondary: <t:decoration>✖</t> <t:click>RIGHT CLICK<newline>   </t>
+      tertiary: <t:decoration>✖</t> <t:click>SHIFT + LEFT Click<newline>   </t>
+      quaternary: <t:decoration>✖</t> <t:click>SHIFT + RIGHT Click<newline>   </t>
+      remove: <t:decoration>✖</t> <t:click>DROP<newline>   </t>
+      label: <t:regular><v:label></t>
+      desc: <t:regular><v:desc></t>
+  enabled: <green>Enabled</green>
+  offline: <red>Offline</red>
+  never: <t:regular>Never</t>
+  rentables:
+    cost: <t:regular_value>Cost</t>
+    price_blocks_ratio: <t:regular_value>Price-blocks ratio</t>
+    size: <t:regular_value>Size</t>
+    buy: <t:regular_value>Buy</t>
+    rent: <t:regular_value>Rent</t>
+    rental: <t:regular_value>Rental</t>
+    sell: <t:regular_value>Sell</t>
+  top:
+    sorting:
+      balance: Balance
+      ratio-kd: Kills/Deaths
+      level: Level
+      chunks: Chunks
+      members: Members
+      ratio-wl: Won/Lost
+  now: <green>Now</green>
+  wNo: <red>No</red>
+  disabled: <red>Disabled</red>
+  directions:
+    north: North
+    east: East
+    south: South
+    west: West
+
+physical:
+  selection:
+    name: <t:regular_heading>Selection Tool
+    lore:
+    - <t:regular>Use this tool to create a selection.
+    - 'Selections can be used for:'
+    - ' <t:decoration>• </t><t:regular>Claiming'
+    - ' <t:decoration>• </t><t:regular>Unclaiming'
+    - ' <t:decoration>• </t><t:regular>Resizing areas'
+  currency: {}
+  claim_block_radius:
+    name: <t:regular_heading>Radius Claimblock
+    lore:
+    - <t:regular>You can claim a radius of
+    - chunks by placing this block
+    - in the wilderness.
+    - ''
+    - ' <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>'
+    - ' <t:decoration>• </t><t:regular>Radius:<t:regular_value> <v:radius></t> <t:decoration>(</t><t:regular_value>= <v:chunks> chunks</t><t:decoration>)</t>'
+  claim_block:
+    name: <t:regular_heading>Claimblock
+    lore:
+    - <t:regular>You can claim a chunk
+    - by placing this block
+    - in the wilderness.
+    - ''
+    - ' <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>'
+  info:
+    name: <t:regular_heading>Info Tool
+    lore:
+    - <t:regular>Use this tool to get
+    - information about the claim
+    - you're pointing at.
+  camp:
+    name: <t:regular_heading>Camp
+    lore:
+    - <t:regular>Place this item to create a temporary
+    - camp that will be deleted after
+    - <t:time><v:time></t>.
+    - ' <t:decoration>• </t><t:regular>Radius:<t:regular_value> <v:radius></t>'
+    - ' <t:decoration>• </t><t:regular>Camps can''t be expanded.'
+common:
+  items:
+    default:
+      child_failure_message:
+        name: <t:error_heading>Failure
+        lore:
+        - <t:error><v:message></t>
+      child_success_message:
+        name: <t:success_heading>Success
+        lore:
+        - <t:success><v:message></t>
+      child_failure_teleport:
+        name: <t:error_heading>Teleportation failed
+        lore:
+        - <t:error>The teleportation failed because of
+        - 'the following cause: <t:error_value><v:result></t>'
+      child_failure_player_trusted:
+        name: <t:error_heading>Already trusted
+        lore:
+        - <t:error>You're already part of this land.
+      child_failure_permission:
+        name: <t:error_heading>Missing Permission
+        lore:
+        - <t:error>You're not allowed to do this.
+      child_failure_teleport_enter:
+        name: <t:error_heading>Not Allowed to Enter
+        lore:
+        - <t:error>You're not allowed to enter the
+        - area, in which the destination
+        - is located.
+        - ' <t:decoration>• </t><t:regular>The land owner can give you'
+        - '   permission to do so.'
+      refresh_page_previous:
+        name: <t:regular_heading>Previous Page
+        lore:
+        - '<t:decoration>✖ </t><t:regular>Current: <t:regular_value><v:current></t> / <t:regular_value><v:pages></t>'
+      child_failure_no-item:
+        name: <t:error_heading>No Item at Cursor
+        lore:
+        - <t:error>You need to drag an item
+        - from your inventory here.
+      child_failure_spawn_cooldown:
+        name: <t:error_heading>Cooldown active
+        lore:
+        - <t:error>You must wait another<t:error_value> <v:time></t>
+        - before you can teleport to any
+        - land spawn again.
+      child_failure_teleport_unsafe:
+        name: <t:error_heading>Unsafe
+        lore:
+        - <t:error>Couldn't teleport to this destination,
+        - because it's not safe.
+      back:
+        name: <t:regular_heading>Back
+        lore:
+        - <t:decoration>✖ </t><t:regular>Go back to
+        - '   <t:regular_value><v:back></t>.'
+      refresh_page_next:
+        name: <t:regular_heading>Next Page
+        lore:
+        - '<t:decoration>✖ </t><t:regular>Current: <t:regular_value><v:current></t> / <t:regular_value><v:pages></t>'
+      child_failure_cost:
+        name: <t:error_heading>Not enough Money
+        lore:
+        - <t:error>You need <t:cost><v:cost></t> to do this.
+      child_failure_spawn_cost:
+        name: <t:error_heading>Not enough Money
+        lore:
+        - <t:error>You need <t:cost><v:cost></t> to pay for
+        - the teleportation.
+      child_failure_noaccess_owner:
+        name: <t:error_heading>Not allowed
+        lore:
+        - <t:error>Only the owner of <t:error_value><v:object></t> can do that.
+      child_failure_spawn_teleport:
+        name: <t:error_heading>Not Allowed to Teleport
+        lore:
+        - <t:error>You're not allowed to teleport
+        - to this particular land spawn.
+        - ' <t:decoration>• </t><t:regular>The land owner can give you'
+        - '   permission to do so.'
+      child_failure_spawn_war:
+        name: <t:error_heading>Active War
+        lore:
+        - <t:error>You currently can't teleport to
+        - this particular land spawn.
+        - ' <t:decoration>• </t><t:regular>They''re currently engaged in a war,'
+        - '   for another <t:time><v:time></t>.'
+      child_failure_membership-request_not-looking:
+        name: <t:error_heading>Not looking for Members
+        lore:
+        - <t:error>This land isn't looking for
+        - new members.
+      child_failure_page_previous:
+        name: <t:error_heading>No Previous Page
+      child_success_player_trusted:
+        name: <t:success_heading>You're now trusted
+        lore:
+        - <t:success>Land <t:entity_land><v:land></t> automatically
+        - accepted your request.
+        - ' <t:decoration>• </t><t:regular>Leave a land: <t:cmd>/<v:cmd></t>'
+      child_failure_page_next:
+        name: <t:error_heading>No Next Page
+      child_success_membership-request_revoked:
+        name: <t:success_heading>Membership Request Revoked
+        lore:
+        - <t:success>You revoked your membership request.
+      child_failure_noaccess:
+        name: <t:error_heading>Not allowed
+        lore:
+        - <t:error>You're not allowed to do that.
+        - ' <t:decoration>• </t><t:regular>The owner of <v:object><t:regular> can give your'
+        - '   role permission to do so.'
+        - '   Flag: <t:regular_value><v:flag></t>'
+      child_success_membership-request_sent:
+        name: <t:success_heading>Sent Membership Request
+        lore:
+        - <t:regular>They can now accept your membership request.
+      child_failure_spawn_none:
+        name: <t:error_heading>No Spawnpoint
+        lore:
+        - <t:error>This land doesn't have set a spawn yet.
+        - ' <t:decoration>• </t><t:regular>Set spawn point:'
+        - '   <t:cmd>/<v:cmd></t>'
+      category:
+        name: '<t:regular_heading>Category: <v:category>'
+        lore:
+        - <t:decoration>✖ </t><t:regular>Change the category of the land.
+        - '    <t:decoration>• </t><t:regular>Others can filter your land in the'
+        - '      <t:regular_value>/<v:cmd></t> menu by this category.'
+      category_members:
+        name: '<t:regular_heading>Category: <v:category>'
+        lore:
+        - <t:decoration>✖ </t><t:regular>Change the category of the land.
+        - '    <t:decoration>• </t><t:regular>Others can filter your land in the'
+        - '      <t:cmd>/<v:cmd></t> menu by this category.'
+        - ''
+        - '    <t:decoration>• </t><t:regular>They can request membership to'
+        - '      this land in the menu'
+        - '      <t:regular>as long as the category of'
+        - '      your land is set to:'
+        - '      <t:regular_value><v:looking></t>'
+      child_failure_global-action:
+        name: <t:error_heading>Display all Areas enabled
+        lore:
+        - <t:error>Can't disable this, if you're viewing entries
+        - for all areas. <t:regular>Enable <t:regular_heading>View only area</t>
+        - to change this.
+      child_failure_nation_none:
+        name: <t:error_heading>Role managed by Nation
+        lore:
+        - <t:error>This role will be partly managed
+        - by the nation you may belong to in the future.
+        - ' <t:decoration>• </t><t:regular>You''re currently not part of any nation.'
+      object_name:
+        name: '<t:regular_heading>Name: <t:user_content><v:name></t>'
+        lore:
+        - <t:decoration>✖ </t><t:regular>Set a new name.
+      object_tag:
+        name: '<t:regular_heading>Tag: <t:user_content><v:tag></t>'
+        lore:
+        - <t:regular>A short version of the name.
+        - <action:primary><label>Set Tag</label></action>
+        - <action:remove><label>Remove Tag</label></action>
+      object_icon:
+        name: <t:regular_heading>Icon
+        lore:
+        - <action:primary><label>Set Icon</label><desc>Drag an item here, or hold it in your hand on Bedrock.</desc></action>
+        - <action:remove><label>Reset to Default</label></action>
+gui:
+  area_various:
+    title: <t:menu_title>Miscellaneous
+    items:
+      default:
+        child_no-item:
+          name: <t:error_heading>No Item in Hand
+          lore:
+          - <t:regular>You need to have an item
+          - in your main hand.
+        name:
+          name: <t:regular_heading>Name
+          lore:
+          - <t:decoration>✖</t> <t:regular>Rename this area.
+          - '   Current: <t:user_content><v:name></t>'
+        icon:
+          name: <t:regular_heading>Icon
+          lore:
+          - <t:decoration>✖ </t><t:regular>Drag an item here to change the icon.
+          - '    <t:decoration>• </t><t:regular>This helps you to recognize'
+          - '      this area in the areas menu.'
+        description:
+          name: <t:regular_heading>Description
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change the description of
+          - '   this area.'
+          - '   <t:decoration>• </t><t:regular><b>Current:'
+          - '     <t:user_content><v:description></t>'
+  role:
+    title: <t:menu_title><v:role>
+    items:
+      default:
+        taxes_never:
+          name: <t:regular_heading>This role doesn't pay Taxes
+          lore:
+          - <t:regular>It can't be changed for this role.
+        settings:
+          name: <t:regular_heading>Action Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Toggle action flags like block breaking,
+          - '   container opening etc.'
+        apply:
+          name: '<t:regular_heading>Add to new Areas: <v:apply>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should this role, including
+          - '   its members and flags, be added'
+          - '   to new area creations?'
+        members_ally:
+          name: <t:regular_heading>Role Members
+          lore:
+          - <t:regular>All players that aren't trusted
+          - and are part of an ally land, have
+          - this role assigned.
+        icon:
+          name: <t:regular_heading>Icon
+          lore:
+          - <action:primary><label>Set Icon</label><desc>Drag an item here to change the role icon.</desc></action>
+          - <action:remove><label>Reset to Default</label></action>
+        taxes:
+          name: '<t:regular_heading>Pays Taxes: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should members of this role
+          - '   pay taxes?'
+          - '   <t:decoration>• </t><t:regular>The land receives<t:regular_value> <v:taxes> <t:regular>in taxes'
+          - '     from this role and area in'
+          - '     <t:time><v:time></t>.'
+        apply_always:
+          name: <t:regular_heading>Adds Role to new Areas
+          lore:
+          - <t:regular>This role, including its members
+          - and flags, is always added to new
+          - area creations. That can't be
+          - toggled for this role.
+        members_visitor:
+          name: <t:regular_heading>Role Members
+          lore:
+          - <t:regular>All players that aren't trusted
+          - have this role assigned.
+        child_failure_priority:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You're not allowed to edit
+          - settings of this role.
+          - ' <t:decoration>• </t><t:regular>It has a higher priority than'
+          - '   yours or you''re a member of'
+          - '   this role.'
+        members_nation:
+          name: <t:regular_heading>Role Members
+          lore:
+          - <t:regular>All players that aren't trusted
+          - and are part of your nation, have
+          - this role assigned.
+        child_failure_access:
+          name: <t:error_heading>Not Allowed
+          lore:
+          - <t:error>You're not allowed to edit
+          - roles in this area.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your'
+          - '   role permission to do so.'
+        management:
+          name: <t:regular_heading>Management Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Toggle administrative flags like
+          - '   trusting players, claiming etc.'
+        members:
+          name: <t:regular_heading>Role Members
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all role members.
+        name:
+          name: <t:regular_heading>Rename
+          lore:
+          - <t:decoration>✖ </t><t:regular>Rename this role.
+          - '   Current: <t:user_content><v:name></t>'
+        child_failure_nation:
+          name: <t:error_heading>Role managed by Nation
+          lore:
+          - <t:error>This role is partly managed
+          - by your nation.
+          - ' <t:decoration>• </t><t:regular>Only the nation''s capital can change'
+          - '   this setting: <t:cmd>/<v:cmd></t>'
+  list_area_invites:
+    title: <t:menu_title>Sent Invites & Requests
+    items:
+      default:
+        entry_object_owner_land:
+          name: <t:entry_heading><v:player> <t:decoration>-</t> Ownership Request
+          lore:
+          - <t:regular>Sets this player as the new owner
+          - of land <t:entity_land><v:land></t>.
+          - ''
+          - <t:regular_heading>Information</t>
+          - ' <t:decoration>• </t><t:regular>Sent:<t:time> <v:time></t>'
+          - ' <t:decoration>• </t><t:regular>Sender: <v:sender>'
+          - ''
+          - <action:remove><label>Revoke Invitation</label></action>
+        entry_object_merge:
+          name: <t:entry_heading><v:merge> <t:decoration>-</t> Merge Request
+          lore:
+          - <t:regular>Merges the land<t:entity_land> <v:merge></t> into this.
+          - ''
+          - <t:regular_heading>Information</t>
+          - ' <t:decoration>• </t><t:regular>Sent:<t:time> <v:time></t>'
+          - ' <t:decoration>• </t><t:regular>Sender: <v:sender>'
+          - ' <t:decoration>• </t><t:regular>Receiver: <t:regular_value><v:receiver></t>'
+          - ''
+          - <action:remove><label>Revoke Invitation</label></action>
+        entry_object_trust_area:
+          name: <t:entry_heading><v:player> <t:decoration>-</t> <t:regular_heading>Membership Invitation
+          lore:
+          - <t:regular>Adds this player to the area <t:regular_value><v:area></t>.
+          - ''
+          - <t:regular_heading>Information</t>
+          - ' <t:decoration>• </t><t:regular>Sent:<t:time> <v:time></t>'
+          - ' <t:decoration>• </t><t:regular>Sender: <v:sender>'
+          - ''
+          - <action:remove><label>Revoke Invitation</label></action>
+        child_failure_access:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:error>You're not allowed to revoke
+          - invites in this area.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your role'
+          - '   permission to remove players.'
+        entry_object_trust_land:
+          name: <t:entry_heading><v:player> <t:decoration>-</t> Membership Invitation
+          lore:
+          - <t:regular>Adds this player to the whole
+          - land <t:entity_land><v:land></t>.
+          - ''
+          - <t:regular_heading>Information</t>
+          - <t:decoration>• </t><t:regular>Sent:<t:time> <v:time></t>
+          - '<t:decoration>✖ </t><t:regular>Sender: <v:sender>'
+          - <action:remove><label>Revoke Invitation</label></action>
+  land_various:
+    title: <t:menu_title>Miscellaneous
+    items:
+      default:
+        title:
+          name: <t:regular_heading>Enter Message
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change the message that appears
+          - '   to players who enter the land.'
+          - '    <t:decoration>• </t><t:regular_heading>Current</t>'
+          - '      <t:user_content><v:title></t>'
+          - '    <!b><t:decoration>• </t><t:regular_heading>Available Placeholders</t>'
+          - '      <!b><t:decoration>- </t><t:regular_value>%owner%</t> <t:decoration>= </t><t:regular>Owner'
+          - '      <t:decoration>- </t><t:regular_value>%level%</t> <t:decoration>= </t><t:regular>Level'
+          - '      <t:decoration>- </t><t:entity_nation>%nation%</t> <t:decoration>= </t><t:regular>Nation'
+          - '      <t:decoration>- </t><t:regular_value>%player%</t> <t:decoration>= </t><t:regular>Entering player'
+          - ''
+          - <action:primary><label>Set Message</label></action>
+          - '<action:secondary><label>Display: <v:show></label></action>'
+  taxes:
+    title: <t:menu_title>Taxes
+    items:
+      default:
+        tax_area:
+          name: <t:regular_heading>Tax:</t> <t:regular_value><v:tax></t>
+          lore:
+          - <t:regular>In<t:time> <v:time></t> your land
+          - will receive <t:regular_value><v:revenue></t> <t:regular>in total as taxes
+          - from trusted members of this area.
+          - ' <t:decoration>• </t><t:regular>Interval: <t:time><v:interval></t>'
+          - ' <t:decoration>• </t><t:regular>Players are only paying taxes'
+          - '   for areas, in which they''re trusted.'
+        refresh_minus-1:
+          name: <t:negative_heading>Remove <!b><v:value>
+        refresh_minus-2:
+          name: <t:negative_heading>Remove <!b><v:value>
+        refresh_minus-3:
+          name: <t:negative_heading>Remove <!b><v:value>
+        refresh_plus-3:
+          name: <t:positive_heading>Add <!b><v:value>
+        refresh_plus-1:
+          name: <t:positive_heading>Add <!b><v:value>
+        refresh_plus-2:
+          name: <t:positive_heading>Add <!b><v:value>
+        child_failure_value_max:
+          name: <t:error_heading>Maximum Value reached
+          lore:
+          - <t:error>You can't set taxes higher than<t:error_value> <v:max></t>.
+        tax_nation:
+          name: <t:regular_heading>Editing <v:editing> <t:regular_heading>tax:</t> <t:regular_value><v:active_tax></t>
+          lore:
+          - <t:regular>In<t:time> <v:time></t> your nation
+          - will receive <t:regular_value><v:revenue></t> <t:regular>as taxes
+          - from the lands in this nation.
+          - ' <t:decoration>• </t><t:regular>Member tax:<t:regular_value> <v:tax></t>'
+          - ' <t:decoration>• </t><t:regular>Vassal tax:<t:regular_value> <v:vassal_tax></t>'
+          - ' <t:decoration>• </t><t:regular>Interval: <t:time><v:interval></t>'
+          - ' <t:decoration>• </t><t:regular>This value sets the tax'
+          - '   per chunk. So bigger lands'
+          - '   will need to pay more.'
+        tax_toggle:
+          name: '<t:regular_heading>Editing: <v:editing> <t:regular_heading>tax'
+          lore:
+          - <t:regular>The +/- buttons currently change the
+          - <v:editing> <t:regular>tax.
+          - ''
+          - ' <t:decoration>• </t><t:regular>Member tax:<t:regular_value> <v:tax></t>'
+          - ' <t:decoration>• </t><t:regular>Vassal tax:<t:regular_value> <v:vassal_tax></t>'
+          - ''
+          - <t:click>CLICK <t:regular>to switch which tax you edit.
+        child_failure_value_min:
+          name: <t:error_heading>Minimum Value reached
+          lore:
+          - <t:error>You can't set taxes lower than<t:error_value> <v:min></t>.
+        child_failure_cooldown:
+          name: <t:error_heading>You need to wait
+          lore:
+          - <t:error>You currently can't change the
+          - tax value.
+          - ' <t:decoration>• </t><t:regular>You need to wait another'
+          - '   <t:time><v:time></t> before you can'
+          - '   change the it again.'
+  main:
+    title: <t:menu_title>Main Menu
+    items:
+      default:
+        limit:
+          name: <t:regular_heading>Your Limits
+          lore:
+          - <t:decoration>• </t><t:regular>Create<t:regular_value> <v:player_lands_owned></t> lands
+          - '  <t:cmd>/<v:cmd_create></t>'
+          - <t:decoration>• </t><t:regular>Claim chunks
+          - '  <t:decoration>- </t><t:regular_value><v:player_chunks_used></t><t:regular> <t:decoration>/</t> <t:regular_value><v:player_chunks></t> chunks in total'
+          - '  <t:decoration>- </t><t:regular>max land size: <t:regular_value><v:land_size></t> chunks'
+          - '  <t:cmd>/<v:cmd_claim></t>'
+          - <t:decoration>• </t><t:regular>Add<t:regular_value> <v:land_members></t> members per land
+          - '  <t:cmd>/<v:cmd_trust></t>'
+          - <t:decoration>• </t><t:regular>Join<t:regular_value> <v:player_lands_trusted></t> lands
+          - '  <t:cmd>/<v:cmd_accept></t>'
+        rentable:
+          name: <t:regular_heading>Rentable
+          lore:
+          - <t:decoration>✖ </t><t:regular>View areas setup for rental and
+          - '   lands that can be purchased.'
+        lands:
+          name: <t:entity_land><b>Your Lands</t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage lands that you're part of.
+          - '    <t:decoration>• </t><t:regular>Own: <t:regular_value><v:own></t>'
+          - '    <t:decoration>• </t><t:regular>Trusted: <t:regular_value><v:trusted></t>'
+        flags:
+          name: <t:regular_heading>Settings
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit personal settings.
+        invites:
+          name: <t:regular_heading>Invites & Requests
+          lore:
+          - <t:decoration>✖ </t><t:regular>View your received invites.
+          - '   Other lands can invite you to join them,'
+          - '   request you to become their new owner'
+          - '   or request your land to be merged'
+          - '   into theirs.'
+          - ''
+          - '    <t:decoration>• </t><t:regular>Amount: <t:regular_value><v:invites></t>'
+        nations:
+          name: <t:entity_nation><b>Your Nations</t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View nations that you're part of.
+          - '    <t:decoration>• </t><t:regular>Own: <t:regular_value><v:own></t>'
+          - '    <t:decoration>• </t><t:regular>Trusted: <t:regular_value><v:trusted></t>'
+        all-lands:
+          name: <t:entity_land><b>All Lands</t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all lands of this server.
+          - '    <t:decoration>• </t><t:regular>Total amount: <t:regular_value><v:lands></t>'
+        all-nations:
+          name: <t:entity_nation><b>All Nations</t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all nations of this server.
+          - '    <t:decoration>• </t><t:regular>Total amount: <t:regular_value><v:nations></t>'
+        map:
+          name: <t:regular_heading>Map
+          lore:
+          - <t:decoration>✖ </t><t:regular>View the claims map.
+  list_land_claims:
+    title: <t:menu_title>Claims
+    items:
+      default:
+        entry_chunk:
+          name: <t:regular_heading><v:world>, <v:x>, <v:z>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Teleport to this chunk.
+          - '   <t:decoration>• </t><t:regular>Claimed by: <t:regular_value><v:claimer></t>'
+          - '   <t:decoration>• </t><t:regular>Claimed at:<t:time> <v:date></t>'
+          - '   <t:decoration>• </t><t:regular>World: <t:regular_value><v:world></t>'
+          - '   <t:decoration>• </t><t:regular>X: <t:regular_value><v:x></t>'
+          - '   <t:decoration>• </t><t:regular>Z: <t:regular_value><v:z></t>'
+        entry_chunk_server:
+          name: <t:entry_heading><v:server> <v:world><t:decoration>,</t> <v:x><t:decoration>,</t> <v:z>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Teleport to this chunk.
+          - '   <t:decoration>• </t><t:regular>Claimed by: <t:regular_value><v:claimer></t>'
+          - '   <t:decoration>• </t><t:regular>Claimed at:<t:time> <v:date></t>'
+          - '   <t:decoration>• </t><t:regular>Server: <t:regular_value><v:server></t>'
+          - '   <t:decoration>• </t><t:regular>World: <t:regular_value><v:world></t>'
+          - '   <t:decoration>• </t><t:regular>X: <t:regular_value><v:x></t>'
+          - '   <t:decoration>• </t><t:regular>Z: <t:regular_value><v:z></t>'
+        refresh_world:
+          name: '<t:regular_heading>World: <v:world>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Click here to toggle the world.
+        child_failure_cooldown:
+          name: <t:error_heading>Cooldown
+          lore:
+          - <t:error>You need to wait another<t:error_value> <v:time></t>
+          - before you can do this again.
+        refresh_claimer:
+          name: '<t:regular_heading>Claimed by: <t:regular_value><v:filter></t>'
+          lore:
+          - <t:regular>Filter the claims by the player who claimed them.
+          - ''
+          - <action:primary><label>Show Your Claims</label></action>
+          - <action:secondary><label>Select Player</label></action>
+          - <action:remove><label>Remove Filter</label></action>
+  list_player_select:
+    title: <t:menu_title>Select Player
+    items:
+      default:
+        entry_player:
+          name: <t:entry_heading><v:player>
+          lore:
+          - <action:primary><label>Select</label></action>
+  list_admin_wilderness_roleflags:
+    title: <t:menu_title>Player Flags
+  list_level_progress:
+    title: <t:menu_title>Level Progress
+    items:
+      default:
+        next:
+          name: <t:regular_heading>Next:</t><t:regular> <t:regular_value><v:level></t>
+          lore:
+          - <t:regular><v:object> <t:regular>will reach this
+          - level, once all requirements
+          - are met.
+          - ''
+          - 'Attributes:'
+          - <t:regular_value><v:attributes></t>
+        current:
+          name: <t:regular_heading>Current:</t><t:regular> <t:regular_value><v:level></t>
+          lore:
+          - '<t:regular>Attributes:'
+          - <t:regular_value><v:attributes></t>
+        entry_done:
+          name: <t:positive_heading>✔ <v:title>
+          lore:
+          - <v:bar><t:regular> <t:regular_value><v:progress></t>
+          - <t:user_content><v:description></t>
+        entry_loading:
+          name: <t:regular><b>? <t:user_content><v:title></t>
+          lore:
+          - <t:regular>The current progress is being
+          - calculated. The item will update
+          - once it's complete.
+          - <t:user_content><v:description></t>
+        entry_progress:
+          name: <t:negative_heading>✘ <v:title>
+          lore:
+          - <v:bar><t:regular> <t:regular_value><v:progress></t>
+          - <t:user_content><v:description></t>
+  mainblock:
+    title: <t:menu_title><v:level_prefix><v:land>
+    items:
+      default:
+        land:
+          name: <t:regular_heading>Land
+          lore:
+          - <t:decoration>✖ </t><t:regular>Open the land menu of<t:entity_land> <v:land></t>.
+        map:
+          name: <t:regular_heading>Map
+          lore:
+          - <t:decoration>✖ </t><t:regular>Open the map menu.
+        main:
+          name: <t:regular_heading>Main
+          lore:
+          - <t:decoration>✖ </t><t:regular>Open the main menu.
+          - '   Toggle personal settings, view'
+          - '   all lands of the server, etc.'
+        mainblock_reposition:
+          name: <t:regular_heading>Edit Mainblock
+          lore:
+          - <t:decoration>✖ </t><t:click>LEFT CLICK</t>
+          - '   <t:regular>Remove or reposition the mainblock.'
+          - '    <t:decoration>• </t><t:regular>Placing it again costs:<t:cost> <v:cost></t>'
+          - <t:decoration>✖ </t><t:click>RIGHT CLICK</t>
+          - '   <t:regular>Toggle the hologram: <t:regular_value><v:hologram></t>'
+  land:
+    title: <t:menu_title><v:level_prefix><v:land>
+    items:
+      default:
+        mainblock_set:
+          name: <t:positive_heading>Place Mainblock
+          lore:
+          - <t:decoration>✖ </t><t:regular>Place the mainblock at your current position.
+          - '   Cost:<t:cost> <v:cost></t>'
+        level:
+          name: <t:regular_heading>Level
+          lore:
+          - <t:decoration>✖ </t><t:regular>View level progression and
+          - '   attributes.'
+        player-management:
+          name: <t:regular_heading>Player Management
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage members, banned players,
+          - '   invites and membership requests.'
+        roles:
+          name: <t:regular_heading>Roles
+          lore:
+          - <t:decoration>✖ </t><t:regular>View roles of the
+          - '   area<t:regular_value> <v:area></t>.'
+        taxes:
+          name: <t:regular_heading>Taxes
+          lore:
+          - <t:decoration>✖ </t><t:regular>View taxes of the
+          - '   area<t:regular_value> <v:area></t>.'
+        areas:
+          name: <t:regular_heading>Areas
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all areas of this land.
+          - '   You also can create new'
+          - '   areas in this menu.'
+        level_camp:
+          name: <t:regular_heading>Level
+          lore:
+          - <t:error>Camps don't have any levels.
+        land-settings:
+          name: <t:regular_heading>Natural Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit natural flags
+          - '   of the area<t:regular_value> <v:area></t>.'
+        spawn:
+          name: <t:regular_heading>Spawn
+          lore:
+          - <action:primary><label>Teleport to Spawn</label></action>
+          - <action:tertiary><label>Set Spawn</label></action>
+          - '<action:quaternary><label>Visitor Teleport: <t:regular_value><v:teleport></t></label><desc>   <t:decoration>• </t>This can be edited in the role menu as well.</desc></action>'
+        child_failure_land:
+          name: <t:error_heading>Must be set inside Land
+          lore:
+          - <t:error>The spawn can't be set in the
+          - wilderness or different lands.
+        statistics:
+          name: <t:regular_heading>Statistics
+          lore:
+          - '<t:regular>Spawn: <t:regular_value><v:world></t>, x=<t:regular_value><v:x></t>, z=<t:regular_value><v:z></t>'
+          - Nation:<t:entity_nation> <v:nation></t>
+          - 'Size: <t:regular_value><v:chunks></t> chunk(s) <t:decoration>/</t> <t:regular_value><v:chunks_max></t>'
+          - 'Members: <t:regular_value><v:members></t> <t:decoration>/</t> <t:regular_value><v:members_max></t>'
+          - ''
+          - <t:regular_heading>Economy</t>
+          - ' <t:decoration>• </t><t:regular>Land'
+          - '   Balance: <t:regular_value><v:balance></t>'
+          - '   Next claim cost: <t:regular_value><v:chunk_cost></t>'
+          - '   Upkeep of<t:cost> <v:upkeep></t> in:'
+          - '   <t:time><v:upkeep_next></t>'
+          - ' <t:decoration>• </t><t:regular>You'
+          - '   Total claimed chunks:<t:regular_value> <v:player_chunks_used></t> <t:decoration>/</t> <t:regular_value><v:player_chunks></t>'
+          - '   Balance: <t:regular_value><v:balance_player></t>'
+          - '   Taxes of<t:cost> <v:taxes></t> in:'
+          - '   <t:time><v:taxes_next></t>'
+        various:
+          name: <t:regular_heading>Miscellaneous Settings
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit the land name, tag, icon
+          - '   enter message, category etc.'
+        relations_camp:
+          name: <t:regular_heading>Relations
+          lore:
+          - <t:error>Camps can't have any relations.
+        relations:
+          name: <t:regular_heading>Relations
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage your relations with other
+          - '   lands and nations.'
+        inbox:
+          name: <t:regular_heading>Inbox</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Open the advanced view.
+          - ''
+          - <t:regular_value><v:inbox></t>
+        child_failure_mainblock_claim:
+          name: <t:error_heading>Needs to be placed inside Land
+          lore:
+          - <t:error>The mainblock must be placed inside the land.
+          - <t:regular>Please make sure you stand in the land<t:entity_land> <v:land></t>.
+        child_failure_mainblock_space:
+          name: <t:error_heading>Not enough Space
+          lore:
+          - <t:error>There's not enough space to place it at your current location.
+      patches:
+        basic:
+          statistics:
+            name: <t:regular_heading>Statistics
+            lore:
+            - '<t:regular>Spawn: <t:regular_value><v:world></t>, x=<t:regular_value><v:x></t>, z=<t:regular_value><v:z></t>'
+            - 'Claims: <t:regular_value><v:chunks></t> / <t:regular_value><v:chunks_max></t>'
+            - 'Members: <t:regular_value><v:members></t> / <t:regular_value><v:members_max></t>'
+          members:
+            name: <t:regular_heading>Members
+            lore:
+            - <t:decoration>✖ </t><t:regular>Manage members.
+  list_area_settings:
+    title: <t:menu_title>Natural Flags
+    items:
+      default:
+        entry_phantom_spawn:
+          name: '<v:enabled_symbol> <t:entry_heading>Phantom Spawning: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow phantoms to spawn by
+          - '   natural reasons.'
+          - '    <t:decoration>• </t><t:regular>Spawners aren''t influenced'
+          - '      by this flag.'
+        child_failure_permission:
+          name: <t:error_heading>Missing Permission
+          lore:
+          - <t:error>You're missing permission
+          - to edit this flag.
+        entry_expiration_shield:
+          name: '<v:enabled_symbol> <t:entry_heading>Expiration Shield: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Excludes the land from being deleted,
+          - '   if the land is inactive.'
+          - '    <t:decoration>• </t><t:regular>This flag is only visible to server admins.'
+        entry_peaceful:
+          name: '<v:enabled_symbol> <t:entry_heading>Peaceful Land: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Exclude this land from any wars.
+          - '    <t:decoration>• </t><t:regular>This flag is only visible to server admins.'
+        entry_monster_spawn:
+          name: '<v:enabled_symbol> <t:entry_heading>Monster Spawning: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow monsters to spawn by
+          - '   natural reasons.'
+          - '    <t:decoration>• </t><t:regular>Affects spawners: <t:regular_value><v:spawners></t>'
+        entry_copper_golem:
+          name: '<v:enabled_symbol> <t:entry_heading>Copper Golems: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow copper golems from other
+          - '   areas of this land?'
+          - '    <t:decoration>• </t><t:regular>Golems that were spawned in'
+          - '      the wilderness are always denied.'
+        entry_entity_griefing:
+          name: '<v:enabled_symbol> <t:entry_heading>Entity Griefing: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow entities to destroy blocks?
+          - '    <t:decoration>• </t><t:regular>If enabled, creepers will be able to destroy'
+          - '      your buildings, lightning strikes'
+          - '      do damage etc.'
+        entry_wither_attack_animal:
+          name: '<v:enabled_symbol> <t:entry_heading>Wither attacking Animals: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should withers be able to damage animals?
+          - '    <t:decoration>• </t><t:regular>They can always damage other monsters.'
+        entry_snow_melt:
+          name: '<v:enabled_symbol> <t:entry_heading>Snow Melt: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should snow and ice melt?
+          - '    <t:decoration>• </t><t:regular>If disabled, blizzards and snowmen won''t'
+          - '      cover the ground with snow.'
+        child_failure_priority:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You're not allowed to edit
+          - settings of this role.
+          - ' <t:decoration>• </t><t:regular>It has a higher priority'
+          - '   than yours or you''re a'
+          - '   member of this role.'
+        entry_block_spreading:
+          name: '<v:enabled_symbol> <t:entry_heading>Block Spreading from Land: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow blocks to spread into this area
+          - '   from other areas of this land?'
+          - '    <t:decoration>• </t><t:regular>This affects blocks such as amethyst blocks.'
+          - '    <t:decoration>• </t><t:regular>Blocks from the wilderness can never spread'
+          - '      into this area.'
+        entry_piston_griefing:
+          name: '<v:enabled_symbol> <t:entry_heading>Pistons from Wilderness: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow pistons from wilderness or other
+          - '   lands/areas to push into your land?'
+          - '    <t:decoration>• </t><t:regular>If enabled, players will be able to grief your land'
+          - '      by using pistons from the wilderness.'
+        child_failure_access:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:error>You're not allowed to edit
+          - roles in this area.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your'
+          - '   role permission to do so.'
+        entry_general_admin:
+          name: '<v:enabled_symbol> <t:entry_heading><v:flag>: <v:enabled>'
+          lore:
+          - '<t:decoration>✖ </t><t:regular>Click to toggle:'
+          - 'Description:'
+          - ' <t:decoration>• </t><t:user_content><v:desc></t>'
+          - ' • <t:regular>This is an admin flag. It only applies'
+          - '   to admin lands and the Wilderness section of <t:cmd>/<v:cmd></t><t:regular>.'
+        entry_fire_spread:
+          name: '<v:enabled_symbol> <t:entry_heading>Fire Spread: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow fire to spread inside
+          - '   your land?'
+          - '    <t:decoration>• </t><t:regular>Fire from the wilderness'
+          - '      can''t enter your land.'
+        entry_animal_spawn:
+          name: '<v:enabled_symbol> <t:entry_heading>Animal Spawning: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow animals to spawn?
+          - '    <t:decoration>• </t><t:regular>Spawners aren''t influenced'
+          - '      by this flag.'
+        entry_plant_growth:
+          name: '<v:enabled_symbol> <t:entry_heading>Plant Growth: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should plants grow?
+        entry_tnt_griefing:
+          name: '<v:enabled_symbol> <t:entry_heading>TNT Explosions: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow TNT blocks to damage
+          - '   blocks and entities?'
+          - '    <t:decoration>• </t><t:regular>If enabled, players will be able to shoot'
+          - '      TNT into your land to grief it.'
+        entry_leaf_decay:
+          name: '<v:enabled_symbol> <t:entry_heading>Leaf Decay: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should leaves decay inside
+          - '   your land?'
+        entry_general_player:
+          name: '<v:enabled_symbol> <t:entry_heading><v:flag>: <v:enabled>'
+          lore:
+          - '<t:decoration>✖ </t><t:regular>Click to toggle:'
+          - 'Description:'
+          - <t:user_content><v:desc></t>
+        entry_waterflow_allow:
+          name: '<v:enabled_symbol> <t:entry_heading>Water Flow: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow water from the wilderness
+          - '   or other claims to flow into your'
+          - '   land?'
+          - '    <t:decoration>• </t><t:regular>If enabled, players will be able to grief'
+          - '      your land by placing water in'
+          - '      the wilderness.'
+        entry_lavaflow_allow:
+          name: '<v:enabled_symbol> <t:entry_heading>Lava Flow: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow lava from the wilderness
+          - '   or other claims to flow into your'
+          - '   land?'
+          - '    <t:decoration>• </t><t:regular>If enabled, players will be able to grief'
+          - '      your land by placing lava in'
+          - '      the wilderness.'
+        roles:
+          name: <t:regular_heading>Role Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Flags that affect players
+          - '   (like PvP, block placing etc.)'
+          - '   are toggled per role, not'
+          - '   here.'
+          - ''
+          - <t:decoration>✖ </t><t:regular>Click here to manage roles.
+  list_role_settings:
+    title: <t:menu_title>Flags
+    items:
+      default:
+        entry_setting_edit_various:
+          name: '<v:enabled_symbol> <t:entry_heading>Edit Miscellaneous Settings: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to edit miscellaneous
+          - '   settings, like the name etc.?'
+        entry_plant:
+          name: '<v:enabled_symbol> <t:entry_heading>Plant: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to plant
+          - '   crops, saplings, berries,'
+          - '   sugar cane etc.?'
+        entry_balance_withdraw:
+          name: '<v:enabled_symbol> <t:entry_heading>Withdraw Money: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to withdraw money
+          - '   from the land bank?'
+          - '    <t:decoration>• </t><t:regular>Command: <t:cmd>/<v:cmd></t>'
+        entry_balance_deposit:
+          name: '<v:enabled_symbol> <t:entry_heading>Deposit Money: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to deposit money
+          - '   into the land bank?'
+          - '    <t:decoration>• </t><t:regular>Command: <t:cmd>/<v:cmd></t>'
+        entry_player_untrust:
+          name: '<v:enabled_symbol> <t:entry_heading>Remove Players: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to remove players?
+          - '    <t:decoration>• </t><t:regular>They won''t be able to remove'
+          - '      players who have a higher role'
+          - '      or are part of the same role.'
+        entry_land_enter:
+          name: '<v:enabled_symbol> <t:entry_heading>Enter this Area: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to enter this area?
+          - '    <t:decoration>• </t><t:regular>Regardless of this flag players'
+          - '      may be able to enter your claim,'
+          - '      if combat tagging is active and'
+          - '      you''re in a fight.'
+        entry_land_claim:
+          name: '<v:enabled_symbol> <t:entry_heading>Claim and Unclaim: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to claim and also
+          - '   unclaim chunks for this land?'
+        entry_ender_pearl:
+          name: '<v:enabled_symbol> <t:entry_heading>Use Ender Pearls: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to teleport into
+          - '   this land by using ender pearls'
+          - '   and chorus fruits.'
+        entry_shear:
+          name: '<v:enabled_symbol> <t:entry_heading>Shear Entities: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to shear
+          - '   sheep, mushroom cows etc.?'
+        entry_attack_monster:
+          name: '<v:enabled_symbol> <t:entry_heading>Attack Monsters: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to attack monsters?
+          - '    <t:decoration>• </t><t:regular>If disabled, monsters won''t be able to attack'
+          - '      them either.'
+        entry_harvest:
+          name: '<v:enabled_symbol> <t:entry_heading>Harvest: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to harvest
+          - '   crops, saplings, berries,'
+          - '   sugar cane etc.?'
+        entry_fly:
+          name: '<v:enabled_symbol> <t:entry_heading>Fly: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to use <t:cmd>/fly</t>
+          - '   <t:regular>in this area?'
+        entry_general_admin:
+          name: '<v:enabled_symbol> <t:entry_heading><v:flag>: <v:enabled>'
+          lore:
+          - '<t:decoration>✖ </t><t:regular>Click to toggle:'
+          - '    <t:decoration>• </t><t:regular>Description:'
+          - '      <t:user_content><v:desc></t>'
+          - ' <t:decoration>• </t><t:regular>This is an admin flag. It only applies'
+          - '   to admin lands and the Wilderness section of <t:cmd>/<v:cmd></t><t:regular>.'
+        entry_player_trust:
+          name: '<v:enabled_symbol> <t:entry_heading>Add Players: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to add
+          - '   other players?'
+        entry_block_ignite:
+          name: '<v:enabled_symbol> <t:entry_heading>Ignite Blocks: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to ignite blocks?
+        entry_war_manage:
+          name: '<v:enabled_symbol> <t:entry_heading>Manage War: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to declare
+          - '   and manage the war for your land?'
+        entry_attack_player:
+          name: '<v:enabled_symbol> <t:entry_heading>Attack Players: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to attack players?
+          - '    <t:decoration>• </t><t:regular>Combat tagging:'
+          - '     <t:regular>It might still be possible to fight'
+          - '      inside your land, if a player attacked'
+          - '      another player outside of the land.'
+          - '    <t:decoration>• </t><t:regular>Mutual flag:'
+          - '     <t:regular>They can only attack players,'
+          - '      which can also attack them.'
+        entry_trample_farmland:
+          name: '<v:enabled_symbol> <t:entry_heading>Trample Farmland: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to trample farmland?
+        entry_elytra:
+          name: '<v:enabled_symbol> <t:entry_heading>Elytra & Riptide Usage: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to use elytras or
+          - '   riptide to fly in this area?'
+        entry_interact_villager:
+          name: '<v:enabled_symbol> <t:entry_heading>Trade with Villagers: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to trade with villagers?
+        child_failure_permission:
+          name: <t:error_heading>Missing Permission
+          lore:
+          - <t:error>You're missing permission to
+          - toggle this flag in any land.
+        child_failure_allow-edit:
+          name: <t:error_heading>Flag not Toggleable
+          lore:
+          - <t:error>The server configured this flag
+          - to not be toggleable for this role.
+        entry_player_setrole:
+          name: '<v:enabled_symbol> <t:entry_heading>Set Roles: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to set
+          - '   roles for trusted players?'
+          - '    <t:decoration>• </t><t:regular>They won''t be able to edit'
+          - '      roles, which have a higher'
+          - '      priority than theirs.'
+        entry_interact_general:
+          name: '<v:enabled_symbol> <t:entry_heading>General Interaction: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to interact with blocks
+          - '   that aren''t covered by other flags?'
+        child_failure_blacklist:
+          name: <t:error_heading>Flag controlled by Land
+          lore:
+          - <t:error>This flag isn't toggleable by nations.
+          - ' <t:decoration>• </t><t:regular>Each land of this nation can configure'
+          - '   it individually.'
+        child_failure_cancelled:
+          name: <t:error_heading>Cancelled by Plugin
+          lore:
+          - <t:error>Toggling this flag has been
+          - cancelled by a 3rd party plugin.
+        child_failure_edit_owner:
+          name: <t:error_heading>Owner Role
+          lore:
+          - <t:error>You can't toggle this flag for your
+          - own owner role.
+          - ' <t:decoration>• </t><t:regular>This prevents you from accidentally'
+          - '   depriving yourself of rights.'
+        entry_interact_mechanism:
+          name: '<v:enabled_symbol> <t:entry_heading>Use Redstone: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to use redstone
+          - '   mechanisms, like levers etc.?'
+        entry_land_claim_border:
+          name: '<v:enabled_symbol> <t:entry_heading>Claim Land at Border: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to claim chunks
+          - '   for their lands directly at this'
+          - '   land''s border.'
+        entry_spawn_set:
+          name: '<v:enabled_symbol> <t:entry_heading>Set Spawn: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to change the spawn?
+        entry_player_ban:
+          name: '<v:enabled_symbol> <t:entry_heading>Manage Bans: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to ban or
+          - '   unban players?'
+          - '    <t:decoration>• </t><t:regular>They won''t be able to ban players'
+          - '      which have a higher role.'
+        entry_item_pickup:
+          name: '<v:enabled_symbol> <t:entry_heading>Pickup & Drop Items: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to pickup
+          - '   or drop items?'
+        child_failure_priority:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You're not allowed to
+          - edit settings of this role.
+          - ' <t:decoration>• </t><t:regular>It has a higher priority'
+          - '   than yours or you''re a'
+          - '   member of this role.'
+        entry_block_place:
+          name: '<v:enabled_symbol> <t:entry_heading>Place Blocks: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to place blocks?
+        entry_setting_edit_land:
+          name: '<v:enabled_symbol> <t:entry_heading>Edit Natural Flags: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to edit natural flags?
+        entry_interact_container:
+          name: '<v:enabled_symbol> <t:entry_heading>Open Containers: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to open containers?
+        child_failure_access:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:error>You're not allowed to
+          - edit roles in this area.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your'
+          - '   role permission to do so.'
+        entry_no_damage:
+          name: '<v:enabled_symbol> <t:entry_heading>No Damage: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Makes members of this role immune
+          - '   to any damage other than PvP'
+          - '   or monsters.'
+          - '    <t:decoration>• </t><t:regular>Damage from players or monsters can'
+          - '      be toggled with their respective flags.'
+          - '    <t:decoration>• </t><t:regular>This flag is only visible to server admins.'
+        entry_block_break:
+          name: '<v:enabled_symbol> <t:entry_heading>Break Blocks: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to break blocks?
+        entry_wind_burst:
+          name: '<v:enabled_symbol> <t:entry_heading>Use Wind Burst: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to use the wind burst
+          - '   enchantment and wind charge items?'
+          - '    <t:decoration>• </t><t:regular>If enabled, players can toggle doors by using'
+          - '      a mace attack with the wind burst enchantment.'
+        entry_setting_edit_role:
+          name: '<v:enabled_symbol> <t:entry_heading>Edit Role Settings: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to edit role
+          - '   settings and create new roles?'
+          - '    <t:decoration>• </t><t:regular>They won''t be able to edit'
+          - '      their own role flags.'
+          - '    <t:decoration>• </t><t:regular>You should only give this flag'
+          - '      very trustworthy players.'
+        entry_interact_trapdoor:
+          name: '<v:enabled_symbol> <t:entry_heading>Open Trapdoors: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to open trapdoors?
+        entry_setting_edit_taxes:
+          name: '<v:enabled_symbol> <t:entry_heading>Edit Taxes: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to edit taxes?
+          - '    <t:decoration>• </t><t:regular>You should only give this permission'
+          - '      to very trustworthy players.'
+        child_failure_nation:
+          name: <t:error_heading>Role managed by Nation
+          lore:
+          - <t:error>This role is partly managed by nation<t:error_value> <v:nation></t>.
+          - ' <t:decoration>• </t><t:regular>Only the nation can change this flag:'
+          - '   <t:cmd>/<v:cmd></t>'
+        entry_attack_animal:
+          name: '<v:enabled_symbol> <t:entry_heading>Attack Animals: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to attack animals?
+        entry_spawn_teleport:
+          name: '<v:enabled_symbol> <t:entry_heading>Teleport to Spawn: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to teleport to
+          - '   the spawn.'
+        entry_vehicle_use:
+          name: '<v:enabled_symbol> <t:entry_heading>Use Vehicles: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to use vehicles?
+        entry_area_assign:
+          name: '<v:enabled_symbol> <t:entry_heading>Assign Areas: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to create areas
+          - '   and resize areas?'
+        entry_general_player:
+          name: '<v:enabled_symbol> <t:entry_heading><v:flag>: <v:enabled>'
+          lore:
+          - '<t:decoration>✖ </t><t:regular>Click to toggle:'
+          - '    <t:decoration>• </t><t:regular>Description:'
+          - '      <t:user_content><v:desc></t>'
+        entry_interact_door:
+          name: '<v:enabled_symbol> <t:entry_heading>Open Doors: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow this role to open doors?
+  area:
+    title: <t:menu_title><v:area>
+    items:
+      default:
+        land-settings:
+          name: <t:regular_heading>Natural Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit nature related flags, like
+          - '   mob spawning, plant growth and more.'
+        child_failure_rented:
+          name: <t:error_heading>Rented
+          lore:
+          - <t:error>You can't set taxes for this
+          - area while it is rented or sold.
+          - ' <t:decoration>• </t><t:regular>Current tenant:<t:regular_value> <v:player></t>'
+        child_failure_access:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:regular>The area owner can give your
+          - role permission to do so.
+          - ' <t:decoration>• </t><t:regular>Flag: <t:regular_value><v:flag></t>'
+        player-management:
+          name: <t:regular_heading>Player Management
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage members, banned players,
+          - '   invites and membership requests.'
+        various:
+          name: <t:regular_heading>Miscellaneous Settings
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit the area name and
+          - '   description.'
+        spawn:
+          name: <t:regular_heading>Teleport
+          lore:
+          - <action:primary><label>Teleport to Spawn</label><desc>Teleport to the spawn of this area.</desc></action>
+          - <action:secondary><label>Set Spawn</label></action>
+        roles:
+          name: <t:regular_heading>Roles
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage roles for this area.
+          - '   <t:decoration>• </t><t:regular>Roles from the default area'
+          - '     are automatically added to'
+          - '     this area.'
+        taxes:
+          name: <t:regular_heading>Taxes
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage the taxes of this area.
+          - '   Taxes are collected per area.'
+        rental_setup:
+          name: <t:regular_heading>Setup Rental
+          lore:
+          - <t:decoration>✖ </t><t:regular>Setup this area to be rented or sold.
+        rental_setup_land:
+          name: <t:regular_heading>Sell Land
+          lore:
+          - <t:decoration>✖ </t><t:regular>Setup the whole land to be sold.
+          - '   <t:decoration>• </t><t:regular>A whole land or its default area <t:decoration>(</t><t:regular_value><v:area></t>)'
+          - '     <t:regular>can only be sold and not setup for rental.'
+        rental_setup_change_sell:
+          name: <t:regular_heading>Change Purchase Offer
+          lore:
+          - <action:primary><label>Update Offer</label><desc>Update purchase offer values.
+          - '   Current:'
+          - '    <t:decoration>• </t><t:regular>Cost:<t:cost> <v:cost></t></desc></action>'
+          - <action:remove><label>Remove Offer</label></action>
+        rental_setup_change_rent:
+          name: <t:regular_heading>Change Rental Offer
+          lore:
+          - <action:primary><label>Update Offer</label><desc>
+          - 'Current:'
+          - ' <t:decoration>• </t><t:regular>Interval:<t:time> <v:interval></t>'
+          - ' <t:decoration>• </t><t:regular>Cost per interval:<t:cost> <v:cost></t>'
+          - ' <t:decoration>• </t><t:regular>Max time:<t:time> <v:max-time></t></desc></action>'
+          - <action:remove><label>Remove Offer</label></action>
+        child_failure_spawn_area:
+          name: <t:error_heading>Must be in Area
+          lore:
+          - <t:error>The spawn must be set in the area.
+          - <t:regular>You're currently not standing inside it.
+        child_failure_spawn_none:
+          name: <t:error_heading>No Spawn set
+          lore:
+          - <t:error>This area doesn't have a spawn set.
+        child_success_spawn_set:
+          name: <t:success_heading>Spawn set
+          lore:
+          - <t:regular>You set the spawn at your current position.
+  list_area_players:
+    title: <t:menu_title>Trusted Players
+    items:
+      default:
+        add:
+          name: <t:positive_heading>Add Player
+          lore:
+          - <t:regular>Available:<t:regular_value> <v:players></t> <t:decoration>/</t><t:limit> <v:max></t>
+        child_failure_edit_player_land:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You can't edit this player.
+          - ' <t:decoration>• </t><t:regular>Their role<t:regular_value> <v:role></t> has a higher'
+          - '   or equal priority than yours.'
+        entry_area:
+          name: <t:entry_heading><v:player>
+          lore:
+          - <t:regular>Role:<t:regular_value> <v:role></t>
+          - ''
+          - <action:primary><label>More Information</label></action>
+          - <action:tertiary><label>▲ Promote</label></action>
+          - <action:quaternary><label>▼ Demote</label></action>
+          - <action:remove><label>Remove</label></action>
+        child_failure_edit_player_area:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You can't edit this player.
+          - ' <t:decoration>• </t><t:regular>Their role<t:regular_value> <v:role></t> has a higher'
+          - '   or equal priority than yours.'
+        child_failure_max-players:
+          name: <t:error_heading>Max Members
+          lore:
+          - <t:error>This land reached its maximum
+          - amount of<t:error_value> <v:max></t> members.
+        refresh_toggle:
+          name: '<t:regular_heading>View only Area: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Display only players who are
+          - '   trusted in this area <t:decoration>(</t><t:regular_value><v:area></t><t:decoration>)</t><t:regular>?'
+          - '    <t:decoration>• </t><t:regular>If disabled, it displays players of the whole land.'
+        global-action:
+          name: '<t:regular_heading>Execute for all Areas: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Add or remove players in the whole land?
+          - '   <t:decoration>• </t><t:regular>If disabled, it only adds/removes'
+          - '     players for area<t:regular_value> <v:area></t>.'
+        child_failure_priority:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You're not allowed to
+          - edit settings of this role.
+          - ' <t:decoration>• </t><t:regular>It has a higher priority'
+          - '   than yours or you''re a'
+          - '   member of the same role.'
+        entry_area_all:
+          name: <t:entry_heading><v:player>
+          lore:
+          - '<t:regular>Trusted in these areas:'
+          - <t:regular_value><v:areas></t>
+          - ''
+          - <action:primary><label>More Information</label></action>
+          - <action:remove><label>Remove</label></action>
+        entry_area_temporary:
+          name: <t:entry_heading><v:player>
+          lore:
+          - <t:regular>Role:<t:regular_value> <v:role></t>
+          - <t:regular>Temporary trust expires in<t:regular_value> <v:time></t>
+          - ''
+          - <action:primary><label>More Information</label></action>
+          - <action:tertiary><label>▲ Promote</label></action>
+          - <action:quaternary><label>▼ Demote</label></action>
+          - <action:remove><label>Remove</label></action>
+        child_failure_access:
+          name: <t:error_heading>No Access
+          lore:
+          - <t:error>You're not allowed to remove
+          - players.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your'
+          - '   role permission to do so.'
+        remove:
+          name: <t:negative_heading>Remove Player
+        child_failure_owner:
+          name: <t:error_heading>Owner
+          lore:
+          - <t:error>Owners can't be removed.
+          - ' <t:decoration>• </t><t:regular>A new owner can be set by'
+          - '   executing <t:cmd>/<v:cmd></t><t:regular>.'
+        child_failure_tenant:
+          name: <t:error_heading>Tenant
+          lore:
+          - <t:error>Tenants can't be removed.
+          - and their roles can't be changed.
+          - ' <t:decoration>• </t><t:regular>Tenants can be removed by'
+          - '   executing <t:cmd>/<v:cmd></t><t:regular>.'
+        child_failure_setrole:
+          name: <t:error_heading>No Access
+          lore:
+          - <t:error>You're not allowed to set roles.
+          - <t:decoration>• </t><t:regular>The land owner can give your
+          - '  role permission to do so.'
+        child_failure_self:
+          name: <t:error_heading>Can't remove yourself
+          lore:
+          - <t:regular>To leave a land use <t:cmd>/<v:cmd></t>
+          - <t:regular>instead.
+  list_admin_lands:
+    title: <t:menu_title>Admin Lands
+    items:
+      default:
+        add:
+          name: <t:positive_heading>Convert into Admin Land
+          lore:
+          - <t:decoration>✖ </t><t:regular>Convert a normal land into
+          - '   an admin land.'
+        entry_object:
+          name: <t:entry_heading><v:land>
+          lore:
+          - <t:user_content><v:title></t>
+          - <t:decoration>✖ </t><t:regular>Open the land menu.
+        convert:
+          name: <t:regular_heading>Convert back to Normal
+          lore:
+          - <t:decoration>✖ </t><t:regular>Convert an admin land back
+          - '   to a normal land.'
+        delete:
+          name: <t:negative_heading>Delete completely
+          lore:
+          - <t:decoration>✖ </t><t:regular>Delete an admin land completely.
+  player-management:
+    title: <t:menu_title>Player Management
+    items:
+      default:
+        members:
+          name: <t:regular_heading>Members
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage members.
+        members_online:
+          name: <t:regular_heading>Online Members
+          lore:
+          - <t:decoration>✖ </t><t:regular>View members that are online.
+        invites:
+          name: <t:regular_heading>Invites
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage outgoing invites.
+        banned:
+          name: <t:regular_heading>Banned
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage banned players.
+        membership-requests:
+          name: <t:regular_heading>Membership Requests
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage incoming membership requests.
+  admin_main:
+    title: <t:menu_title>Admin Main Menu
+    items:
+      default:
+        lands:
+          name: <t:regular_heading>Manage Admin Lands
+          lore:
+          - <t:decoration>✖ </t><t:regular>View and manage admin lands.
+          - '    <t:decoration>• </t><t:regular>Manage them the same way as normal lands, using'
+          - '      <t:regular_value>/<v:cmd_land></t> ... commands.'
+          - '    <t:decoration>• </t><t:regular>Admin lands don''t pay any upkeep'
+          - '      and can''t participate in wars. While'
+          - '      their owner is automatically set to'
+          - '      "Server", you can still change it via'
+          - '      <t:regular_value>/<v:cmd_setowner></t>.'
+        child_failure_world:
+          name: <t:error_heading>Not a Lands world
+          lore:
+          - <t:error>The world you're currently standing
+          - in must be a Lands claim world.
+          - ' <t:decoration>• </t><t:regular>You can add claim worlds'
+          - '   in the plugin config.'
+        wilderness:
+          name: <t:regular_heading>Wilderness Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Toggle role and natural
+          - '   flags in the wilderness.'
+  list_membership-requests:
+    title: <t:menu_title>Membership Requests
+    items:
+      default:
+        entry_object:
+          name: <t:regular_heading><v:name>
+          lore:
+          - '<t:regular>Time: <t:time><v:time></t> ago'
+          - ''
+          - <action:primary><label>Accept Request</label><desc>Accept request and add them.</desc></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:remove><label>Deny Request</label></action>
+        membership_accept:
+          name: '<t:regular_heading>Auto Accept: <v:status>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should membership requests
+          - '   automatically be accepted?'
+          - '    <t:decoration>• </t><t:regular>That means that anyone could'
+          - '      join your land.'
+          - '    <t:decoration>• </t><t:regular>New members get the role'
+          - '      <t:regular_value><v:role></t> assigned.'
+  list_player_lands:
+    title: <t:menu_title>Your Lands
+    items:
+      default:
+        entry_land_own:
+          name: <t:entry_heading><v:land>
+          lore:
+          - <t:regular>You own this land.
+          - ' <t:decoration>• </t><t:regular>Nation:<t:entity_nation> <v:nation></t>'
+          - ' <t:decoration>• </t><t:regular>Chunks:<t:regular_value> <v:chunks></t> /<t:limit> <v:max-chunks></t>'
+          - ''
+          - <action:primary><label>Manage this Land</label></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:tertiary><label>Select as Edit Land</label></action>
+        entry_land_edit:
+          name: <t:entry_heading><v:land>
+          lore:
+          - '<t:success>Selected as edit land: Commands will apply to it.'
+          - ' <t:decoration>• </t><t:regular>Nation:<t:entity_nation> <v:nation></t>'
+          - ' <t:decoration>• </t><t:regular>Chunks:<t:regular_value> <v:chunks></t> /<t:limit> <v:max-chunks></t>'
+          - ''
+          - <action:primary><label>Manage this Land</label></action>
+          - <action:secondary><label>View Information</label></action>
+        entry_camp_own:
+          name: <t:entry_heading><v:land>
+          lore:
+          - <t:regular>You own this camp. Camps are lands
+          - that can't be expanded and don't
+          - pay upkeep.
+          - ''
+          - '<t:error_heading>This camp expires in:</t>'
+          - <t:time><v:time></t>
+          - ''
+          - <action:primary><label>Manage this Camp</label></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:tertiary><label>Select as Edit Land</label></action>
+        entry_camp_edit:
+          name: <t:entry_heading><v:land>
+          lore:
+          - '<t:success>Selected as edit land: Commands will apply to it.'
+          - <t:regular>Camps are lands that can't be
+          - expanded and don't pay upkeep.
+          - ''
+          - '<t:error_heading>This camp expires in:</t>'
+          - <t:time><v:time></t>
+          - ''
+          - <action:primary><label>Manage this Camp</label></action>
+          - <action:secondary><label>View Information</label></action>
+        entry_camp:
+          name: <t:entry_heading><v:land>
+          lore:
+          - <t:regular>You're trusted in this camp.
+          - Camps are lands that can't be
+          - expanded and don't pay upkeep.
+          - ''
+          - '<t:error_heading>This camp expires in:</t>'
+          - <t:time><v:time></t>
+          - ''
+          - <action:primary><label>Manage this Camp</label></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:tertiary><label>Select as Edit Land</label></action>
+        entry_land:
+          name: <t:entry_heading><v:land>
+          lore:
+          - <t:regular>You're trusted in this land.
+          - ' <t:decoration>• </t><t:regular>Nation:<t:entity_nation> <v:nation></t>'
+          - ' <t:decoration>• </t><t:regular>Chunks:<t:regular_value> <v:chunks></t> /<t:limit> <v:max-chunks></t>'
+          - ''
+          - <action:primary><label>Manage this Land</label></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:tertiary><label>Select as Edit Land</label></action>
+  player_invite:
+    title: <t:menu_title><v:land>
+    items:
+      default:
+        child_failure_banned:
+          name: <t:error_heading>You're banned
+          lore:
+          - <t:error>You can't join area<t:error_value> <v:area></t> of
+          - land<t:error_value> <v:land></t>, since they've
+          - banned you.
+        deny:
+          name: <t:negative_heading>Deny
+          lore:
+          - <t:decoration>✖ </t><t:regular>Deny this invite.
+        accept_owner:
+          name: <t:positive_heading>Accept
+          lore:
+          - <t:decoration>✖ </t><t:regular>Accept this invite.
+          - '   Taxes:<t:cost> <v:tax></t>'
+          - '   Upkeep:<t:cost> <v:upkeep></t>'
+        accept_merge:
+          name: <t:positive_heading>Accept
+          lore:
+          - <t:decoration>✖ </t><t:regular>Accept the request to merge your land
+          - '   <t:entity_land><v:merge></t> into<t:entity_land> <v:land></t>.'
+        accept_trust:
+          name: <t:positive_heading>Accept
+          lore:
+          - <t:decoration>✖ </t><t:regular>Accept this invite.
+          - '   Taxes:<t:cost> <v:tax>'
+        child_failure_inviteOwner:
+          name: <t:error_heading>Invite Owner
+          lore:
+          - <t:error>You can't join this land.
+          - ' <t:decoration>• </t><t:regular>You aren''t allowed to have'
+          - '   your own land and be trusted'
+          - '   in another one at the same time.'
+        child_failure_lands:
+          name: <t:error_heading>Max Lands
+          lore:
+          - <t:error>You can't join another land.
+          - ' <t:decoration>• </t><t:regular>You reached your maximum'
+          - '   amount of<t:regular_value> <v:max></t> lands you'
+          - '   can be trusted in.'
+        child_failure_members:
+          name: <t:error_heading>Max Members
+          lore:
+          - <t:error>Couldn't add you to land<t:error_value> <v:land></t>.
+          - ' <t:decoration>• </t><t:regular>They reached their maximum'
+          - '   amount of<t:regular_value> <v:max></t> members.'
+        child_failure_war:
+          name: <t:error_heading>Engaged in War
+          lore:
+          - <t:error>You currently can't join land
+          - <t:error_value><v:land></t>, since they're engaged
+          - in an upcoming or active war.
+        info:
+          name: <t:regular_heading>Information
+          lore:
+          - ' <t:decoration>• </t><t:regular>Area:<t:regular_value> <v:area></t>'
+          - ' <t:decoration>• </t><t:regular>Land:<t:entity_land> <v:land></t>'
+          - ' <t:decoration>• </t><t:regular>Received:<t:time> <v:time></t>'
+          - ' <t:decoration>• </t><t:regular>Sender: <v:sender>'
+  list_rentables:
+    title: <t:menu_title>Rentable
+    items:
+      default:
+        refresh_type:
+          name: '<t:regular_heading>Type: <t:regular_value><v:type></t>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Display objects to buy
+          - '   or to rent?'
+        entry_land_buy:
+          name: '<t:entry_heading>Buy Land: <v:land>'
+          lore:
+          - <t:decoration>• </t><t:regular>Cost:<t:cost> <v:costs></t>
+          - <t:decoration>✖ </t><t:regular>Teleport
+        entry_area_buy:
+          name: '<t:entry_heading>Buy Area: <v:area>'
+          lore:
+          - '<t:decoration>• </t><t:regular>Size: <t:regular_value><v:size></t> blocks'
+          - <t:decoration>• </t><t:regular>Cost:<t:cost> <v:costs></t>
+          - '<t:decoration>• </t><t:regular>Land: <v:land>'
+          - <t:decoration>✖ </t><t:regular>Teleport
+        refresh_sort:
+          name: '<t:regular_heading>Sort by: <t:regular_value><v:mode></t>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Click to toggle the sort mode.
+        entry_area_rent:
+          name: '<t:entry_heading>Rent Area: <v:area>'
+          lore:
+          - '<t:decoration>• </t><t:regular>Size: <t:regular_value><v:size></t> blocks'
+          - <t:decoration>• </t><t:regular>Cost:<t:cost> <v:costs></t> per <t:time><v:time></t>
+          - '<t:decoration>• </t><t:regular>Max time: <t:regular_value><v:max></t>'
+          - '<t:decoration>• </t><t:regular>Land: <v:land>'
+          - <t:decoration>✖ </t><t:regular>Teleport
+        child_failure_cooldown:
+          name: <t:error_heading>Cooldown
+          lore:
+          - <t:regular>You need to wait another<t:time> <v:time></t>
+          - before you can teleport to an offer again.
+  action-confirm:
+    title: <t:menu_title>Confirm this Action
+    items:
+      default:
+        confirm:
+          name: <t:positive_heading>Confirm
+        cancel:
+          name: <t:negative_heading>Cancel
+        info:
+          name: <t:regular_heading>Confirm this Action
+          lore:
+          - <t:regular>Click <t:positive_heading>Confirm</t> to confirm or
+          - <t:negative_heading>Cancel</t> to abort this action.
+  admin_wilderness:
+    title: <t:menu_title>Wilderness Flags
+    items:
+      default:
+        management:
+          name: <t:regular_heading>Management Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit administrative flags from
+          - '   3rd party plugins, that are'
+          - '   toggleable in the wilderness.'
+        action:
+          name: <t:regular_heading>Action Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit action flags like
+          - '   block breaking etc.'
+        landflags:
+          name: <t:regular_heading>Natural Flags
+          lore:
+          - <t:decoration>✖ </t><t:regular>Toggle natural flags, like
+          - '   mob spawning etc.'
+  object_info:
+    title: <t:menu_title><v:object>
+    items:
+      default:
+        membership-request_not-looking:
+          name: <t:regular_heading>Request Membership
+          lore:
+          - <t:error>This land isn't looking for
+          - new members.</t>
+          - <action:primary><label>Request Membership</label></action>
+          - <action:secondary><label>Revoke Request</label></action>
+        level:
+          name: <t:regular_heading>Level
+          lore:
+          - <t:decoration>✖ </t><t:regular>Click here to view information
+          - '   about the current and next level.'
+        created:
+          name: <t:regular_heading>Created
+          lore:
+          - <t:time><v:date></t>
+        players:
+          name: <t:regular_heading>Players</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          lore:
+          - <t:cmd><v:players></t>
+        lands:
+          name: <t:regular_heading>Lands</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          lore:
+          - <t:cmd><v:lands></t>
+        membership-request:
+          name: <t:regular_heading>Request Membership
+          lore:
+          - <action:primary><label>Request Membership</label></action>
+          - <action:secondary><label>Revoke Request</label></action>
+        war:
+          name: '<t:regular_heading>Win Ratio:'
+          lore:
+          - ' <t:decoration>• </t><t:regular>Won: <t:regular_value><v:won></t>'
+          - ' <t:decoration>• </t><t:regular>Lost: <t:regular_value><v:lost></t>'
+          - '   <t:decoration>= </t><t:regular>WLR:<t:regular_value> <v:wlr></t>'
+          - ''
+          - <t:regular_heading>Kill Ratio:</t>
+          - ' <t:decoration>• </t><t:regular>Kills: <t:regular_value><v:kills></t>'
+          - ' <t:decoration>• </t><t:regular>Deaths: <t:regular_value><v:deaths></t>'
+          - '   <t:decoration>= </t><t:regular>KDR:<t:regular_value> <v:kdr></t>'
+          - '<t:decoration>• </t><t:regular>Captures: <t:regular_value><v:captures></t>'
+        level_camp:
+          name: <t:regular_heading>Level
+          lore:
+          - <t:error>Camps don't have any levels.
+        relations:
+          name: <t:regular_heading>Relations
+          lore:
+          - <t:decoration>✖ </t><t:regular>View relations.
+  list_admin_wilderness_landflags:
+    title: <t:menu_title>Natural Flags
+  list_area_roles:
+    title: <t:menu_title>Roles
+    items:
+      default:
+        child_failure_max-roles:
+          name: <t:error_heading>Max Roles
+          lore:
+          - <t:error>This area reached the maximum
+          - amount of<t:error_value> <v:max></t> roles.
+        child_failure_access:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:error>You're not allowed to edit roles
+          - in this area.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your'
+          - '   role permission to do so.'
+        entry_object_system_priority:
+          name: <t:entry_heading><v:role>
+          lore:
+          - <action:primary><label>Edit Role</label></action>
+          - <action:tertiary><label>Higher Priority</label></action>
+          - <action:quaternary><label>Lower Priority</label></action>
+        entry_object_normal:
+          name: <t:entry_heading><v:role>
+          lore:
+          - <action:primary><label>Edit Role</label></action>
+          - <action:tertiary><label>Higher Priority</label></action>
+          - <action:quaternary><label>Lower Priority</label></action>
+          - <action:remove><label>Delete Role</label></action>
+        entry_object_system:
+          name: <t:entry_heading><v:role>
+          lore:
+          - <action:primary><label>Edit Role</label></action>
+        create:
+          name: <t:positive_heading>Create Role
+          lore:
+          - <t:regular>Available:<t:regular_value> <v:roles></t> <t:decoration>/</t><t:limit> <v:max></t>
+        child_failure_required:
+          name: <t:error_heading>Role is Required
+          lore:
+          - <t:error>You can't delete this role.
+          - ' <t:decoration>• </t><t:regular>It is required for player'
+          - '   management.'
+        delete:
+          name: <t:negative_heading>Delete Role
+        child_failure_priority:
+          name: <t:error_heading>Role Priority
+          lore:
+          - <t:error>You're not allowed to edit settings
+          - of this role.
+          - ' <t:decoration>• </t><t:regular>It has a higher priority than'
+          - '   yours or you''re a member of it.'
+  list_player_map:
+    title: <t:menu_title>Map
+    items:
+      default:
+        entry_chunk_position:
+          name: <t:regular_heading>Current Position
+          lore:
+          - <t:regular>This is your current position.
+        entry_chunk_wilderness:
+          name: <green>Wilderness
+          lore:
+          - <t:decoration>✖ </t><t:regular>Click to claim this chunk.
+        entry_chunk_untrusted:
+          name: <t:negative_heading><v:land>
+          lore:
+          - <red>You're not trusted in this chunk.
+          - <t:decoration>✖ </t><t:regular>View info about this land.
+        entry_chunk_owner:
+          name: <t:positive_heading><v:land>
+          lore:
+          - <t:regular>You own this land.
+          - <t:decoration>✖ </t><t:regular>Open the menu of this land.
+        entry_chunk_trusted:
+          name: <t:positive_heading><v:land>
+          lore:
+          - <t:regular>You're trusted in this chunk.
+          - <t:decoration>✖ </t><t:regular>Open the menu of this land.
+        refresh_move_up:
+          name: <t:regular_heading>Navigate <v:direction>
+        refresh_move_down:
+          name: <t:regular_heading>Navigate <v:direction>
+        refresh_move_left:
+          name: <t:regular_heading>Navigate <v:direction>
+        refresh_move_right:
+          name: <t:regular_heading>Navigate <v:direction>
+        refresh_reset-pos:
+          name: <t:regular_heading>Reset Position
+          lore:
+          - <t:decoration>✖ </t><t:regular>Reset the current position.
+        refresh_select-land:
+          name: <t:regular_heading>Claim for:<t:entity_land> <v:land></t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Click to select the land you
+          - '   want to claim wilderness chunks for.'
+        child_failure_permission:
+          name: <t:error_heading>Missing Permission
+          lore:
+          - <t:error>You're missing permission
+          - to claim chunks.
+        child_failure_disabled:
+          name: <t:error_heading>Feature Disabled
+          lore:
+          - <t:error>Claiming chunks from the map
+          - is currently disabled.
+        child_failure_no-land-selected:
+          name: <t:error_heading>No Land Selected
+          lore:
+          - <t:error>Select a land to claim for first.
+          - ' <t:decoration>• </t><t:regular>Click the <t:regular_value>Claim for</t> item to '
+          - choose one of your lands.
+  list_player_invites:
+    title: <t:menu_title>Received Invites & Requests
+    items:
+      default:
+        entry_object_owner:
+          name: <t:entry_heading><v:land> <t:decoration>-</t> Become the Owner
+          lore:
+          - <t:decoration>✖ </t><t:regular>Respond to this invite and view more information.
+        entry_object_merge:
+          name: <t:entry_heading><v:land> <t:decoration>-</t> <t:regular_heading>Merge your Land
+          lore:
+          - <t:decoration>✖ </t><t:regular>Decide if you want to merge your
+          - '   land<t:entity_land> <v:merge></t> into<t:entity_land> <v:land></t>.'
+        entry_object_trust:
+          name: <t:entry_heading><v:land> <t:decoration>-</t> Membership Invitation
+          lore:
+          - <t:decoration>✖ </t><t:regular>Respond to this invite and view more information.
+  list_land_areas:
+    title: <t:menu_title>Areas
+    items:
+      default:
+        child_failure_rented:
+          name: <t:error_heading>Rented
+          lore:
+          - <t:error>You can't edit this area while
+          - it's being rented or sold.
+          - ' <t:decoration>• </t><t:regular>Current tenant:<t:regular_value> <v:player></t>'
+        entry_area_default:
+          name: <t:entry_heading><v:area>
+          lore:
+          - <t:user_content><v:description></t>
+          - <action:primary><label>Manage this area</label></action>
+        child_failure_access:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:error>You're not allowed to delete
+          - areas in this land.
+          - ' <t:decoration>• </t><t:regular>The land owner can give your'
+          - '   role permission to assign areas.'
+        entry_area:
+          name: <t:entry_heading><v:area>
+          lore:
+          - <t:user_content><v:description></t>
+          - <action:primary><label>Manage this area</label></action>
+          - <action:remove><label>Delete this area</label></action>
+        create:
+          name: <t:positive_heading>Create Area
+          lore:
+          - <t:decoration>✖ </t><t:regular>Create a new area for this land.
+          - '   Available:<t:regular_value> <v:areas></t> <t:decoration>/</t><t:limit> <v:max></t>'
+        entry_area-setup:
+          name: <t:negative_heading>Not Setup
+          lore:
+          - <t:decoration>1. </t><t:regular>Execute <t:cmd>/<v:cmd_selection> </t><t:regular>and
+          - '   select a lower and upper corner.'
+          - <t:decoration>2. </t><t:regular>Execute <t:cmd>/<v:cmd></t>
+          - '  <t:regular>to resize this area to the selection.'
+          - <action:remove><label>Delete this area</label></action>
+        child_failure_untrusted:
+          name: <t:error_heading>Not trusted
+          lore:
+          - <t:error>You're not allowed to open the
+          - menu for this area.
+          - ' <t:decoration>• </t><t:regular>You need to be trusted'
+          - '   in this area.'
+        child_failure_default:
+          name: <t:error_heading>Default Area
+          lore:
+          - <t:error>You can't delete the default area
+          - of this land.
+          - ' <t:decoration>• </t><t:regular>New claims will belong to it.'
+        child_failure_koth_arena:
+          name: <t:error_heading>KotH Arena
+          lore:
+          - <t:error>You can't delete this area
+          - because it's a KotH arena.
+          - ' <t:decoration>• </t><t:regular>An admin must remove the arena first.'
+        child_failure_max-areas:
+          name: <t:error_heading>Max Areas
+          lore:
+          - <t:error>This land reached its maximum
+          - amount of<t:error_value> <v:max></t> areas.
+        delete:
+          name: <t:negative_heading>Delete Area
+          lore:
+          - <t:decoration>✖ </t><t:regular>Delete an area of
+          - '   this land.'
+  list_area_banned:
+    title: <t:menu_title>Banned Players
+    items:
+      default:
+        unban:
+          name: <t:positive_heading>Unban Player
+          lore:
+          - <t:decoration>✖ </t><t:regular>Unban a player from this area.
+        entry_area_all:
+          name: <t:entry_heading><v:player>
+          lore:
+          - '<t:regular>Banned in these areas:'
+          - <t:regular_value><v:areas></t>
+          - ''
+          - <action:primary><label>View Information</label></action>
+          - <action:remove><label>Unban</label></action>
+        entry_area:
+          name: <t:entry_heading><v:player>
+          lore:
+          - <t:regular>This player is banned in this area.
+          - ''
+          - <action:primary><label>View Information</label></action>
+          - <action:remove><label>Unban</label></action>
+        refresh_toggle:
+          name: '<t:regular_heading>View only Area: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Display only players who are
+          - '   banned in this area <t:decoration>(</t><t:regular_value><v:area></t><t:decoration>)</t><t:regular>?'
+          - '    <t:decoration>• </t><t:regular>If disabled, it displays bans of the whole land.'
+          - '      Also it allows you to ban or unban'
+          - '      players from the whole land.'
+        global-action:
+          name: '<t:regular_heading>Execute for all Areas: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Ban or unban players in the whole land?
+          - '   <t:decoration>• </t><t:regular>If disabled, it only bans/unbans'
+          - '     players for area<t:regular_value> <v:area></t>.'
+        ban:
+          name: <t:negative_heading>Ban Player
+          lore:
+          - <t:decoration>✖ </t><t:regular>Ban a player from this area.
+          - '    <t:decoration>• </t><t:regular>Banned players won''t be able to'
+          - '      enter or teleport into it.'
+  list_role_players:
+    title: <t:menu_title>Players
+    items:
+      default:
+        entry_object:
+          name: <t:entry_heading><v:player>
+          lore:
+          - <t:regular>This player increases the max
+          - land size by<t:regular_value> <v:chunks></t> chunks.
+  list_all:
+    title: <t:menu_title>All
+    items:
+      default:
+        refresh_toggle-allowed:
+          name: '<t:regular_heading>Only public: <v:only-allowed>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Show only those which you're
+          - '   allowed to enter and teleport to'
+          - '   the spawn?'
+        refresh_toggle-category:
+          name: '<t:regular_heading>Category: <v:category>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Show only lands which are
+          - '   part of this category?'
+        entry_land_looking:
+          name: <t:regular_heading>#<v:pos></t> <t:entity_land><b><v:land></t>
+          lore:
+          - ' <t:decoration>• </t><t:regular_value><v:sorting></t>: <t:regular_value><v:value></t>'
+          - ' <t:decoration>• </t><t:regular>Category: <t:regular_value><v:category></t>'
+          - ' <t:decoration>• </t><t:regular>Title:'
+          - '   <t:user_content><v:title></t>'
+          - ''
+          - <action:primary><label>Teleport to Spawn</label></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:tertiary><label>Request Membership</label></action>
+          - <action:quaternary><label>Revoke Request</label></action>
+        entry_nation:
+          name: <t:regular_heading>#<v:pos></t> <t:entity_nation><b><v:nation></t>
+          lore:
+          - ' <t:decoration>• </t><t:regular_value><v:sorting></t>: <t:regular_value><v:value></t>'
+          - ' <t:decoration>• </t><t:regular>Tag: <t:user_content><v:tag></t>'
+          - ' <t:decoration>• </t><t:regular>Lands: <t:regular_value><v:lands></t>'
+          - ''
+          - <action:primary><label>Teleport to Spawn</label></action>
+          - <action:secondary><label>View Information</label></action>
+        refresh_sorting:
+          name: '<t:regular_heading>Sorting: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Toggle the sorting mode.
+        refresh_search:
+          name: <t:regular_heading>Search
+          lore:
+          - '<action:primary><label>Search</label><desc>Current: <t:user_content><v:search></t></desc></action>'
+          - '<action:secondary><label>Search By: <t:regular_value><v:mode></t></label></action>'
+          - <action:remove><label>Reset Search</label></action>
+        entry_land:
+          name: <t:regular_heading>#<v:pos></t> <t:entity_land><b><v:land></t>
+          lore:
+          - ' <t:decoration>• </t><t:regular_value><v:sorting></t>: <t:regular_value><v:value></t>'
+          - ' <t:decoration>• </t><t:regular>Category: <t:regular_value><v:category></t>'
+          - ' <t:decoration>• </t><t:regular>Tag: <t:user_content><v:tag></t>'
+          - ' <t:decoration>• </t><t:regular>Title:'
+          - '   <t:user_content><v:title></t>'
+          - ''
+          - <action:primary><label>Teleport to Spawn</label></action>
+          - <action:secondary><label>View Information</label></action>
+          - <action:tertiary><label>Request Membership</label></action>
+          - <action:quaternary><label>Revoke Request</label></action>
+  list_inbox:
+    title: <t:menu_title>Inbox
+    items:
+      default:
+        refresh_filter:
+          name: <t:regular_heading>Filter by Type:</t><t:regular_value> <v:type></t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Cycle through message types.
+          - '   Current:<t:regular_value> <v:type></t>'
+        entry_object:
+          name: <t:regular_heading>#<v:id></t><t:regular> <t:regular_value><v:date></t>
+          lore:
+          - <t:user_content><v:message></t>
+          - <action:primary><label>Remove</label></action>
+        refresh_clear:
+          name: <t:regular_heading>Clear
+          lore:
+          - <t:decoration>✖ </t><t:regular>Remove all inbox messages.
+        child_failure_owner:
+          name: <t:error_heading>Owner
+          lore:
+          - <t:regular>Only the land owner can remove
+          - inbox messages.
+        refresh_post:
+          name: <t:positive_heading>Create Post
+          lore:
+          - <t:decoration>✖ </t><t:regular>Post information for your land members.
+          - '   They will be notified.'
+  list_player_flags:
+    title: <t:menu_title>Personal Settings
+    items:
+      default:
+        entry_enter_messages:
+          name: '<v:enabled_symbol> <t:entry_heading>Enter and Leave Messages: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Show land enter and leave messages?
+        entry_receive_invites:
+          name: '<v:enabled_symbol> <t:entry_heading>Receive Invites: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Allow other lands to sent you
+          - '   invites in order to join them?'
+        entry_show_inbox:
+          name: '<v:enabled_symbol> <t:entry_heading>Show Inbox: <v:enabled>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Get notified about important
+          - '   events that happen in your lands?'
+        entry_general_player:
+          name: '<v:enabled_symbol> <t:entry_heading><v:flag>: <v:enabled>'
+          lore:
+          - <t:decoration>✖</t> <t:user_content><v:desc></t>
+  player_info:
+    title: <t:menu_title>Player <v:player>
+    items:
+      default:
+        land_size_general:
+          name: <t:regular_heading>Land Size Increase
+          lore:
+          - <t:regular>Every player that is trusted in your
+          - land increases the max size by<t:regular_value> <v:chunks></t> chunks.
+          - ''
+          - ' <t:decoration>• </t><t:regular>Land owners are excluded from this.'
+        land_size:
+          name: <t:regular_heading>Land Size Increase
+          lore:
+          - <t:regular>This player increases the max
+          - land size by<t:regular_value> <v:chunks></t> chunks.
+        lands:
+          name: <t:regular_heading>Lands</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          lore:
+          - <t:regular_value><v:lands></t>
+        areas:
+          name: <t:regular_heading>Trusted Areas</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          lore:
+          - <t:regular>This player is trusted in these
+          - 'areas of land<t:entity_land> <v:land></t>:'
+          - <t:regular_value><v:areas></t>
+        time:
+          name: <t:regular_heading>Last seen and Playtime
+          lore:
+          - '<t:decoration>• </t><t:regular>Last online: <t:time><v:seen></t> <t:decoration>/</t> <t:time><v:offline></t> ago'
+          - '<t:decoration>• </t><t:regular>Playtime: <t:time><v:playtime></t>'
+  relations:
+    title: <t:menu_title>Relations
+    items:
+      default:
+        offer_received:
+          name: <t:regular_heading>Received Offers
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage ingoing offers.
+        offer_sent:
+          name: <t:regular_heading>Sent Offers
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage outgoing offers.
+        enemies:
+          name: <t:regular_heading>Enemies
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage enemies.
+        allies:
+          name: <t:regular_heading>Allies
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage allies.
+  list_relation:
+    title: <t:menu_title>Relation
+    items:
+      default:
+        add:
+          name: <t:positive_heading>Add
+          lore:
+          - '<t:regular>Maximum amount: <t:regular_value><v:current></t> <t:decoration>/</t> <t:limit><v:max></t>'
+        entry_offer_neutral_sender:
+          name: <t:entry_heading><v:object>
+          lore:
+          - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
+          - '<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>'
+          - ''
+          - If they accept this offer you'll
+          - no longer be enemies.
+          - ''
+          - <action:tertiary><label>View Information</label></action>
+          - <action:remove><label>Revoke Offer</label></action>
+        entry_offer_ally_sender:
+          name: <t:entry_heading><v:object>
+          lore:
+          - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
+          - '<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>'
+          - ''
+          - If they accept this offer, you'll
+          - be allied with them.
+          - ''
+          - <action:tertiary><label>View Information</label></action>
+          - <action:remove><label>Revoke Offer</label></action>
+        remove:
+          name: <t:negative_heading>Remove
+        entry_offer_neutral_receiver:
+          name: <t:entry_heading><v:object>
+          lore:
+          - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
+          - '<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>'
+          - ''
+          - <action:primary><label>Accept Peace</label><desc>You'll no longer be enemies.</desc></action>
+          - <action:tertiary><label>View Information</label></action>
+          - <action:remove><label>Deny Offer</label></action>
+        child_failure_war:
+          name: <t:error_heading>Upcoming or active War
+          lore:
+          - <t:error>You can't manage this while <v:object>
+          - is engaged in an upcoming or
+          - active war against<t:error_value> <v:enemy></t>.
+        add_nation:
+          name: <t:regular_heading>Managed by Nation
+          lore:
+          - <t:error>All relations are managed by the nation
+          - <t:error_value><v:nation></t>, which your land is part of.
+        child_failure_max_allies:
+          name: <t:error_heading>Max Allies reached
+          lore:
+          - <t:error_value><v:object></t> <t:error>reached its maximum
+          - amount of<t:error_value> <v:max></t> allies.
+        entry_offer_ally_receiver:
+          name: <t:entry_heading><v:object>
+          lore:
+          - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
+          - '<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>'
+          - ''
+          - <action:primary><label>Accept Alliance</label><desc>You'll be allies.</desc></action>
+          - <action:tertiary><label>View Information</label></action>
+          - <action:remove><label>Deny Offer</label></action>
+        entry_ally:
+          name: <t:entry_heading>Ally <v:object>
+          lore:
+          - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
+          - '<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>'
+          - ''
+          - <action:tertiary><label>View Information</label></action>
+          - <action:remove><label>Remove Ally</label></action>
+        remove_nation:
+          name: <t:regular_heading>Managed by Nation
+          lore:
+          - <t:error>All relations are managed by the nation
+          - <t:error_value><v:nation></t>, which your land is part of.
+        entry_enemy:
+          name: <t:entry_heading>Enemy <v:object>
+          lore:
+          - <t:decoration>• </t><t:regular>Owner:<t:regular_value> <v:owner></t>
+          - '<t:decoration>• </t><t:regular>Level: <t:regular_value><v:level></t>'
+          - ''
+          - <action:tertiary><label>View Information</label></action>
+          - <action:remove><label>Send Neutralization</label></action>
+        child_failure_nation:
+          name: <t:error_heading>Managed by Nation
+          lore:
+          - <t:error>All relations are managed by the nation
+          - <t:error_value><v:nation></t>, which your land is part of.
+        child_war:
+          name: <t:error_heading>Current War
+          lore:
+          - <t:error>You can't do this while <v:object>
+          - is engaged in a war.
+        child_failure_max_enemies:
+          name: <t:error_heading>Max Enemies reached
+          lore:
+          - <t:error_value><v:object></t> <t:error>reached its maximum
+          - amount of<t:error_value> <v:max></t> enemies.
+  object_info_relations:
+    title: <t:menu_title>Relations
+    items:
+      default:
+        enemies:
+          name: <t:negative_heading>Enemies
+          lore:
+          - <t:decoration>✖ </t><t:regular>View enemies.
+          - '   <t:decoration>• </t><t:regular>Amount: <v:enemies>'
+        allies:
+          name: <t:positive_heading>Allies
+          lore:
+          - <t:decoration>✖ </t><t:regular>View allies.
+          - '   <t:decoration>• </t><t:regular>Amount: <v:allies>'
+  list_land_storage:
+    title: <t:menu_title>Storage of <v:land>
+  list_members_online:
+    title: <t:menu_title>Online Members
+    items:
+      default:
+        entry_area:
+          name: <t:entry_heading><v:player>
+          lore:
+          - <t:regular>Role:<t:regular_value> <v:role></t>
+        entry_area_all:
+          name: <t:entry_heading><v:player>
+        entry_nation:
+          name: <t:entry_heading><v:player>
+        refresh_toggle:
+          name: '<t:regular_heading>View only Area: <v:current>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Display only players who are
+          - '   trusted in this area <t:decoration>(</t><t:regular_value><v:area></t><t:decoration>)</t><t:regular>?'
+          - '    <t:decoration>• </t><t:regular>If disabled, it displays players of the whole land.'
+  rental_setup:
+    title: <t:menu_title><v:type> Setup
+    items:
+      default:
+        type:
+          name: '<t:regular_heading>Type: <v:type>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change between rental and sell.
+        interval:
+          name: '<t:regular_heading>Interval: <v:interval>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Tenants will pay<t:cost> <v:cost></t> each for each<t:time> <v:interval></t>
+          - '   for which they extend their rental.'
+        max-time:
+          name: '<t:regular_heading>Max total Time: <v:max-time>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change the max total time a player
+          - '   can rent this area.'
+        cost_rental:
+          name: <t:regular_heading>Cost per Interval:</t><t:cost> <v:cost></t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change how much a tenant pays
+          - '   for every<t:time> <v:interval></t>.'
+        cost_sell:
+          name: <t:regular_heading>Total Cost:</t><t:cost> <v:cost></t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change how much a buyer pays.
+        confirm_rental:
+          name: <t:positive_heading>Confirm
+          lore:
+          - <t:decoration>✖ </t><t:regular>Setup this area for rental.
+          - '   <t:decoration>• </t><t:regular>Interval:<t:time> <v:interval></t>'
+          - '   <t:decoration>• </t><t:regular>Cost per <t:time><v:interval></t>:<t:cost> <v:cost></t>'
+          - '   <t:decoration>• </t><t:regular>Max total time:<t:time> <v:max-time></t>'
+        confirm_sell:
+          name: <t:positive_heading>Confirm
+          lore:
+          - <t:decoration>✖ </t><t:regular>Setup this area to be sold.
+          - '   <t:decoration>• </t><t:regular>Total cost:<t:cost> <v:cost></t>'
+        restore:
+          name: '<t:regular_heading>Restore Area: <v:state>'
+          lore:
+          - <action:primary><label>Toggle</label></action>
+          -     <t:regular>Restore this area to its previous state
+          - '   once a rental or purchase ends.'
+          - '   <t:decoration>• </t><t:regular>A snapshot is taken right before a player'
+          - '     rents or buys it, so your own changes are kept.'
+          - '   <t:decoration>• </t><t:regular>Players inside are teleported out first.'
+          - '   <t:decoration>• </t><t:regular>Chests get back their previous contents.'
+        restore_unavailable:
+          name: '<t:regular_heading>Restore Area: <t:negative>Unavailable</t>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Restoring this area once a rental or purchase ends
+          - '   requires the plugin<t:regular_value> WildRegeneration</t>.'
+  select_time:
+    title: <t:menu_title>Time
+    items:
+      default:
+        refresh_d_plus:
+          name: <t:positive_heading>+<v:value> day(s)
+        refresh_d_minus:
+          name: <t:negative_heading>-<v:value> day(s)
+        refresh_h_plus:
+          name: <t:positive_heading>+<v:value> hour(s)
+        current:
+          name: <t:regular_heading>Current:</t><t:time> <v:time></t>
+        refresh_h_minus:
+          name: <t:negative_heading>-<v:value> hour(s)
+        refresh_m_plus:
+          name: <t:positive_heading>+<v:value> minute(s)
+        refresh_m_minus:
+          name: <t:negative_heading>-<v:value> minute(s)
+        confirm:
+          name: <t:positive_heading>Confirm
+  select_value:
+    title: <t:menu_title>Value
+    items:
+      default:
+        refresh_plus-1:
+          name: <green>+<v:value>
+        refresh_plus-2:
+          name: <green>+<v:value>
+        refresh_plus-3:
+          name: <green>+<v:value>
+        current:
+          name: '<t:regular_heading>Current: <v:value>'
+        refresh_minus-3:
+          name: <red>-<v:value>
+        refresh_minus-2:
+          name: <red>-<v:value>
+        refresh_minus-1:
+          name: <red>-<v:value>
+        confirm:
+          name: <t:positive_heading>Confirm

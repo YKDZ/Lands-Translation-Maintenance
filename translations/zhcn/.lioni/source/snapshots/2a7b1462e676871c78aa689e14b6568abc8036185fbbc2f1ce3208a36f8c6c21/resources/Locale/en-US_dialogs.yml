@@ -1,0 +1,97 @@
+dialogs:
+  confirm:
+    title: Confirm
+    bodies:
+      info:
+        text: <v:message>
+    buttons:
+      confirm:
+        label: <t:positive>Confirm
+        tooltip: Click here to confirm.
+      discard:
+        label: <t:negative>Cancel
+        tooltip: Click to cancel.
+  input:
+    title: Input
+    inputs:
+      text:
+        label: Text
+      player:
+        label: Player
+    buttons:
+      confirm:
+        label: <t:positive>Confirm
+        tooltip: Click here to confirm your input.
+      discard:
+        label: <t:negative>Discard
+        tooltip: Click to discard your input.
+  add_member:
+    title: Add Player
+    inputs:
+      name:
+        label: Player
+    buttons:
+      add:
+        label: <t:positive>Add
+        tooltip: Trust this player permanently.
+      add-temporary:
+        label: <t:regular_value>Add temporarily
+        tooltip: Trust this player for a limited time.
+      discard:
+        label: <t:negative>Discard
+        tooltip: Click to discard.
+  add_member_duration:
+    title: Temporary trust
+    inputs:
+      days:
+        type: number-range
+        label: Days
+        label-format: '<v:label>: <v:value>'
+        start: 0
+        end: 30
+        step: 1
+        initial: 0
+      hours:
+        type: number-range
+        label: Hours
+        label-format: '<v:label>: <v:value>'
+        start: 0
+        end: 23
+        step: 1
+        initial: 0
+    bodies:
+      info:
+        text: The player will be trusted only for the selected duration. A temporarily-trusted
+          player doesn't pay taxes and can't claim or unclaim unless they're also permanently
+          trusted in another area.
+    buttons:
+      add:
+        label: <t:positive>Add
+        tooltip: Trust this player for the selected duration.
+      back:
+        label: <t:regular>Back
+        tooltip: Go back.
+  land_create:
+    title: Create a New Land
+    inputs:
+      name:
+        label: Name
+      tag:
+        label: Tag
+    bodies:
+      info:
+        text: Creating this land will cost you<t:cost> <v:cost></t>. For
+          your new land<t:regular_value> <v:chunks></t> chunks will be claimed,
+          if there is enough space.
+      tag:
+        text: The tag is the short version of your land's name.
+        item:
+          material: NAME_TAG
+          hide-tooltip: true
+    buttons:
+      confirm:
+        label: <t:positive>Create
+        tooltip: Click here to create a new land.
+      discard:
+        label: <t:negative>Discard
+        tooltip: Click to discard the land creation.

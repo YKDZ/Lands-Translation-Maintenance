@@ -1,0 +1,194 @@
+# ----------------------------------------------------------------------------
+#  Theme
+# ----------------------------------------------------------------------------
+#
+# This file defines named colors, called "tokens", that locale files use
+# through the <t:token> tag (chat messages, GUI menus, Bedrock forms and
+# dialogs).
+#
+# Example: a locale entry "<t:error>You can't do this." renders with the style
+# configured at theme.tokens.error below. Changing that one value re-colors
+# every message that uses the <t:error> tag - without touching the locale
+# files.
+#
+# Accepted values: MiniMessage color and decoration tags, e.g.:
+#   - a color alone: "<red>", "<#ff8080>"
+#   - color plus decorations: "<b><white>", "<red><st>"
+# Only color and decoration tags are allowed (no click/hover/gradients) - a
+# token is a style definition, not a message.
+#
+# A value left empty (e.g. entity_land: "") disables that token: <t:entity_land>
+# still resolves, it just applies no styling at all, instead of failing as an
+# unknown token. Useful for turning a token off without hunting down and
+# removing every place it's used across the locale files.
+#
+# This file is self-contained and can be copied between servers to share a
+# theme.
+theme:
+
+  # Tokens used by the default locale files. You can change their styles, but
+  # they cannot be removed - locale entries reference them by name.
+  #
+  # Grouped below by role rather than alphabetically: body-text tones, then
+  # the "value" tokens that highlight something embedded in that tone's prose
+  # (a name, a number, a cost, a limit, a duration, a command - all serve the
+  # same purpose of standing out against the surrounding text), then
+  # headings, then everything else.
+  tokens:
+
+    # --- Body/prose tones ---
+
+    # Regular message and lore text.
+    regular: "<gray>"
+
+    # Positive feedback: success messages, "Yes", enabled states.
+    success: "<green>"
+
+    # Failure and error message text.
+    error: "<red>"
+
+    # Positive connotation inline within otherwise-neutral text: a
+    # beneficial effect, a favorable relation, a gain - distinct from
+    # success, which is reserved for "this action succeeded" messages.
+    positive: "<green>"
+
+    # Negative connotation inline within otherwise-neutral text: a harmful
+    # effect, a hostile relation, a loss - distinct from error, which is
+    # reserved for "this action failed" messages.
+    negative: "<red>"
+
+    # --- Embedded-value tokens ---
+    # Each highlights a value quoted inside its matching prose tone above
+    # (or, for cost/limit/time/cmd, a specific value type regardless of tone).
+
+    # Values inside regular text that players look for: numbers, owners,
+    # page counts.
+    regular_value: "<yellow>"
+
+    # Values inside success messages, such as names. Brighter than the
+    # surrounding success text so the important part stands out.
+    success_value: "<#80ff80>"
+
+    # Values inside error messages, such as names. Brighter than the
+    # surrounding error text so the important part stands out.
+    error_value: "<#ff8080>"
+
+    # Values with positive connotation, such as a beneficial stat or a gain.
+    positive_value: "<#80ff80>"
+
+    # Values with negative connotation, such as a harmful stat or a loss.
+    negative_value: "<#ff8080>"
+
+    # Prices and costs: {cost}/{costs} placeholders. Distinct from
+    # regular_value so money always reads the same regardless of surrounding
+    # text color.
+    cost: "<red>"
+
+    # Limits and thresholds: min/max values (e.g. {max} chunks, {min}
+    # balance). Distinct from cost since a limit isn't money, and from
+    # regular_value so it stays recognizable wherever it's quoted, including
+    # inside otherwise-neutral text.
+    limit: "<yellow>"
+
+    # Durations and timestamps.
+    time: "<yellow>"
+
+    # Commands, command arguments and click-to-run hints.
+    cmd: "<yellow>"
+
+    # --- Headings ---
+
+    # Titles and headings: title messages and GUI item names.
+    regular_heading: "<b><gold>"
+
+    # Headings of success states, e.g. GUI item names like "Request Accepted".
+    success_heading: "<b><dark_green>"
+
+    # Headings of error states, e.g. GUI item names like "Not allowed" or
+    # "Missing Permission".
+    error_heading: "<b><dark_red>"
+
+    # Headings with positive connotation, e.g. GUI item names for a
+    # beneficial effect or a favorable relation.
+    positive_heading: "<b><dark_green>"
+
+    # Headings with negative connotation, e.g. GUI item names for a harmful
+    # effect or a hostile relation.
+    negative_heading: "<b><dark_red>"
+
+    # Headings of repeating list-row items (GUI menu entries prefixed
+    # "entry_", e.g. a land/nation row, an invite, a flag toggle) - kept
+    # distinct from regular_heading so list rows can be recolored without
+    # affecting single-purpose menu item names.
+    entry_heading: "<gold>"
+
+    # --- Structural ---
+
+    # Decorations around text: brackets, bullets, separators and dashes.
+    decoration: "<dark_gray>"
+
+    # --- Surface-specific ---
+
+    # Java Edition inventory menu titles, rendered on the light inventory
+    # background - needs a dark color, unlike tooltip text.
+    menu_title: "<dark_gray>"
+
+    # GUI-menu-only: keybind hints in item lore (LEFT CLICK, RIGHT CLICK,
+    # SHIFT + ... variants, DROP). Never used in chat/Bedrock/dialog text.
+    click: "<aqua>"
+
+    # --- Other ---
+
+    # The plugin brand color, used by the chat prefix.
+    prefix: "<dark_green>"
+
+    # Content written or supplied by players: chat messages, land descriptions,
+    # inbox posts, stored items.
+    user_content: "<white>"
+
+    # --- Entity identity ---
+    # Each entity type keeps a recognizable color across all menus and messages.
+
+    entity_land: "<dark_green>"
+    entity_nation: "<blue>"
+
+  # Your own tokens. Every entry added here becomes available as a tag in all
+  # locale files. For example, adding
+  #   highlight: "<#00e617>"
+  # makes <t:highlight> usable in any message or menu text.
+  # This section is never modified by plugin updates.
+  custom: {}
+
+  # Optional per-surface overrides. Java Edition menus (item tooltips,
+  # inventory titles and dialogs) use these values for the listed tokens;
+  # anything not listed falls back to the sections above. Example:
+  #   regular: "<white>"
+  # This section is never modified by plugin updates.
+  gui:
+    regular: "<white>"
+
+  # Optional per-surface overrides for dialogs, which render on dark panels
+  # similar to Bedrock forms. Anything not listed falls back to the sections
+  # above.
+  # This section is never modified by plugin updates.
+  dialog:
+    regular: "<white>"
+
+  # Optional per-surface overrides for Bedrock Edition forms. Anything not
+  # listed falls back to the sections above.
+  # This section is never modified by plugin updates.
+  bedrock:
+    # Bedrock forms render text on dark panels: brighter body text reads better there.
+    regular: "<white>"
+    # Headings label form buttons and the light title strip. Bedrock forms only
+    # support the 16 legacy colors - NOT hex (an <#rrggbb> renders black there) -
+    # and there is no "dark gold" among them, so the neutral headings use black
+    # for maximum contrast on the light-gray buttons instead of the washed-out
+    # bright gold, while the semantic ones stay dark_green/dark_red. (Swap
+    # regular_heading/entry_heading to <dark_gray> or <gold> to taste.)
+    regular_heading: "<black>"
+    entry_heading: "<black>"
+    success_heading: "<dark_green>"
+    error_heading: "<dark_red>"
+    positive_heading: "<dark_green>"
+    negative_heading: "<dark_red>"

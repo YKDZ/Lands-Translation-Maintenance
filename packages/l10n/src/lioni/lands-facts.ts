@@ -4,9 +4,12 @@ import { join } from "node:path";
 import type { SourceRead, TranslationRead, SourceUnitFact } from "@lioni/lioni";
 import { z } from "zod";
 
-import { parseConfiguration } from "#/configuration";
 import { formatForScene } from "#/field-metadata";
 import { createLandsWritebackAdapter } from "#/lioni/lands-writeback";
+import {
+  parseLandsProjectConfiguration,
+  type LandsProjectConfiguration,
+} from "#/lioni/project-configuration";
 import {
   landsProjectPaths,
   type LandsProjectPaths,
@@ -18,7 +21,6 @@ import {
 import { formatForMessagePath } from "#/messages";
 import { captureMiniMessageTheme } from "#/minimessage-theme";
 import type {
-  ConsumerConfiguration,
   JsonValue,
   ResourcePurpose,
   ResourceInventoryEntry,
@@ -346,32 +348,18 @@ function messageFormat(
   return formatForMessagePath(path, field.category, purpose);
 }
 
-function configurationFrom(
-  source: string,
-  file: string,
-): ConsumerConfiguration {
-  const parsed = parseConfiguration(source);
-  if (!parsed.ok) {
-    const details = parsed.issues
-      .map(({ path, reason }) => `${path.join(".")}: ${reason}`)
-      .join("；");
-    throw new Error(`${file} 配置无效：${details}`);
-  }
-  return parsed.value;
-}
-
 async function readProjectInput(paths: LandsProjectPaths): Promise<{
-  readonly configuration: ConsumerConfiguration;
+  readonly configuration: LandsProjectConfiguration;
   readonly snapshot: LandsSourceSnapshot;
 }> {
   const [configurationText, snapshot] = await Promise.all([
-    readFile(paths.legacyManifestFile, "utf8"),
+    readFile(paths.projectConfigurationFile, "utf8"),
     readLandsSourceSnapshot(paths.sourceDirectory),
   ]);
   return {
-    configuration: configurationFrom(
+    configuration: parseLandsProjectConfiguration(
       configurationText,
-      paths.legacyManifestFile,
+      paths.projectConfigurationFile,
     ),
     snapshot,
   };
@@ -398,7 +386,7 @@ function parseResource(bytes: Uint8Array, path: string): ReadResourceResult {
 }
 
 function fieldUnits(
-  mapping: ConsumerConfiguration["translationScope"]["mappings"][number],
+  mapping: LandsProjectConfiguration["translationScope"]["mappings"][number],
   root: JsonValue,
   purpose: ResourcePurpose | undefined,
 ): {
@@ -465,7 +453,7 @@ function fieldUnits(
 }
 
 type LandsMapping =
-  ConsumerConfiguration["translationScope"]["mappings"][number];
+  LandsProjectConfiguration["translationScope"]["mappings"][number];
 
 type TranslationPathRelation = "outside" | "ancestor" | "selected";
 
@@ -612,7 +600,7 @@ function targetRange(sourceFile: string, targetFile: string) {
 async function readSource(
   paths: LandsProjectPaths,
 ): Promise<SourceRead<LandsUnit>> {
-  let configuration: ConsumerConfiguration;
+  let configuration: LandsProjectConfiguration;
   let snapshot: LandsSourceSnapshot;
   try {
     ({ configuration, snapshot } = await readProjectInput(paths));
@@ -725,7 +713,7 @@ async function readSource(
 }
 
 function fieldPaths(
-  mapping: ConsumerConfiguration["translationScope"]["mappings"][number],
+  mapping: LandsProjectConfiguration["translationScope"]["mappings"][number],
   definitions: JsonValue,
 ): { readonly paths: ReadonlySet<string>; readonly issues: readonly string[] } {
   const paths = new Set<string>();
@@ -959,7 +947,7 @@ async function readTranslations(
   language: string,
   sourceUnits: readonly SourceUnitFact<LandsUnit>[],
 ): Promise<TranslationRead<LandsTranslation, UnavailableTranslation>> {
-  let configuration: ConsumerConfiguration;
+  let configuration: LandsProjectConfiguration;
   let snapshot: LandsSourceSnapshot;
   try {
     ({ configuration, snapshot } = await readProjectInput(paths));

@@ -1,0 +1,28 @@
+common:
+  values:
+    failure_message:
+      title: Failure
+      content: <t:user_content><v:message></t>
+    success_message:
+      title: Success
+      content: <t:user_content><v:message></t>
+  items:
+    default:
+      back:
+        name: <t:error_heading>Back
+      close:
+        name: <t:error_heading>Close
+
+gui:
+  action-confirm:
+    title: <t:menu_title>Please confirm this Action
+    items:
+      default:
+        confirm:
+          name: <t:positive>Confirm
+        cancel:
+          name: <t:error>Cancel
+
+  click-response:
+    title: <t:menu_title><v:title>
+    content: <v:content>
