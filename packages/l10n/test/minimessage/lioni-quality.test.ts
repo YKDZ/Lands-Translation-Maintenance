@@ -668,6 +668,33 @@ void test("多个 hover 按解析出的 click 行为配对并支持换序", asyn
   );
 });
 
+void test("原译字段完全相同的多个 hover 按官方位置配对", async (t) => {
+  const value =
+    "<hover:show_text:'Lands upkeep details'>Lands upkeep</hover> " +
+    "<hover:show_text:'Nations upkeep details'>Nations upkeep</hover>";
+  const project = await createQualityProject(t, undefined, value, value);
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const omissions = checkResult(report, "translation-omissions");
+  const sameText = omissions.diagnostics.filter(
+    ({ object, evidence }) =>
+      object.code === "translation.same-text" &&
+      evidence.some(
+        ({ role, value: body }) =>
+          role === "expected" &&
+          (body === "Lands upkeep details" ||
+            body === "Nations upkeep details"),
+      ),
+  );
+
+  assert.equal(
+    omissions.status,
+    "complete",
+    JSON.stringify(omissions, null, 2),
+  );
+  assert.deepEqual(omissions.issues, []);
+  assert.equal(sameText.length, 2, JSON.stringify(omissions, null, 2));
+});
+
 void test("结构一致性 QA 只读检查受管值并允许自定义字段", async (t) => {
   const project = await createQualityProject(
     t,
@@ -764,6 +791,34 @@ void test("结构一致性按源字段单位核对嵌套结构对象", async (t)
       },
     ],
   );
+});
+
+void test("结构 QA 比较受管字段并容忍对象中的额外目标键", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    { nestedStructure: true },
+  );
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  const target = await readFile(targetPath, "utf8");
+  await writeFile(
+    targetPath,
+    target.replace(
+      "            enabled: false",
+      "            enabled: true\n            pluginValue: true",
+    ),
+  );
+
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const structures = checkResult(report, "lands-structure-consistency");
+  assert.equal(
+    structures.status,
+    "complete",
+    JSON.stringify(structures, null, 2),
+  );
+  assert.deepEqual(structures.diagnostics, []);
 });
 
 void test("结构和正文缺失由漏译 QA 各报告一次且 QA 不写入目标", async (t) => {
