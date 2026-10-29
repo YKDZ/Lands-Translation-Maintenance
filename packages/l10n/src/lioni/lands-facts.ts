@@ -21,6 +21,7 @@ import type {
   ConsumerConfiguration,
   JsonValue,
   ResourcePurpose,
+  ResourceInventoryEntry,
   TranslationField,
 } from "#/model";
 import {
@@ -612,6 +613,7 @@ interface MappingStructureProjection {
 export interface LandsStructureProjection {
   readonly sourceVersion: string;
   readonly jarSha256: string;
+  readonly resources: readonly ResourceInventoryEntry[];
   readonly theme:
     | {
         readonly status: "available";
@@ -737,6 +739,7 @@ export async function readLandsStructureProjection(
   return {
     sourceVersion: snapshot.manifest.sourceVersion,
     jarSha256: snapshot.manifest.jarSha256,
+    resources: configuration.resources,
     theme,
     mappings,
   };
