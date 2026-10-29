@@ -579,18 +579,25 @@ function sourceRange(path: string) {
   };
 }
 
-// 只把 Lands 的来源语言与 GUI definitions 命名视为潜在维护范围，普通新增文件仍可提示后推进。
+// 来源语言允许新增用途后缀；按命名空间识别，避免未来资源被当作普通新增项。
 function unregisteredResourceIssue(
   path: string,
   sourceLanguage: string,
 ): string | undefined {
   const name = path.split("/").at(-1);
-  if (
+  const isYaml =
+    name?.endsWith(".yml") === true || name?.endsWith(".yaml") === true;
+  const sourceLanguageResource =
     name === `${sourceLanguage}.yml` ||
-    name === `${sourceLanguage}_gui.yml` ||
-    name === `${sourceLanguage}_dialogs.yml` ||
-    name === "definitions_gui.yml"
-  ) {
+    name === `${sourceLanguage}.yaml` ||
+    (isYaml && name.startsWith(`${sourceLanguage}_`));
+  const guiDefinitionsResource =
+    isYaml &&
+    (name === "definitions_gui.yml" ||
+      name === "definitions_gui.yaml" ||
+      name.startsWith("definitions_gui_") ||
+      name.startsWith("definitions_gui-"));
+  if (sourceLanguageResource || guiDefinitionsResource) {
     return `发现未登记的来源语言或 GUI 结构资源 ${path}；请明确更新资源与翻译范围清单。`;
   }
   return undefined;

@@ -763,6 +763,10 @@ void test("未登记的新增源语言文件要求明确纳入范围且不推进
       "messages:\n  greeting: Hello from the new module\n",
     ],
     [
+      "Locale/NewModule/en-US_notifications.yml",
+      "notifications:\n  welcome: Welcome to the new module\n",
+    ],
+    [
       "Locale/NewModule/definitions_gui.yml",
       "gui:\n  confirm:\n    material: STONE\n",
     ],
@@ -840,6 +844,95 @@ void test("未登记的新增源语言文件要求明确纳入范围且不推进
       readFile(join(project, "Locale/NewModule/zh-CN_gui.yml")),
     );
   }
+});
+
+void test("显式排除用途优先于未登记语言资源命名", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-excluded-language-resource-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(
+    initialJar,
+    landsJar("messages:\n  greet: Hello\n  leave: Goodbye\n"),
+  );
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const manifestPath = join(project, ".l10n/config.yml");
+  const configuration = await readFile(manifestPath, "utf8");
+  await writeFile(
+    manifestPath,
+    configuration.replace(
+      "translationScope:\n",
+      [
+        "  - path: Locale/NewModule/en-US_notifications.yml",
+        "    purpose: other-excluded",
+        "translationScope:",
+        "",
+      ].join("\n"),
+    ),
+  );
+  const changedJar = join(project, "Lands-with-explicit-exclusion.jar");
+  await writeFile(
+    changedJar,
+    landsJarWithUnregisteredFile(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n",
+      "Locale/NewModule/en-US_notifications.yml",
+      "notifications:\n  welcome: Welcome\n",
+    ),
+  );
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+
+  const output = runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  const envelope = JSON.parse(output) as {
+    readonly data: {
+      readonly status: string;
+      readonly baseline?: { readonly outcome: string };
+      readonly plan: {
+        readonly current: {
+          readonly source: {
+            readonly read: {
+              readonly scopes: readonly {
+                readonly range: {
+                  readonly kind: string;
+                  readonly path: string;
+                };
+                readonly enumeration: string;
+              }[];
+            };
+          };
+        };
+      };
+    };
+  };
+  assert.equal(envelope.data.status, "completed");
+  assert.equal(envelope.data.baseline?.outcome, "saved");
+  assert.doesNotMatch(output, /未登记/u);
+  assert.deepEqual(
+    envelope.data.plan.current.source.read.scopes.find(
+      ({ range }) => range.path === "Locale/NewModule/en-US_notifications.yml",
+    ),
+    {
+      range: {
+        kind: "lands-resource",
+        path: "Locale/NewModule/en-US_notifications.yml",
+      },
+      enumeration: "complete",
+      recordCount: 0,
+    },
+  );
 });
 
 void test("整份退出翻译范围的目标文件留给维护者且未读取时不推进基线", async (t) => {
