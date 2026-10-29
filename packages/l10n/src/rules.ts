@@ -77,18 +77,8 @@ const structureRule: CheckRule = {
   },
 };
 
-const miniMessageSyntaxRule: CheckRule = {
-  id: "minimessage-syntax",
-  defaultSeverity: "error",
-  requiredInputs: ["minimessage-parse"],
-  evaluate(project) {
-    return project.miniMessage?.findings ?? [];
-  },
-};
-
 export const builtInRules: readonly CheckRule[] = [
   structureRule,
-  miniMessageSyntaxRule,
   miniMessageTagsRule,
   miniMessageVariablesRule,
   terminologyRule,

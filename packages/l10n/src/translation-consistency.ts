@@ -10,7 +10,7 @@ import type {
   TranslatableTextDocument,
   TranslatableTextSegment,
 } from "#/model";
-import { pairedTextDocuments } from "#/translatable-text-pairing";
+import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { canonicalJson, compareText, toJsonValue } from "#/value";
 
 interface TextRegion {
@@ -400,9 +400,12 @@ function messageIsPendingSeed(
 
 function comparisonRecords(project: ProjectView): ComparisonRecord[] {
   const records: ComparisonRecord[] = [];
-  for (const { sourceDocument, targetDocument } of pairedTextDocuments(
-    project,
-  )) {
+  const miniMessage = project.miniMessage;
+  if (miniMessage === undefined) return records;
+  for (const {
+    sourceDocument,
+    targetDocument,
+  } of pairTranslatableTextDocuments(miniMessage).pairs) {
     if (messageIsPendingSeed(project, sourceDocument, targetDocument)) continue;
 
     const targetRegions = regionsForDocument(targetDocument);

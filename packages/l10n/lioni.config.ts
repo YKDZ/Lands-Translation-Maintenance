@@ -6,6 +6,9 @@ import {
   landsFactAdapters,
 } from "#/lioni/lands-facts";
 import { landsProjectPaths } from "#/lioni/project-paths";
+import { loadMiniMessageQualityDependencies } from "#/minimessage-quality";
+import { miniMessageSyntaxCheck } from "#/minimessage-syntax-check";
+import { miniMessageThemeCheck } from "#/minimessage-theme-check";
 
 /** 根据翻译项目入口构造唯一的 Lands 配置。 */
 export function createLandsConfig(entryUrl: string | URL) {
@@ -29,8 +32,12 @@ export function createLandsConfig(entryUrl: string | URL) {
       ];
     },
     quality: {
+      checks: [miniMessageSyntaxCheck, miniMessageThemeCheck],
       exceptionStore: createFileQualityExceptionStore(paths.exceptionFile),
-      loadDependencies: () => ({ termbaseDirectory: paths.termbaseDirectory }),
+      loadDependencies: async ({ facts }) => ({
+        ...(await loadMiniMessageQualityDependencies(entryUrl, facts)),
+        termbaseDirectory: paths.termbaseDirectory,
+      }),
     },
   });
 }
