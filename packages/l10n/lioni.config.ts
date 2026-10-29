@@ -1,14 +1,23 @@
 import { defineConfig } from "@lioni/lioni";
-import { createFileQualityExceptionStore } from "@lioni/lioni/node";
+import {
+  createFileQualityExceptionStore,
+  loadTermbaseYaml,
+} from "@lioni/lioni/node";
 
 import { landsFactAdapters } from "#/lioni/lands-facts";
 import { landsUpdatePolicy } from "#/lioni/lands-update-policy";
 import { landsProjectPaths } from "#/lioni/project-paths";
+import { miniMessageHonorificCheck } from "#/minimessage-honorific-check";
 import { miniMessageLandsControlsCheck } from "#/minimessage-lands-controls-check";
 import { miniMessageNestingCheck } from "#/minimessage-nesting-check";
+import { miniMessagePunctuationCheck } from "#/minimessage-punctuation-check";
 import { loadMiniMessageQualityDependencies } from "#/minimessage-quality";
 import { miniMessageSyntaxCheck } from "#/minimessage-syntax-check";
 import { miniMessageTagCorrespondenceCheck } from "#/minimessage-tag-correspondence-check";
+import {
+  landsTermbaseData,
+  landsTerminologyCheck,
+} from "#/minimessage-terminology-check";
 import { miniMessageThemeCheck } from "#/minimessage-theme-check";
 
 /** 根据翻译项目入口构造唯一的 Lands 配置。 */
@@ -24,12 +33,18 @@ export function createLandsConfig(entryUrl: string | URL) {
         miniMessageTagCorrespondenceCheck,
         miniMessageNestingCheck,
         miniMessageLandsControlsCheck,
+        landsTerminologyCheck,
+        miniMessagePunctuationCheck,
+        miniMessageHonorificCheck,
       ],
       exceptionStore: createFileQualityExceptionStore(paths.exceptionFile),
-      loadDependencies: async ({ facts }) => ({
-        ...(await loadMiniMessageQualityDependencies(entryUrl, facts)),
-        termbaseDirectory: paths.termbaseDirectory,
-      }),
+      loadDependencies: async ({ facts }) => {
+        const [miniMessage, termbase] = await Promise.all([
+          loadMiniMessageQualityDependencies(entryUrl, facts),
+          loadTermbaseYaml(paths.termbaseDirectory),
+        ]);
+        return { ...miniMessage, termbaseData: landsTermbaseData(termbase) };
+      },
     },
   });
 }

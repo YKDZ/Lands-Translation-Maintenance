@@ -1,0 +1,205 @@
+concepts:
+  nation:
+    note: 由城镇组成的实体。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  capital:
+    note: 建立联邦的城镇。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  land:
+    note: Lands 插件中的城镇领地实体；产品名 Lands 不适用此术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  area:
+    note: 城镇领土内划出的小区域。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  camp:
+    note: 临时、固定大小的城镇。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  wilderness:
+    note: 没有被占领的区块。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  role:
+    note: 城镇或联邦成员的权限控制。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  owner:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  tenant:
+    note: 区域租客和买主都用此词。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  trust:
+    note: 对应其他领地插件的 invite；从玩家视角也可表达为被加入。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  trusted-player:
+    note: 已受信任并获得成员身份的玩家。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  untrust:
+    note: 对应其他领地插件的 kick。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  claim-verb:
+    note: 动词义；与名词义领土区分。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  claim-noun:
+    note: 名词义；与动词义占领区分。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  unclaim:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  natural-settings:
+    note: 影响区域环境行为，例如刷怪或 TNT 对方块的影响。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  role-settings:
+    note: 控制职位玩家的权限，例如能否破坏方块。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  mainblock:
+    note: 城镇创建时自动产生的方块结构。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  bank:
+    note: 城镇和联邦的“银行”。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  storage:
+    note: 城镇核心中的虚拟物品空间。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  upkeep:
+    note: 城镇和联邦定期向服务器支付的款项。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  taxes:
+    note: 成员定期向所属城镇或联邦支付的款项。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  relation:
+    note: 城镇、联邦等在战争中的关系。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  ally:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  enemy:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  neutral:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  war:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  capture-block-or-flag:
+    note: 战争中攻方用于占领守方领土的信标道具；此完整短语不等同于普通动词 capture。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  attacker:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  defender:
+    note: README 将该词列为 Lands 玩法中的领域术语。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  tribute:
+    note: 一方投降后向另一方支付的款项。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  shield:
+    note: 保护城镇或联邦免于战争的一段时间。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  declare-noun:
+    note: 名词义，常见完整短语为 war declaration。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表
+  declare-verb:
+    note: 动词义，常见完整短语为 declare war。
+    sourceRefs:
+      - path: README.md
+        commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
+        section: 术语表

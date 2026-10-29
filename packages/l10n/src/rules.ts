@@ -17,7 +17,6 @@ import type {
   Severity,
   RuleInputDependency,
 } from "#/model";
-import { terminologyRule, translationStyleRule } from "#/terminology-rules";
 import { translationConsistencyRule } from "#/translation-consistency";
 import { canonicalJson, compareText, deepFreeze, sha256 } from "#/value";
 
@@ -79,8 +78,6 @@ const structureRule: CheckRule = {
 export const builtInRules: readonly CheckRule[] = [
   structureRule,
   miniMessageVariablesRule,
-  terminologyRule,
-  translationStyleRule,
   legacyVariableRule,
   mapHtmlRule,
   mapHtmlSourceLimitRule,

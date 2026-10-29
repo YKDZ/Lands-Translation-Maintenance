@@ -1,0 +1,333 @@
+concepts:
+  nation:
+    expressions:
+      - id: en-US-nation
+        text: nation
+        usage: allowed
+      - id: en-US-nations
+        text: nations
+        usage: allowed
+  capital:
+    expressions:
+      - id: en-US-capital
+        text: capital
+        usage: allowed
+      - id: en-US-capitals
+        text: capitals
+        usage: allowed
+  land:
+    expressions:
+      - id: en-US-land
+        text: land
+        usage: allowed
+      - id: en-US-lands
+        text: lands
+        usage: allowed
+  area:
+    expressions:
+      - id: en-US-area
+        text: area
+        usage: allowed
+      - id: en-US-areas
+        text: areas
+        usage: allowed
+  camp:
+    expressions:
+      - id: en-US-camp
+        text: camp
+        usage: allowed
+      - id: en-US-camps
+        text: camps
+        usage: allowed
+  wilderness:
+    expressions:
+      - id: en-US-wilderness
+        text: wilderness
+        usage: allowed
+  role:
+    expressions:
+      - id: en-US-role
+        text: role
+        usage: allowed
+      - id: en-US-roles
+        text: roles
+        usage: allowed
+  owner:
+    expressions:
+      - id: en-US-owner
+        text: owner
+        usage: allowed
+      - id: en-US-owners
+        text: owners
+        usage: allowed
+  tenant:
+    expressions:
+      - id: en-US-tenant
+        text: tenant
+        usage: allowed
+      - id: en-US-tenants
+        text: tenants
+        usage: allowed
+  trust:
+    expressions:
+      - id: en-US-trust
+        text: trust
+        usage: allowed
+      - id: en-US-trusts
+        text: trusts
+        usage: allowed
+      - id: en-US-trusted
+        text: trusted
+        usage: allowed
+      - id: en-US-trusting
+        text: trusting
+        usage: allowed
+  trusted-player:
+    expressions:
+      - id: en-US-trusted-player
+        text: trusted player
+        usage: allowed
+      - id: en-US-trusted-players
+        text: trusted players
+        usage: allowed
+  untrust:
+    expressions:
+      - id: en-US-untrust
+        text: untrust
+        usage: allowed
+      - id: en-US-untrusted
+        text: untrusted
+        usage: allowed
+      - id: en-US-untrusting
+        text: untrusting
+        usage: allowed
+  claim-verb:
+    expressions:
+      - id: en-US-claim
+        text: claim
+        usage: allowed
+      - id: en-US-claims
+        text: claims
+        usage: allowed
+      - id: en-US-claimed
+        text: claimed
+        usage: allowed
+      - id: en-US-claiming
+        text: claiming
+        usage: allowed
+  claim-noun:
+    expressions:
+      - id: en-US-claim
+        text: claim
+        usage: allowed
+      - id: en-US-claims
+        text: claims
+        usage: allowed
+  unclaim:
+    expressions:
+      - id: en-US-unclaim
+        text: unclaim
+        usage: allowed
+      - id: en-US-unclaims
+        text: unclaims
+        usage: allowed
+      - id: en-US-unclaimed
+        text: unclaimed
+        usage: allowed
+      - id: en-US-unclaiming
+        text: unclaiming
+        usage: allowed
+  natural-settings:
+    expressions:
+      - id: en-US-natural-flag
+        text: natural flag
+        usage: allowed
+      - id: en-US-natural-flags
+        text: natural flags
+        usage: allowed
+      - id: en-US-natural-setting
+        text: natural setting
+        usage: allowed
+      - id: en-US-natural-settings
+        text: natural settings
+        usage: allowed
+  role-settings:
+    expressions:
+      - id: en-US-role-flag
+        text: role flag
+        usage: allowed
+      - id: en-US-role-flags
+        text: role flags
+        usage: allowed
+      - id: en-US-role-setting
+        text: role setting
+        usage: allowed
+      - id: en-US-role-settings
+        text: role settings
+        usage: allowed
+  mainblock:
+    expressions:
+      - id: en-US-mainblock
+        text: mainblock
+        usage: allowed
+      - id: en-US-mainblocks
+        text: mainblocks
+        usage: allowed
+      - id: en-US-main-block
+        text: main block
+        usage: allowed
+      - id: en-US-main-blocks
+        text: main blocks
+        usage: allowed
+  bank:
+    expressions:
+      - id: en-US-bank
+        text: bank
+        usage: allowed
+      - id: en-US-banks
+        text: banks
+        usage: allowed
+  storage:
+    expressions:
+      - id: en-US-storage
+        text: storage
+        usage: allowed
+  upkeep:
+    expressions:
+      - id: en-US-upkeep
+        text: upkeep
+        usage: allowed
+  taxes:
+    expressions:
+      - id: en-US-tax
+        text: tax
+        usage: allowed
+      - id: en-US-taxes
+        text: taxes
+        usage: allowed
+  relation:
+    expressions:
+      - id: en-US-relation
+        text: relation
+        usage: allowed
+      - id: en-US-relations
+        text: relations
+        usage: allowed
+  ally:
+    expressions:
+      - id: en-US-ally
+        text: ally
+        usage: allowed
+      - id: en-US-allies
+        text: allies
+        usage: allowed
+  enemy:
+    expressions:
+      - id: en-US-enemy
+        text: enemy
+        usage: allowed
+      - id: en-US-enemies
+        text: enemies
+        usage: allowed
+  neutral:
+    expressions:
+      - id: en-US-neutral
+        text: neutral
+        usage: allowed
+      - id: en-US-neutrals
+        text: neutrals
+        usage: allowed
+  war:
+    expressions:
+      - id: en-US-war
+        text: war
+        usage: allowed
+      - id: en-US-wars
+        text: wars
+        usage: allowed
+  capture-block-or-flag:
+    expressions:
+      - id: en-US-capture-block
+        text: capture block
+        usage: allowed
+      - id: en-US-capture-blocks
+        text: capture blocks
+        usage: allowed
+      - id: en-US-capture-flag
+        text: capture flag
+        usage: allowed
+      - id: en-US-capture-flags
+        text: capture flags
+        usage: allowed
+  attacker:
+    expressions:
+      - id: en-US-attacker
+        text: attacker
+        usage: allowed
+      - id: en-US-attackers
+        text: attackers
+        usage: allowed
+  defender:
+    expressions:
+      - id: en-US-defender
+        text: defender
+        usage: allowed
+      - id: en-US-defenders
+        text: defenders
+        usage: allowed
+  tribute:
+    expressions:
+      - id: en-US-tribute
+        text: tribute
+        usage: allowed
+      - id: en-US-tributes
+        text: tributes
+        usage: allowed
+  shield:
+    expressions:
+      - id: en-US-shield
+        text: shield
+        usage: allowed
+      - id: en-US-shields
+        text: shields
+        usage: allowed
+  declare-noun:
+    expressions:
+      - id: en-US-declaration
+        text: declaration
+        usage: allowed
+      - id: en-US-declarations
+        text: declarations
+        usage: allowed
+      - id: en-US-war-declaration
+        text: war declaration
+        usage: allowed
+      - id: en-US-war-declarations
+        text: war declarations
+        usage: allowed
+  declare-verb:
+    expressions:
+      - id: en-US-declare
+        text: declare
+        usage: allowed
+      - id: en-US-declares
+        text: declares
+        usage: allowed
+      - id: en-US-declared
+        text: declared
+        usage: allowed
+      - id: en-US-declaring
+        text: declaring
+        usage: allowed
+      - id: en-US-declare-war
+        text: declare war
+        usage: allowed
+      - id: en-US-declares-war
+        text: declares war
+        usage: allowed
+      - id: en-US-declared-war
+        text: declared war
+        usage: allowed
+      - id: en-US-declaring-war
+        text: declaring war
+        usage: allowed

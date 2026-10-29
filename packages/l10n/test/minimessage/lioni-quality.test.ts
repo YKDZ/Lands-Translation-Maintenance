@@ -188,7 +188,47 @@ async function createQualityProject(
   await Promise.all([
     mkdir(join(directory, ".l10n"), { recursive: true }),
     mkdir(join(directory, ".lioni"), { recursive: true }),
+    mkdir(join(directory, ".lioni/terms"), { recursive: true }),
     mkdir(join(directory, "Locale"), { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(
+      join(directory, ".lioni/terms/concepts.yaml"),
+      [
+        "concepts:",
+        "  fixture-word:",
+        "    note: 用于 QA 测试夹具。",
+        "    sourceRefs:",
+        "      - path: test fixture",
+        '        commit: "fixture"',
+        "        section: terms",
+        "",
+      ].join("\n"),
+    ),
+    writeFile(
+      join(directory, ".lioni/terms/en-US.yaml"),
+      [
+        "concepts:",
+        "  fixture-word:",
+        "    expressions:",
+        "      - id: en-US-fixture-word",
+        "        text: fixture phrase",
+        "        usage: allowed",
+        "",
+      ].join("\n"),
+    ),
+    writeFile(
+      join(directory, ".lioni/terms/zh-CN.yaml"),
+      [
+        "concepts:",
+        "  fixture-word:",
+        "    expressions:",
+        "      - id: zh-CN-夹具短语",
+        "        text: 夹具短语",
+        "        usage: allowed",
+        "",
+      ].join("\n"),
+    ),
   ]);
   await writeFile(
     join(directory, ".l10n/config.yml"),
