@@ -284,12 +284,6 @@ void describe("跨消息翻译一致性", () => {
     const partialParticipants = JSON.stringify(partialFinding.actual);
     assert.match(partialParticipants, /greeting/u);
     assert.match(partialParticipants, /entries/u);
-    assert.ok(
-      (partialReport.diagnostics as readonly Record<string, unknown>[]).some(
-        (diagnostic) => diagnostic.code === "minimessage.syntax-invalid",
-      ),
-      partialCheck.stderr || partialCheck.stdout,
-    );
   });
 
   void it("按正式交互归属配对重排的悬浮文档", async (t) => {
@@ -1541,7 +1535,7 @@ void describe("跨消息翻译一致性", () => {
     const configuration = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-syntax:\n    enabled: false\n  minimessage-tags:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  terminology:\n    enabled: false\n  translation-style:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
+      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-tags:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  terminology:\n    enabled: false\n  translation-style:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
     );
     const disabledCheck = runCliWithoutJava(
       "check",

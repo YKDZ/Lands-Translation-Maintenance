@@ -34,7 +34,6 @@ import { parseYaml } from "#/yaml-data";
 
 const lioniJsonSchema = z.json();
 type LioniJson = z.infer<typeof lioniJsonSchema>;
-export type LandsJson = LioniJson;
 
 const messageUnitSchema = z
   .object({
@@ -128,6 +127,7 @@ export type LandsTranslation = z.infer<typeof translationSchema>;
 export type UnavailableTranslation = z.infer<
   typeof unavailableTranslationSchema
 >;
+export type LandsJson = LioniJson;
 
 interface FieldEntry {
   readonly path: readonly string[];

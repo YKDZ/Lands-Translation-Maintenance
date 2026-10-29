@@ -1,10 +1,5 @@
-import type { ProjectFileIssue, ResourceInventoryEntry } from "#/model";
-import { parseYaml } from "#/yaml-data";
-
-export interface MiniMessageThemeSnapshot {
-  readonly file: string;
-  readonly source: string;
-}
+import type { MiniMessageThemeSnapshot } from "#/mini-message-model";
+import type { ResourceInventoryEntry } from "#/model";
 
 export interface CapturedMiniMessageTheme {
   readonly theme?: MiniMessageThemeSnapshot;
@@ -43,11 +38,4 @@ export function captureMiniMessageTheme(
     ambiguousFiles: [],
     unavailableFiles: [],
   };
-}
-
-export function validateMiniMessageThemeYaml(
-  theme: MiniMessageThemeSnapshot,
-): readonly ProjectFileIssue[] {
-  const parsed = parseYaml(theme.source, theme.file);
-  return parsed.ok ? [] : parsed.issues;
 }

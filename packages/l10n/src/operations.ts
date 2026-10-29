@@ -15,13 +15,10 @@ import {
 } from "#/exceptions";
 import { readJarResources } from "#/jar";
 import { collectMessages } from "#/messages";
+import type { MiniMessageThemeSnapshot } from "#/mini-message-model";
 import { parseMiniMessages } from "#/minimessage";
 import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
-import {
-  captureMiniMessageTheme,
-  validateMiniMessageThemeYaml,
-  type MiniMessageThemeSnapshot,
-} from "#/minimessage-theme";
+import { captureMiniMessageTheme } from "#/minimessage-theme";
 import type {
   CheckCoverage,
   CheckRule,
@@ -82,6 +79,7 @@ import {
   type FileSnapshot,
   type FileWrite,
 } from "#/transaction";
+import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { translationReviewRule } from "#/translation-review";
 import { canonicalJson, compareText, sameValue, sha256 } from "#/value";
 import { parseYaml, setDocumentPath, valueAtPath } from "#/yaml-data";
@@ -253,46 +251,11 @@ function requireConfiguration(source: string) {
   return result.value;
 }
 
-function requireMiniMessageTheme(
+function miniMessageThemeForBaseline(
   resources: readonly ResourceInventoryEntry[],
   resourceBytes: ReadonlyMap<string, Uint8Array>,
 ): MiniMessageThemeSnapshot | undefined {
-  const captured = captureMiniMessageTheme(resources, resourceBytes);
-  if (captured.ambiguousFiles.length > 0) {
-    throw new ProjectOperationError(
-      `主题资源不唯一：${captured.ambiguousFiles.join("、")}`,
-      "minimessage.theme-ambiguous",
-      { file: captured.ambiguousFiles[0]!, path: [] },
-    );
-  }
-  if (captured.unavailableFiles.length > 0) {
-    throw new ProjectOperationError(
-      `无法读取主题资源：${captured.unavailableFiles.join("、")}`,
-      "minimessage.theme-unavailable",
-      { file: captured.unavailableFiles[0]!, path: [] },
-    );
-  }
-  if (captured.theme === undefined) return undefined;
-
-  const issues = validateMiniMessageThemeYaml(captured.theme);
-  if (issues.length === 0) return captured.theme;
-  const details = issues
-    .map(
-      (issue) =>
-        `${issue.file}${issue.path.length === 0 ? "" : `:${issue.path.join(".")}`}：${issue.reason}`,
-    )
-    .join("；");
-  const firstIssue = issues[0]!;
-  throw new ProjectOperationError(
-    `主题 YAML 无法安全读取：${details}`,
-    firstIssue.code,
-    {
-      file: firstIssue.file,
-      path: firstIssue.path,
-      ...(firstIssue.line === undefined ? {} : { line: firstIssue.line }),
-      ...(firstIssue.column === undefined ? {} : { column: firstIssue.column }),
-    },
-  );
+  return captureMiniMessageTheme(resources, resourceBytes).theme;
 }
 
 function readYaml(bytes: Uint8Array, file: string) {
@@ -1220,6 +1183,42 @@ function translatableTextCoverageUnavailable(
 ): readonly string[] {
   const parsed = view.miniMessage;
   if (parsed === undefined) return [];
+  const expectedTextKeys = new Set<string>();
+  for (const document of parsed.documents) {
+    const listItems = document.listItems;
+    const paths =
+      listItems === undefined
+        ? [document.path]
+        : document.parent === undefined
+          ? listItems.map(({ path }) => path)
+          : listItems
+              .filter(
+                ({ position }) =>
+                  position.start <= document.range.start &&
+                  document.range.end <= position.end,
+              )
+              .map(({ path }) => path);
+    for (const path of paths) {
+      expectedTextKeys.add(
+        canonicalJson({
+          messageId: document.message.id,
+          path,
+          documentIndex: document.documentIndex,
+          origin: document.origin,
+        }),
+      );
+    }
+  }
+  const actualTextKeys = new Set(
+    parsed.translatableText.map((document) =>
+      canonicalJson({
+        messageId: document.message.id,
+        path: document.path,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+      }),
+    ),
+  );
   const sourceKeys = new Set(
     parsed.translatableText
       .filter((document) => document.origin === "source")
@@ -1242,29 +1241,13 @@ function translatableTextCoverageUnavailable(
         }),
       ),
   );
-  const translatableKeys = new Set(
-    parsed.translatableText.map((document) =>
-      canonicalJson({
-        messageId: document.message.id,
-        path: document.path,
-        documentIndex: document.documentIndex,
-        origin: document.origin,
-      }),
-    ),
-  );
+  const pairing = pairTranslatableTextDocuments(parsed);
   if (
+    expectedTextKeys.size !== actualTextKeys.size ||
+    [...expectedTextKeys].some((key) => !actualTextKeys.has(key)) ||
+    parsed.incompleteFacts.length > 0 ||
+    pairing.incomplete.length > 0 ||
     parsed.documents.some((document) => document.status !== "parsed") ||
-    parsed.documents.some(
-      (document) =>
-        !translatableKeys.has(
-          canonicalJson({
-            messageId: document.message.id,
-            path: document.path,
-            documentIndex: document.documentIndex,
-            origin: document.origin,
-          }),
-        ),
-    ) ||
     [...sourceKeys].some((key) => !targetKeys.has(key)) ||
     [...targetKeys].some((key) => !sourceKeys.has(key))
   ) {
@@ -1351,7 +1334,7 @@ export async function initializeProject(
   const jarByPath = new Map(
     jar.resources.map((resource) => [resource.path, resource.bytes]),
   );
-  const miniMessageTheme = requireMiniMessageTheme(
+  const miniMessageTheme = miniMessageThemeForBaseline(
     configuration.resources,
     jarByPath,
   );
@@ -1754,12 +1737,17 @@ async function evaluateSavedProject(
     enabledRulesRequireInput(loaded.configuration, "minimessage-parse", rules)
       ? {
           ...loaded.view,
-          miniMessage: await parseMiniMessages(
-            loaded.view.messages,
-            loaded.view.resources,
-            loaded.baseline.miniMessageTheme,
-            loaded.configuration.source.version,
-          ),
+          miniMessage: await parseMiniMessages({
+            messages: loaded.view.messages,
+            resources: loaded.view.resources,
+            theme: {
+              ...(loaded.baseline.miniMessageTheme === undefined
+                ? {}
+                : { theme: loaded.baseline.miniMessageTheme }),
+              issues: [],
+            },
+            sourceVersion: loaded.configuration.source.version,
+          }),
         }
       : loaded.view;
   // 翻译状态检查先形成结论；通用例外匹配结果随后参与状态派生和质量检查。
@@ -1890,12 +1878,28 @@ function requiredInputDependencyUnavailable(
   }
   if (current === undefined) return false;
 
+  // GUI lore 共享根文档，正文项按投影位置映射回各列表路径。
+  const documentMatchesPath = (
+    document: NonNullable<typeof miniMessage>["documents"][number],
+  ) => {
+    if (canonicalJson(document.path) === canonicalJson(dependency.path))
+      return true;
+    const item = document.listItems?.find(
+      ({ path }) => canonicalJson(path) === canonicalJson(dependency.path),
+    );
+    return (
+      item !== undefined &&
+      (document.parent === undefined ||
+        (item.position.start <= document.range.start &&
+          document.range.end <= item.position.end))
+    );
+  };
   const documentsForDependency = miniMessage.documents.filter(
     (document) =>
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === dependency.documentIndex &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      documentMatchesPath(document),
   );
   if (documentsForDependency.length > 0) {
     return documentsForDependency.some(
@@ -1909,7 +1913,7 @@ function requiredInputDependencyUnavailable(
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === 0 &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      documentMatchesPath(document),
   );
   return (
     rootDocuments.length === 0 ||

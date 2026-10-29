@@ -14,24 +14,29 @@ import {
   mapHtmlTagRanges,
   supportsMapHtmlVersion,
 } from "#/map-html";
-import { translationFallbackSegment } from "#/minimessage-text";
 import type {
   AdaptedMiniMessageInput,
-  JsonValue,
   MiniMessageContextFrame,
   MiniMessageFinding,
+  MiniMessageIncompleteFact,
+  MiniMessageInputMessage,
+  MiniMessageListItemRange,
   MiniMessageParseProject,
   MiniMessagePosition,
+  MiniMessageProjectionInput,
   MiniMessageSourceNode,
   MiniMessageSurface,
   MiniMessageTagNode,
   MiniMessageThemeEntry,
   MiniMessageThemeSnapshot,
-  ObservedMessage,
   ParsedMiniMessageDocument,
-  ResourceInventoryEntry,
   TranslatableTextDocument,
   TranslatableTextSegment,
+} from "#/mini-message-model";
+import { translationFallbackSegment } from "#/minimessage-text";
+import type {
+  JsonValue,
+  ResourceInventoryEntry as LandsResourceInventoryEntry,
 } from "#/model";
 import { parseYaml } from "#/yaml-data";
 
@@ -46,12 +51,13 @@ interface ThemeDefinition {
 
 interface MessageInput {
   readonly index: number;
-  readonly message: ObservedMessage;
+  readonly message: MiniMessageInputMessage;
   readonly origin: "source" | "target";
   readonly surface: MiniMessageSurface;
   readonly file: string;
   readonly path: readonly (string | number)[];
   readonly input: string;
+  readonly listItems?: readonly MiniMessageListItemRange[];
   readonly adapted: AdaptedMiniMessageInput;
   readonly legacyAdapterUnsupported: boolean;
   readonly legacyIssues: readonly {
@@ -300,13 +306,78 @@ function themeFinding(
   expected: JsonValue,
   actual: JsonValue,
 ): MiniMessageFinding {
+  const position = positionFromJsonValue(actual);
   return {
     code,
     origin: "theme",
     location: { file, path },
+    ...(position === undefined ? {} : { position }),
     reason,
     expected,
     actual,
+  };
+}
+
+function positionFromJsonValue(
+  value: JsonValue,
+): MiniMessagePosition | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.start === "number" &&
+    Number.isSafeInteger(value.start) &&
+    typeof value.end === "number" &&
+    Number.isSafeInteger(value.end)
+  ) {
+    return { start: value.start, end: value.end };
+  }
+  const position = value.position;
+  if (
+    isRecord(position) &&
+    typeof position.start === "number" &&
+    Number.isSafeInteger(position.start) &&
+    typeof position.end === "number" &&
+    Number.isSafeInteger(position.end)
+  ) {
+    return { start: position.start, end: position.end };
+  }
+  if (
+    typeof position === "number" &&
+    Number.isSafeInteger(position) &&
+    typeof value.tag === "string"
+  ) {
+    return { start: position, end: position + value.tag.length };
+  }
+  return undefined;
+}
+
+function inputLocation(
+  input: MessageInput,
+  location: {
+    readonly file: string;
+    readonly path: readonly (string | number)[];
+  },
+  position: MiniMessagePosition | undefined,
+): {
+  readonly location: {
+    readonly file: string;
+    readonly path: readonly (string | number)[];
+  };
+  readonly position?: MiniMessagePosition;
+} {
+  if (position === undefined || input.listItems === undefined) {
+    return { location, ...(position === undefined ? {} : { position }) };
+  }
+  const item = input.listItems.find(
+    ({ position: itemPosition }) =>
+      itemPosition.start <= position.start && position.end <= itemPosition.end,
+  );
+  if (item === undefined) return { location, position };
+  return {
+    location: { ...location, path: item.path },
+    position: {
+      start: position.start - item.position.start,
+      end: position.end - item.position.start,
+    },
   };
 }
 
@@ -465,8 +536,8 @@ function parseTheme(
 }
 
 function messageSurface(
-  message: ObservedMessage,
-  resourcePurpose: ReadonlyMap<string, ResourceInventoryEntry["purpose"]>,
+  message: MiniMessageInputMessage,
+  resourcePurpose: ReadonlyMap<string, LandsResourceInventoryEntry["purpose"]>,
 ): MiniMessageSurface {
   if (message.scene !== undefined && guiScenes.has(message.scene)) return "gui";
   if (message.scene !== undefined && dialogScenes.has(message.scene))
@@ -490,7 +561,7 @@ function messageSurface(
   return "chat";
 }
 
-function usesMiniMessage(message: ObservedMessage): boolean {
+export function usesMiniMessage(message: MiniMessageInputMessage): boolean {
   if (message.format !== undefined)
     return (
       message.format.includes("minimessage") ||
@@ -503,8 +574,8 @@ function usesMiniMessage(message: ObservedMessage): boolean {
 }
 
 function messagesToParseInputs(
-  messages: readonly ObservedMessage[],
-  resources: readonly ResourceInventoryEntry[],
+  messages: readonly MiniMessageInputMessage[],
+  resources: readonly LandsResourceInventoryEntry[],
   sourceVersion: string,
 ): readonly MessageInput[] {
   const purposes = new Map(
@@ -514,12 +585,13 @@ function messagesToParseInputs(
   let nextIndex = 0;
 
   function appendInput(
-    message: ObservedMessage,
+    message: MiniMessageInputMessage,
     origin: "source" | "target",
     surface: MiniMessageSurface,
     file: string,
     path: readonly (string | number)[],
     input: string,
+    listItems?: readonly MiniMessageListItemRange[],
   ): void {
     const isLegacyColor = message.format?.includes("legacy-color") ?? false;
     const legacy = isLegacyColor
@@ -543,6 +615,7 @@ function messagesToParseInputs(
       file,
       path,
       input,
+      ...(listItems === undefined ? {} : { listItems }),
       adapted,
       legacyAdapterUnsupported: isLegacyColor && legacy === undefined,
       legacyIssues: legacy?.issues ?? [],
@@ -584,7 +657,24 @@ function messagesToParseInputs(
           origin === "source" ? message.sourceFile : message.targetFile;
         if (message.category === "gui-lore") {
           const input = value.join("<newline>");
-          appendInput(message, origin, surface, file, message.path, input);
+          const listItems: MiniMessageListItemRange[] = [];
+          let start = 0;
+          for (const [itemIndex, item] of value.entries()) {
+            listItems.push({
+              path: [...message.path, itemIndex],
+              position: { start, end: start + item.length },
+            });
+            start += item.length + "<newline>".length;
+          }
+          appendInput(
+            message,
+            origin,
+            surface,
+            file,
+            message.path,
+            input,
+            listItems,
+          );
         } else {
           for (const [itemIndex, item] of value.entries()) {
             const itemPath = [...message.path, itemIndex];
@@ -1016,13 +1106,22 @@ function findingForMessage(
   identity?: JsonValue,
   fingerprint?: JsonValue,
 ): MiniMessageFinding {
+  const sourceLocation = { file: input.file, path: input.path };
+  const positioned = inputLocation(
+    input,
+    sourceLocation,
+    positionFromJsonValue(actual) ?? positionFromJsonValue(expected),
+  );
   return {
     code,
     ...(identity === undefined ? {} : { identity }),
     ...(fingerprint === undefined ? {} : { fingerprint }),
     message: input.message,
     origin: input.origin,
-    location: { file: input.file, path: input.path },
+    location: positioned.location,
+    ...(positioned.position === undefined
+      ? {}
+      : { position: positioned.position }),
     reason,
     expected,
     actual,
@@ -1062,9 +1161,14 @@ function appendParserFindings(
   findings: MiniMessageFinding[],
   unavailable: Set<string>,
   themeDefinitions: readonly ThemeDefinition[],
+  incompleteFacts: MiniMessageIncompleteFact[],
 ): void {
   if (java.unavailable !== undefined) {
     unavailable.add(java.unavailable);
+    incompleteFacts.push({
+      code: "minimessage.java-unavailable",
+      reason: java.unavailable,
+    });
     return;
   }
   const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));
@@ -1089,8 +1193,17 @@ function appendParserFindings(
       ]),
   );
   for (const warning of java.warnings) {
-    if (inputsByIndex.has(warning.messageIndex))
+    const input = inputsByIndex.get(warning.messageIndex);
+    if (input !== undefined) {
       unavailable.add(warning.reason);
+      incompleteFacts.push({
+        code: "minimessage.parser-warning",
+        message: input.message,
+        origin: input.origin,
+        location: { file: input.file, path: input.path },
+        reason: warning.reason,
+      });
+    }
   }
   const seenOccurrences = new Set<string>();
   const occurrenceIndices = new Map<string, number>();
@@ -1098,15 +1211,28 @@ function appendParserFindings(
   for (const input of inputs) {
     const result = java.messages.get(input.index);
     if (result === undefined) {
-      unavailable.add(
-        "官方 MiniMessage 辅助程序未返回全部消息结果；完整检查未完成",
-      );
+      const reason =
+        "官方 MiniMessage 辅助程序未返回全部消息结果；完整检查未完成";
+      unavailable.add(reason);
+      incompleteFacts.push({
+        code: "minimessage.result-missing",
+        message: input.message,
+        origin: input.origin,
+        location: { file: input.file, path: input.path },
+        reason,
+      });
       continue;
     }
     if (result.status === "failed") {
-      unavailable.add(
-        `官方 MiniMessage 解析器处理消息失败：${result.error ?? "未知运行时错误"}`,
-      );
+      const reason = `官方 MiniMessage 解析器处理消息失败：${result.error ?? "未知运行时错误"}`;
+      unavailable.add(reason);
+      incompleteFacts.push({
+        code: "minimessage.parser-failed",
+        message: input.message,
+        origin: input.origin,
+        location: { file: input.file, path: input.path },
+        reason,
+      });
       continue;
     }
     if (result.status === "invalid") {
@@ -1140,7 +1266,15 @@ function appendParserFindings(
     const occurrenceIndex = occurrenceIndices.get(occurrenceKey) ?? 0;
     occurrenceIndices.set(occurrenceKey, occurrenceIndex + 1);
     if (unresolved.position < 0) {
+      const reason = "存在 MiniMessage 解析诊断无法可靠映射回原文位置";
       unavailable.add("存在 MiniMessage 解析诊断无法可靠映射回原文位置");
+      incompleteFacts.push({
+        code: "minimessage.position-unmapped",
+        message: input.message,
+        origin: input.origin,
+        location: { file: input.file, path: input.path },
+        reason,
+      });
     }
     const context: JsonValue = unresolved.context.map(
       (frame) =>
@@ -1257,6 +1391,17 @@ function appendParserFindings(
       ),
     );
     unavailable.add("存在尚未识别的自定义 MiniMessage 标签");
+    incompleteFacts.push({
+      code: "minimessage.extension-unrecognized",
+      message: input.message,
+      origin: input.origin,
+      location: inputLocation(
+        input,
+        { file: input.file, path: input.path },
+        positionFromJsonValue(actualTag),
+      ).location,
+      reason: "存在尚未识别的自定义 MiniMessage 标签",
+    });
   }
 }
 
@@ -1500,18 +1645,123 @@ function translatableTextDocuments(
     ParsedMiniMessageDocument,
     readonly TranslatableTextSegment[]
   >,
-): readonly TranslatableTextDocument[] {
-  return documents.map((document) => ({
-    message: document.message,
-    documentIndex: document.documentIndex,
-    origin: document.origin,
-    file: document.file,
-    path: document.path,
-    surface: document.surface,
-    range: document.range,
-    context: document.context,
-    segments: mapSegments.get(document) ?? translatableSegments(document),
-  }));
+): {
+  readonly documents: readonly TranslatableTextDocument[];
+  readonly incompleteFacts: readonly MiniMessageIncompleteFact[];
+} {
+  const output: TranslatableTextDocument[] = [];
+  const incompleteFacts: MiniMessageIncompleteFact[] = [];
+  for (const document of documents) {
+    const segments =
+      mapSegments.get(document) ?? translatableSegments(document);
+    const listItems = document.listItems;
+    if (listItems === undefined) {
+      output.push({
+        message: document.message,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+        file: document.file,
+        path: document.path,
+        surface: document.surface,
+        range: document.range,
+        context: document.context,
+        segments,
+      });
+      continue;
+    }
+    if (listItems.length === 0) continue;
+
+    const itemForRange = (position: MiniMessagePosition) =>
+      listItems.find(
+        (item) =>
+          item.position.start <= position.start &&
+          position.end <= item.position.end,
+      );
+    const localizeSegments = (
+      item: MiniMessageListItemRange,
+      candidates: readonly TranslatableTextSegment[],
+    ): readonly TranslatableTextSegment[] =>
+      candidates.flatMap((segment) => {
+        if (
+          segment.position.start < item.position.start ||
+          segment.position.end > item.position.end
+        ) {
+          return [];
+        }
+        return [
+          {
+            ...segment,
+            position: {
+              start: segment.position.start - item.position.start,
+              end: segment.position.end - item.position.start,
+            },
+          },
+        ];
+      });
+
+    if (document.parent === undefined) {
+      for (const item of listItems) {
+        const itemSegments = segments.filter(
+          (segment) =>
+            item.position.start <= segment.position.start &&
+            segment.position.end <= item.position.end,
+        );
+        output.push({
+          message: document.message,
+          documentIndex: document.documentIndex,
+          origin: document.origin,
+          file: document.file,
+          path: item.path,
+          surface: document.surface,
+          range: {
+            start: 0,
+            end: item.position.end - item.position.start,
+          },
+          context: document.context,
+          segments: localizeSegments(item, itemSegments),
+        });
+      }
+      continue;
+    }
+
+    const item = itemForRange(document.range);
+    if (item === undefined) {
+      incompleteFacts.push({
+        code: "minimessage.list-position-unmapped",
+        message: document.message,
+        origin: document.origin,
+        location: { file: document.file, path: document.path },
+        reason: "嵌套 MiniMessage 文档无法唯一回映到 GUI lore 列表项",
+      });
+      output.push({
+        message: document.message,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+        file: document.file,
+        path: document.path,
+        surface: document.surface,
+        range: document.range,
+        context: document.context,
+        segments,
+      });
+      continue;
+    }
+    output.push({
+      message: document.message,
+      documentIndex: document.documentIndex,
+      origin: document.origin,
+      file: document.file,
+      path: item.path,
+      surface: document.surface,
+      range: {
+        start: document.range.start - item.position.start,
+        end: document.range.end - item.position.start,
+      },
+      context: document.context,
+      segments: localizeSegments(item, segments),
+    });
+  }
+  return { documents: output, incompleteFacts };
 }
 
 function appendMapVariableFindings(
@@ -1606,17 +1856,16 @@ function appendMapVariableFindings(
 }
 
 export async function parseMiniMessages(
-  messages: readonly ObservedMessage[],
-  resources: readonly ResourceInventoryEntry[],
-  themeSnapshot?: MiniMessageThemeSnapshot,
-  sourceVersion = "",
+  input: MiniMessageProjectionInput,
 ): Promise<MiniMessageParseProject> {
-  const theme = parseTheme(themeSnapshot);
+  const { messages, resources, sourceVersion, theme: themeInput } = input;
+  const theme = parseTheme(themeInput.theme);
   const inputs = messagesToParseInputs(messages, resources, sourceVersion);
   const java = await runOfficialParser(theme.definitions, inputs);
   const findings = [...theme.findings];
   const mapFindings: MiniMessageFinding[] = [];
   const unavailable = new Set<string>();
+  const incompleteFacts: MiniMessageIncompleteFact[] = [...themeInput.issues];
   const legacyIssueOccurrences = new Map<string, number>();
   for (const input of inputs) {
     if (input.legacyAdapterUnsupported) {
@@ -1668,9 +1917,13 @@ export async function parseMiniMessages(
     for (const definition of theme.definitions) {
       const result = java.themes.get(definition.index);
       if (result === undefined) {
-        unavailable.add(
-          "官方 MiniMessage 辅助程序未返回全部主题结果；完整检查未完成",
-        );
+        const reason =
+          "官方 MiniMessage 辅助程序未返回全部主题结果；完整检查未完成";
+        unavailable.add(reason);
+        incompleteFacts.push({
+          code: "minimessage.theme-result-missing",
+          reason,
+        });
       } else if (!result.ok) {
         findings.push(
           themeFinding(
@@ -1690,7 +1943,14 @@ export async function parseMiniMessages(
       }
     }
   }
-  appendParserFindings(inputs, java, findings, unavailable, theme.definitions);
+  appendParserFindings(
+    inputs,
+    java,
+    findings,
+    unavailable,
+    theme.definitions,
+    incompleteFacts,
+  );
   const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));
   const documentResults: ParsedMiniMessageDocument[] = [];
   const rootDocuments = new Set<number>();
@@ -1720,6 +1980,7 @@ export async function parseMiniMessages(
       nodes: parsed.nodes,
       context: parsed.context,
       ...(parent === undefined ? {} : { parent }),
+      ...(input.listItems === undefined ? {} : { listItems: input.listItems }),
     });
     if (parsed.parentDocumentIndex < 0) rootDocuments.add(input.index);
   }
@@ -1741,6 +2002,7 @@ export async function parseMiniMessages(
         : { plainText: result.plainText }),
       nodes: [],
       context: [],
+      ...(input.listItems === undefined ? {} : { listItems: input.listItems }),
     });
   }
   appendMapVariableFindings(
@@ -1796,16 +2058,44 @@ export async function parseMiniMessages(
     mapSegmentOverrides.set(sourceDocument, analysis.sourceSegments);
     mapSegmentOverrides.set(targetDocument, analysis.targetSegments);
   }
+  for (const reason of unavailable) {
+    incompleteFacts.push({
+      code: "minimessage.projection-incomplete",
+      reason,
+    });
+  }
+  const themeFindings = findings.filter(
+    ({ code, origin }) =>
+      origin === "theme" ||
+      code.startsWith("minimessage.theme-") ||
+      code.startsWith("theme."),
+  );
+  const formatFindings = findings.filter(({ code }) =>
+    code.startsWith("legacy-format."),
+  );
+  const syntaxFindings = findings.filter(
+    ({ code, origin }) =>
+      origin !== "theme" &&
+      !code.startsWith("legacy-format.") &&
+      !code.startsWith("minimessage.theme-") &&
+      !code.startsWith("theme."),
+  );
+  const translatableText = translatableTextDocuments(
+    documentResults,
+    mapSegmentOverrides,
+  );
+  incompleteFacts.push(...translatableText.incompleteFacts);
   return {
     sourceVersion,
     documents: documentResults,
-    translatableText: translatableTextDocuments(
-      documentResults,
-      mapSegmentOverrides,
-    ),
+    translatableText: translatableText.documents,
     themes: themeEntryResults(theme.definitions, java.themes),
     findings,
+    syntaxFindings,
+    themeFindings,
+    formatFindings,
     mapFindings,
+    incompleteFacts,
     unavailableCapabilities: [...unavailable].sort(),
   };
 }

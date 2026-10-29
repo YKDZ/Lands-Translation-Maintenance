@@ -83,7 +83,7 @@ export async function createProject(
           "",
         ].join("\n"),
       ),
-      "plugin.yml": strToU8("name: Lands\n"),
+      "plugin.yml": strToU8("name: Lands\nversion: 8.0.1\n"),
       "settings.yml": strToU8("enabled: true\n"),
       "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
       ...(options.theme === undefined
@@ -268,7 +268,9 @@ export async function createFormatProject(
   await writeFile(
     jarFile,
     zipSync({
-      "plugin.yml": strToU8("name: Lands\n"),
+      "plugin.yml": strToU8(
+        `name: Lands\nversion: ${options.sourceVersion ?? "8.0.1"}\n`,
+      ),
       "Locale/en-US.yml": strToU8(sourceLocale),
       ...(nationsSourceLocale === undefined
         ? {}
@@ -421,7 +423,9 @@ export async function createGuiProject(
   await writeFile(
     jarFile,
     zipSync({
-      "plugin.yml": strToU8("name: Lands\n"),
+      "plugin.yml": strToU8(
+        `name: Lands\nversion: ${options.sourceVersion ?? "8.0.1"}\n`,
+      ),
       "Locale/en-US_gui.yml": strToU8(source),
       "Locale/definitions_gui.yml": strToU8(definitions),
       "Locale/theme.yml": strToU8(theme),
