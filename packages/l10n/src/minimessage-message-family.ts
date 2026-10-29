@@ -40,7 +40,7 @@ import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 
 const sourceLanguage = "en-US";
-const landsMessageFamilyVersion = "lands-message-family-v1";
+const landsMessageFamilyVersion = "lands-message-family-v2";
 
 export interface LandsMessageFamilySubject extends MessageFamilySubject<
   LandsUnit,
@@ -283,13 +283,13 @@ function familyGroup(
   targetIssues: readonly MessageFamilyIssue[],
   targetKnownEmpty = false,
 ): MessageFamilyInput["groups"][number] {
+  // group.ref 仅保留文档定位；完整片段引用由两侧 fragments 承载。
   const sourceRef: JsonValue = {
     messageId: sourceDocument.message.id,
     documentIndex: sourceDocument.documentIndex,
     file: sourceDocument.file,
     path: [...sourceDocument.path],
     contextKey,
-    fragments: source.map(({ ref }) => ref),
   };
   const targetRef: JsonValue =
     targetDocument === undefined
@@ -307,7 +307,6 @@ function familyGroup(
           file: targetDocument.file,
           path: [...targetDocument.path],
           contextKey,
-          fragments: (target ?? []).map(({ ref }) => ref),
         };
   const targetComplete = targetDocument !== undefined || targetKnownEmpty;
   return {
