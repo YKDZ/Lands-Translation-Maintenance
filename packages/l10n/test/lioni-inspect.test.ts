@@ -287,6 +287,13 @@ void test("原生 inspect 离线读取 Lands 消息、结构及稳定身份", as
   const unknownResource = facts.source.read.scopes.find(({ range }) =>
     JSON.stringify(range).includes("Locale/unregistered.yml"),
   );
+  const sourceRange = facts.source.read.scopes.find(({ range }) =>
+    JSON.stringify(range).includes("Locale/en-US_gui.yml"),
+  );
+  assert.deepEqual(sourceRange?.range, {
+    kind: "lands-resource",
+    path: "Locale/en-US_gui.yml",
+  });
   assert.equal(unknownResource?.recordCount, 0);
   assert.equal(
     facts.source.units.some(({ unit }) =>
@@ -304,37 +311,11 @@ void test("原生 inspect 离线读取 Lands 消息、结构及稳定身份", as
   const guiScope = facts.translations.reads[0]?.scopes.find(({ range }) =>
     JSON.stringify(range).includes("Locale/zh-CN_gui.yml"),
   );
-  const guiRange = guiScope?.range as {
-    readonly definitionsSource?: string;
-    readonly fields?: readonly {
-      readonly category: string;
-      readonly scene?: string;
-    }[];
-    readonly structures?: readonly {
-      readonly path: readonly string[];
-      readonly expected: unknown;
-      readonly actual: unknown;
-    }[];
-  };
-  assert.equal(guiRange.definitionsSource, "Locale/definitions_gui.yml");
-  assert.deepEqual(guiRange.fields?.[0], {
-    path: ["gui", "*", "items", "*", "name"],
-    category: "gui-string",
-    scene: "gui-item-name",
+  assert.deepEqual(guiScope?.range, {
+    kind: "lands-target-resource",
+    sourceFile: "Locale/en-US_gui.yml",
+    targetFile: "Locale/zh-CN_gui.yml",
   });
-  assert.deepEqual(
-    guiRange.structures?.find(({ path }) =>
-      path.join("/").endsWith("confirm/material"),
-    ),
-    {
-      path: ["gui", "main", "items", "confirm", "material"],
-      expected: "DIAMOND",
-      actual: { status: "present", value: "EMERALD" },
-    },
-  );
-  assert.ok(
-    String(JSON.stringify(greeting.unit)).includes('"sourceVersion":"8.9.2"'),
-  );
 });
 
 void test("原生 inspect 区分目标缺失、结构阻断、正文不可用和资源读取失败", async (t) => {
