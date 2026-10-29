@@ -119,6 +119,12 @@ interface QualityProjectOptions {
   readonly targetCustomField?: boolean;
   readonly nestedStructure?: boolean;
   readonly chat?: { readonly source: string; readonly target: string };
+  readonly extraChatMessages?: readonly {
+    readonly key: string;
+    readonly source: string;
+    readonly target: string;
+  }[];
+  readonly mappedExtraChatKeys?: readonly string[];
 }
 
 function landsJar(
@@ -128,6 +134,7 @@ function landsJar(
   sourceVersion: string,
   chat: QualityProjectOptions["chat"],
   structureMaterial = "EMERALD",
+  extraChatMessages: QualityProjectOptions["extraChatMessages"] = [],
   nestedStructure = false,
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
@@ -169,7 +176,14 @@ function landsJar(
   };
   if (chat !== undefined) {
     files["Locale/en-US_messages.yml"] = strToU8(
-      `messages:\n  greeting: ${JSON.stringify(chat.source)}\n`,
+      [
+        "messages:",
+        `  greeting: ${JSON.stringify(chat.source)}`,
+        ...(extraChatMessages ?? []).map(
+          ({ key, source }) => `  ${key}: ${JSON.stringify(source)}`,
+        ),
+        "",
+      ].join("\n"),
     );
   }
   return zipSync(files);
@@ -218,8 +232,12 @@ async function createQualityProject(
           "    - source: Locale/en-US_messages.yml",
           "      target: Locale/zh-CN_messages.yml",
           "      fields:",
-          "        - path: [messages, greeting]",
-          "          category: chat-string",
+          ...["greeting", ...(options.mappedExtraChatKeys ?? [])].flatMap(
+            (key) => [
+              `        - path: [messages, ${key}]`,
+              "          category: chat-string",
+            ],
+          ),
         ]),
   ];
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
@@ -316,7 +334,14 @@ async function createQualityProject(
   if (options.chat !== undefined) {
     await writeFile(
       join(directory, "Locale/zh-CN_messages.yml"),
-      `messages:\n  greeting: ${JSON.stringify(options.chat.target)}\n`,
+      [
+        "messages:",
+        `  greeting: ${JSON.stringify(options.chat.target)}`,
+        ...(options.extraChatMessages ?? []).map(
+          ({ key, target }) => `  ${key}: ${JSON.stringify(target)}`,
+        ),
+        "",
+      ].join("\n"),
     );
   }
   const configPath = join(directory, ".lioni/lioni.config.ts");
@@ -343,6 +368,7 @@ async function createQualityProject(
       sourceVersion,
       options.chat,
       options.structureMaterial,
+      options.extraChatMessages,
       options.nestedStructure,
     ),
   );
@@ -1844,11 +1870,23 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
       sourceLore: [sourceName, "You cannot claim <v:nation>."],
       targetLore: ["无法认领<v:land>。", "不能认领<v:nation>。"],
       chat: { source: "Unrelated message", target: "无关消息" },
+      extraChatMessages: [
+        { key: "unrelated_a", source: "Save", target: "保存" },
+        { key: "unrelated_b", source: "Close", target: "关闭" },
+        {
+          key: "family_member",
+          source: sourceName,
+          target: "请勿认领<v:land>。",
+        },
+      ],
+      mappedExtraChatKeys: ["unrelated_a"],
     },
   );
   const sourceKey =
     'Locale/en-US_gui.yml:["gui","main","items","confirm","name"]';
   const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  const projectConfigPath = join(project.directory, ".lioni/project.yml");
+  const projectConfig = await readFile(projectConfigPath, "utf8");
   const initialTarget = await readFile(targetPath, "utf8");
   const initial = qualityReport(runLioni(["qa", project.configPath]));
   const sameSource = checkResult(initial.report, "message-family-same-source");
@@ -2035,6 +2073,137 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
       "applicable",
     );
   }
+
+  const assertFamilyExceptionStatus = (
+    report: QualityReport,
+    status: string,
+  ) => {
+    for (const checkId of [
+      "message-family-same-source",
+      "message-family-same-template",
+    ]) {
+      assert.equal(
+        report.exceptionApplicability.find(
+          ({ checkId: id, sourceKey: key }) =>
+            id === checkId && key === sourceKey,
+        )?.status,
+        status,
+      );
+    }
+  };
+  const chatMappingStart = projectConfig.indexOf(
+    "    - source: Locale/en-US_messages.yml\n",
+  );
+  assert.notEqual(chatMappingStart, -1);
+  const writeChatFields = async (keys: readonly string[]) => {
+    const mapping = [
+      "    - source: Locale/en-US_messages.yml",
+      "      target: Locale/zh-CN_messages.yml",
+      "      fields:",
+      ...keys.flatMap((key) => [
+        `        - path: [messages, ${key}]`,
+        "          category: chat-string",
+      ]),
+      "",
+    ].join("\n");
+    await writeFile(
+      projectConfigPath,
+      projectConfig.slice(0, chatMappingStart) + mapping,
+    );
+  };
+
+  await writeChatFields(["unrelated_b", "greeting", "unrelated_a"]);
+  const insertedAndReordered = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  assertFamilyExceptionStatus(insertedAndReordered.report, "applicable");
+  const unrelatedBKey = 'Locale/en-US_messages.yml:["messages","unrelated_b"]';
+  assert.ok(
+    checkResult(
+      insertedAndReordered.report,
+      "message-family-same-source",
+    ).executions.some(({ sourceKey: key }) => key === unrelatedBKey),
+  );
+
+  await writeChatFields(["greeting", "unrelated_a"]);
+  const removedUnrelated = qualityReport(runLioni(["qa", project.configPath]));
+  assertFamilyExceptionStatus(removedUnrelated.report, "applicable");
+  assert.equal(
+    checkResult(
+      removedUnrelated.report,
+      "message-family-same-source",
+    ).executions.some(({ sourceKey: key }) => key === unrelatedBKey),
+    false,
+  );
+
+  await writeChatFields(["greeting", "unrelated_a", "family_member"]);
+  const addedFamilyMember = qualityReport(runLioni(["qa", project.configPath]));
+  assertFamilyExceptionStatus(addedFamilyMember.report, "basis-changed");
+  assert.ok(
+    checkResult(
+      addedFamilyMember.report,
+      "message-family-same-source",
+    ).executions.some(
+      ({ sourceKey: key }) =>
+        key === 'Locale/en-US_messages.yml:["messages","family_member"]',
+    ),
+  );
+
+  await writeChatFields(["greeting", "unrelated_a"]);
+  const removedFamilyMember = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  assertFamilyExceptionStatus(removedFamilyMember.report, "applicable");
+
+  const formerlyUnrelated = await createQualityProject(
+    t,
+    undefined,
+    sourceName,
+    targetName,
+    {
+      sourceLore: [sourceName, "You cannot claim <v:nation>."],
+      targetLore: ["无法认领<v:land>。", "不能认领<v:nation>。"],
+      chat: { source: "Unrelated message", target: "无关消息" },
+      extraChatMessages: [
+        { key: "unrelated_a", source: sourceName, target: "保存" },
+        { key: "unrelated_b", source: "Close", target: "关闭" },
+        {
+          key: "family_member",
+          source: sourceName,
+          target: "请勿认领<v:land>。",
+        },
+      ],
+      mappedExtraChatKeys: ["unrelated_a"],
+    },
+  );
+  await copyFile(
+    join(project.directory, ".lioni/lioni.exceptions.yaml"),
+    join(formerlyUnrelated.directory, ".lioni/lioni.exceptions.yaml"),
+  );
+  const enteredFamily = qualityReport(
+    runLioni(["qa", formerlyUnrelated.configPath]),
+  );
+  assertFamilyExceptionStatus(enteredFamily.report, "basis-changed");
+
+  const movedTargetPath = join(project.directory, "Locale/zh-CN_gui-moved.yml");
+  await copyFile(targetPath, movedTargetPath);
+  await writeFile(
+    projectConfigPath,
+    projectConfig.replace(
+      "target: Locale/zh-CN_gui.yml",
+      "target: Locale/zh-CN_gui-moved.yml",
+    ),
+  );
+  const movedRelatedPosition = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  assertFamilyExceptionStatus(movedRelatedPosition.report, "basis-changed");
+  await writeFile(projectConfigPath, projectConfig);
+  await rm(movedTargetPath);
+  const restoredRelatedPosition = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  assertFamilyExceptionStatus(restoredRelatedPosition.report, "applicable");
 
   const chatPath = join(project.directory, "Locale/zh-CN_messages.yml");
   const initialChat = await readFile(chatPath, "utf8");
