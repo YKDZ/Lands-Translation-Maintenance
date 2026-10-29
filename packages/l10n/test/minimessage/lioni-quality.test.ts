@@ -643,6 +643,222 @@ void test("未识别的扩展标签有原生诊断并保留不完整限制", asy
   assert.equal(syntax.status, "incomplete");
 });
 
+void test("变量、click 行为和交互分布是独立的原生检查", async (t) => {
+  const reordered = await createQualityProject(
+    t,
+    undefined,
+    '<click:run_command:"/lands claim <v:player>">Claim</click> <click:run_command:"/lands info <v:land>">Land</click>',
+    '<click:run_command:"/lands info <v:land>">土地</click> <click:run_command:"/lands claim <v:player>">认领</click>',
+  );
+  const reorderedReport = qualityReport(runLioni(["qa", reordered.configPath]));
+  for (const checkId of [
+    "minimessage-variable-correspondence",
+    "minimessage-click-behavior",
+    "minimessage-interaction-distribution",
+  ]) {
+    const check = checkResult(reorderedReport.report, checkId);
+    assert.equal(check.status, "complete", JSON.stringify(check, null, 2));
+    assert.deepEqual(check.diagnostics, []);
+  }
+
+  const changed = await createQualityProject(
+    t,
+    undefined,
+    '<click:run_command:"/lands claim <v:player>">Claim</click>',
+    '<click:suggest_command:"/lands claim <v:land>">认领</click>',
+  );
+  const changedRun = runLioni(["qa", changed.configPath]);
+  assert.notEqual(changedRun.status, 0, changedRun.stdout || changedRun.stderr);
+  const changedReport = qualityReport(changedRun);
+  const variables = checkResult(
+    changedReport.report,
+    "minimessage-variable-correspondence",
+  );
+  const clickBehavior = checkResult(
+    changedReport.report,
+    "minimessage-click-behavior",
+  );
+  const variableCodes = new Set(
+    variables.diagnostics.map(({ object }) => object.code),
+  );
+  assert.ok(
+    variableCodes.has("minimessage.variable-missing") &&
+      variableCodes.has("minimessage.variable-added"),
+    JSON.stringify(variables, null, 2),
+  );
+  assert.ok(
+    clickBehavior.diagnostics.some(
+      ({ object }) => object.code === "minimessage.click-action-mismatch",
+    ),
+    JSON.stringify(clickBehavior, null, 2),
+  );
+
+  const reportPath = join(changed.directory, "qa-report.json");
+  await writeFile(reportPath, JSON.stringify(changedReport.envelope));
+  const clickExecution = clickBehavior.executions.find(
+    ({ sourceKey }) => sourceKey === clickBehavior.diagnostics[0]?.object.key,
+  );
+  assert.ok(clickExecution);
+  const accepted = runLioni([
+    "exceptions",
+    "upsert",
+    changed.configPath,
+    reportPath,
+    "--check-id",
+    "minimessage-click-behavior",
+    "--execution-id",
+    String(clickExecution.executionId),
+    "--id",
+    "accepted-click-action",
+    "--reason",
+    "此按钮动作由服务器按配置切换。",
+  ]);
+  assert.equal(accepted.status, 0, accepted.stderr || accepted.stdout);
+
+  const afterException = qualityReport(runLioni(["qa", changed.configPath]));
+  const remainingVariables = checkResult(
+    afterException.report,
+    "minimessage-variable-correspondence",
+  );
+  assert.ok(
+    remainingVariables.diagnostics.some(
+      ({ handling }) => handling.status === "active",
+    ),
+    JSON.stringify(remainingVariables, null, 2),
+  );
+  assert.ok(
+    checkResult(
+      afterException.report,
+      "minimessage-click-behavior",
+    ).diagnostics.some(({ handling }) => handling.status === "excepted"),
+    JSON.stringify(afterException.report, null, 2),
+  );
+});
+
+void test("同一消息的多个同类交互按完整对象分布比较", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<click:run_command:\"/lands info\"><v:owner> Owner <hover:show_text:'Owner <v:owner>'>Owner</hover></click> <click:run_command:\"/lands info\"><v:land> Land <hover:show_text:'Land <v:land>'>Land</hover></click>",
+    "<click:run_command:\"/lands info\"><v:owner> <v:land> 所有者 <hover:show_text:'Owner <v:owner> <v:land>'>所有者</hover></click> <click:run_command:\"/lands info\">土地 <hover:show_text:'Land'>土地</hover></click>",
+  );
+  const run = runLioni(["qa", project.configPath]);
+  assert.notEqual(run.status, 0, run.stdout || run.stderr);
+  const report = qualityReport(run);
+  const interaction = checkResult(
+    report.report,
+    "minimessage-interaction-distribution",
+  );
+  assert.ok(
+    interaction.diagnostics.some(
+      ({ object }) =>
+        object.code ===
+        "minimessage.variable-interaction-distribution-mismatch",
+    ),
+    JSON.stringify(interaction, null, 2),
+  );
+  assert.ok(
+    interaction.diagnostics.every(
+      ({ location }) =>
+        location.range.file === "Locale/zh-CN_gui.yml" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "name"]),
+    ),
+    JSON.stringify(interaction, null, 2),
+  );
+});
+
+void test("正文与 hover 可翻译并在各自范围调整变量语序", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "Hello <v:player>, owner of <v:land> <hover:show_text:'<v:land> belongs to <v:player>'>details</hover>",
+    "<v:land> 属于 <v:player>，<hover:show_text:'<v:player> 的 <v:land>'>说明</hover>",
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath]));
+  for (const checkId of [
+    "minimessage-variable-correspondence",
+    "minimessage-interaction-distribution",
+  ]) {
+    const check = checkResult(report.report, checkId);
+    assert.equal(check.status, "complete", JSON.stringify(check, null, 2));
+    assert.deepEqual(check.diagnostics, []);
+  }
+
+  const typo = await createQualityProject(
+    t,
+    undefined,
+    "Hello <v:player>!",
+    "你好，<v:playr>。",
+  );
+  const typoReport = qualityReport(runLioni(["qa", typo.configPath]));
+  const variables = checkResult(
+    typoReport.report,
+    "minimessage-variable-correspondence",
+  );
+  assert.ok(
+    variables.diagnostics.some(
+      ({ object }) => object.code === "minimessage.variable-name-mismatch",
+    ),
+    JSON.stringify(variables, null, 2),
+  );
+});
+
+void test("click 命令名、参数和其他动作参数均受保护", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    '<click:run_command:"/lands claim <v:player>">Claim</click> <click:suggest_command:"/lands info <v:land>">Info</click> <click:open_url:"https://example.test">Open</click>',
+    '<click:run_command:"/lands unclaim <v:player>">认领</click> <click:suggest_command:"/warp info <v:land>">信息</click> <click:open_url:"https://other.test">打开</click>',
+  );
+  const run = runLioni(["qa", project.configPath]);
+  assert.notEqual(run.status, 0, run.stdout || run.stderr);
+  const report = qualityReport(run);
+  const click = checkResult(report.report, "minimessage-click-behavior");
+  const codes = new Set(click.diagnostics.map(({ object }) => object.code));
+  assert.ok(
+    codes.has("minimessage.click-command-arguments-mismatch"),
+    JSON.stringify(click, null, 2),
+  );
+  assert.ok(
+    codes.has("minimessage.click-command-name-mismatch"),
+    JSON.stringify(click, null, 2),
+  );
+  assert.ok(
+    codes.has("minimessage.click-value-mismatch"),
+    JSON.stringify(click, null, 2),
+  );
+  assert.ok(
+    click.diagnostics.every(
+      ({ location }) =>
+        location.range.file === "Locale/zh-CN_gui.yml" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "name"]) &&
+        location.range.start !== undefined &&
+        location.range.end !== undefined,
+    ),
+    JSON.stringify(click, null, 2),
+  );
+});
+
+void test("交互对象归属或官方语义未确认时检查报告不完整", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<click:show_dialog:example>Open dialog</click>",
+    "<click:show_dialog:example>打开对话框</click>",
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath]));
+  const click = checkResult(report.report, "minimessage-click-behavior");
+  assert.equal(click.status, "incomplete", JSON.stringify(click, null, 2));
+  assert.ok(
+    click.issues.some(
+      ({ code }) => code === "minimessage.behavior-coverage-unavailable",
+    ),
+    JSON.stringify(click.issues, null, 2),
+  );
+});
+
 void test("标签对应、嵌套与 Lands 控制各自形成原生检查结论", async (t) => {
   const aliases = await createQualityProject(
     t,

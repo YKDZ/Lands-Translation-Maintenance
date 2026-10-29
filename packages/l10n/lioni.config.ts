@@ -7,7 +7,9 @@ import {
 import { landsFactAdapters } from "#/lioni/lands-facts";
 import { landsUpdatePolicy } from "#/lioni/lands-update-policy";
 import { landsProjectPaths } from "#/lioni/project-paths";
+import { miniMessageClickBehaviorCheck } from "#/minimessage-click-behavior-check";
 import { miniMessageHonorificCheck } from "#/minimessage-honorific-check";
+import { miniMessageInteractionDistributionCheck } from "#/minimessage-interaction-distribution-check";
 import { miniMessageLandsControlsCheck } from "#/minimessage-lands-controls-check";
 import { miniMessageNestingCheck } from "#/minimessage-nesting-check";
 import { miniMessagePunctuationCheck } from "#/minimessage-punctuation-check";
@@ -19,6 +21,7 @@ import {
   landsTerminologyCheck,
 } from "#/minimessage-terminology-check";
 import { miniMessageThemeCheck } from "#/minimessage-theme-check";
+import { miniMessageVariableCorrespondenceCheck } from "#/minimessage-variable-correspondence-check";
 
 /** 根据翻译项目入口构造唯一的 Lands 配置。 */
 export function createLandsConfig(entryUrl: string | URL) {
@@ -36,6 +39,9 @@ export function createLandsConfig(entryUrl: string | URL) {
         landsTerminologyCheck,
         miniMessagePunctuationCheck,
         miniMessageHonorificCheck,
+        miniMessageVariableCorrespondenceCheck,
+        miniMessageClickBehaviorCheck,
+        miniMessageInteractionDistributionCheck,
       ],
       exceptionStore: createFileQualityExceptionStore(paths.exceptionFile),
       loadDependencies: async ({ facts }) => {

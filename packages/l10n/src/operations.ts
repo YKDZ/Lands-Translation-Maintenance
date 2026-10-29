@@ -1964,20 +1964,9 @@ function ruleUnavailable(
   ruleId: string,
   operation: "status" | "check",
   messageId?: string,
-  diagnosticCode?: string,
   location?: DiagnosticLocation,
   requiredInputDependencies?: readonly RuleInputDependency[],
 ): boolean {
-  const incompleteVariableEvaluation =
-    ruleId === "minimessage-variables" &&
-    diagnosticCode !== "minimessage.variable-coverage-unavailable" &&
-    messageId !== undefined &&
-    project.diagnostics.some(
-      (item) =>
-        item.ruleId === ruleId &&
-        item.message?.id === messageId &&
-        item.code === "minimessage.variable-coverage-unavailable",
-    );
   return (
     !project.coverage.enabledRuleIds.includes(ruleId) ||
     project.coverage.disabledRuleIds.includes(ruleId) ||
@@ -1988,8 +1977,7 @@ function ruleUnavailable(
       operation,
       messageId,
       requiredInputDependencies,
-    ) ||
-    incompleteVariableEvaluation
+    )
   );
 }
 
@@ -2069,7 +2057,6 @@ function conclusionUnavailable(
     conclusion.ruleId,
     operation,
     conclusion.message?.id,
-    conclusion.code,
     conclusion.location,
     conclusion.requiredInputDependencies,
   );

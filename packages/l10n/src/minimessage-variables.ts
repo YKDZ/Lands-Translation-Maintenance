@@ -1,13 +1,13 @@
 import { isMapHtmlAttributeTag } from "#/map-html";
 import type {
-  CheckRule,
   JsonValue,
   MiniMessageContextFrame,
+  MiniMessageIncompleteFact,
+  MiniMessageParseProject,
   MiniMessagePosition,
   MiniMessageTagNode,
+  MessageIdentity,
   ParsedMiniMessageDocument,
-  ProjectView,
-  RuleFinding,
   VariableContextPart,
   VariableCountDifference,
   VariableOccurrence,
@@ -15,7 +15,7 @@ import type {
 import { canonicalJson } from "#/value";
 import { compareVariableOccurrences } from "#/variable-comparison";
 
-interface ClickInteraction {
+export interface MiniMessageClickInteraction {
   readonly document: ParsedMiniMessageDocument;
   readonly node: MiniMessageTagNode;
   readonly action: string;
@@ -26,21 +26,45 @@ interface ClickInteraction {
   readonly parentContext: readonly VariableContextPart[];
 }
 
-interface SideExtraction {
+export interface MiniMessageBehaviorSide {
   readonly variables: readonly VariableOccurrence[];
-  readonly clicks: readonly ClickInteraction[];
-  readonly interactionRoots: readonly InteractionDistribution[];
-  readonly limitations: readonly CoverageLimitation[];
+  readonly clicks: readonly MiniMessageClickInteraction[];
+  readonly interactionRoots: readonly MiniMessageInteractionDistribution[];
+  readonly limitations: readonly MiniMessageCoverageLimitation[];
 }
 
-interface CoverageLimitation {
+export interface MiniMessageCoverageLimitation {
   readonly reason: string;
   readonly context?: readonly VariableContextPart[];
   readonly position?: MiniMessagePosition;
   readonly object?: JsonValue;
 }
 
-type LimitationCollection = Map<string, CoverageLimitation>;
+type LimitationCollection = Map<string, MiniMessageCoverageLimitation>;
+
+export interface MiniMessageInteractionBehaviorFacts {
+  readonly message: MessageIdentity;
+  readonly source: MiniMessageBehaviorSide;
+  readonly target: MiniMessageBehaviorSide;
+}
+
+export interface MiniMessageBehaviorFinding {
+  readonly code: string;
+  readonly message: MessageIdentity;
+  readonly origin: "target";
+  readonly position?: MiniMessagePosition;
+  readonly reason: string;
+  readonly expected: JsonValue;
+  readonly actual: JsonValue;
+}
+
+export interface MiniMessageBehaviorChecks {
+  readonly messageId: string;
+  readonly variables: readonly MiniMessageBehaviorFinding[];
+  readonly clicks: readonly MiniMessageBehaviorFinding[];
+  readonly interactions: readonly MiniMessageBehaviorFinding[];
+  readonly issues: readonly MiniMessageIncompleteFact[];
+}
 
 interface ClickPatternMatch {
   readonly action: string;
@@ -54,7 +78,7 @@ interface IndexedTag {
   readonly node: MiniMessageTagNode;
 }
 
-interface InteractionDistribution {
+export interface MiniMessageInteractionDistribution {
   readonly fieldKey: string;
   readonly fieldContext: VariableContextPart;
   readonly parentKey?: string;
@@ -64,15 +88,15 @@ interface InteractionDistribution {
   readonly behavior: JsonValue;
   readonly textVariables: Map<string, number>;
   readonly commandVariables: Map<string, number>;
-  readonly children: InteractionDistribution[];
+  readonly children: MiniMessageInteractionDistribution[];
 }
 
 function addLimitation(
   limitations: LimitationCollection,
   reason: string,
-  details: Omit<CoverageLimitation, "reason"> = {},
+  details: Omit<MiniMessageCoverageLimitation, "reason"> = {},
 ): void {
-  const limitation: CoverageLimitation = { reason, ...details };
+  const limitation: MiniMessageCoverageLimitation = { reason, ...details };
   limitations.set(canonicalJson(limitation), limitation);
 }
 
@@ -195,7 +219,7 @@ function unquoteAndUnescape(value: string, quote: string): string {
 }
 
 function variablesInClick(
-  interaction: ClickInteraction,
+  interaction: MiniMessageClickInteraction,
   limitations: LimitationCollection,
 ): readonly VariableOccurrence[] {
   const pattern = quotedClickPattern(interaction.node);
@@ -268,7 +292,7 @@ function makeClickInteraction(
   document: ParsedMiniMessageDocument,
   node: MiniMessageTagNode,
   limitations: LimitationCollection,
-): ClickInteraction | undefined {
+): MiniMessageClickInteraction | undefined {
   const actionValue = node.parameters[0];
   const value = node.parameters[1];
   if (actionValue === undefined || value === undefined) {
@@ -319,7 +343,7 @@ function interactionContext(
   frames: readonly MiniMessageContextFrame[],
   document: ParsedMiniMessageDocument,
   tags: ReadonlyMap<string, IndexedTag>,
-  clicks: ReadonlyMap<string, ClickInteraction>,
+  clicks: ReadonlyMap<string, MiniMessageClickInteraction>,
   limitations: LimitationCollection,
 ): readonly VariableContextPart[] {
   const result: VariableContextPart[] = [];
@@ -419,10 +443,10 @@ function addVariableCount(counts: Map<string, number>, name: string): void {
 
 function interactionTree(
   documents: readonly ParsedMiniMessageDocument[],
-  clicks: readonly ClickInteraction[],
+  clicks: readonly MiniMessageClickInteraction[],
   limitations: LimitationCollection,
-): readonly InteractionDistribution[] {
-  const interactions = new Map<string, InteractionDistribution>();
+): readonly MiniMessageInteractionDistribution[] {
+  const interactions = new Map<string, MiniMessageInteractionDistribution>();
   const clicksByPosition = new Map(
     clicks.map((interaction) => [
       sourcePositionKey(interaction.document, interaction.node.position.start),
@@ -547,7 +571,7 @@ function interactionTree(
     }
   }
 
-  const roots: InteractionDistribution[] = [];
+  const roots: MiniMessageInteractionDistribution[] = [];
   for (const interaction of interactions.values()) {
     if (interaction.parentKey === undefined) {
       roots.push(interaction);
@@ -573,8 +597,8 @@ function interactionTree(
 
 function extractSide(
   documents: readonly ParsedMiniMessageDocument[],
-  parserLimitations: readonly CoverageLimitation[] = [],
-): SideExtraction {
+  parserLimitations: readonly MiniMessageCoverageLimitation[] = [],
+): MiniMessageBehaviorSide {
   const limitations: LimitationCollection = new Map(
     parserLimitations.map((limitation) => [
       canonicalJson(limitation),
@@ -597,7 +621,7 @@ function extractSide(
     }
   }
   const tags = tagIndex(documents);
-  const clickCandidates = new Map<string, ClickInteraction>();
+  const clickCandidates = new Map<string, MiniMessageClickInteraction>();
   for (const document of documents) {
     if (document.status !== "parsed") continue;
     for (const node of document.nodes) {
@@ -676,20 +700,19 @@ function extractSide(
 }
 
 function finding(
-  message: ProjectView["messages"][number],
+  message: MessageIdentity,
   code: string,
   context: VariableCountDifference["context"],
   expected: JsonValue,
   actual: JsonValue,
   reason: string,
-  identity: JsonValue = { context: context as unknown as JsonValue },
-): RuleFinding {
+  position?: MiniMessagePosition,
+): MiniMessageBehaviorFinding {
   return {
     code,
-    identity,
     message,
     origin: "target",
-    location: { file: message.targetFile, path: message.path },
+    ...(position === undefined ? {} : { position }),
     reason,
     expected,
     actual,
@@ -703,9 +726,9 @@ function positionValues(
 }
 
 function appendDifferenceFindings(
-  message: ProjectView["messages"][number],
+  message: MessageIdentity,
   difference: readonly VariableCountDifference[],
-  findings: RuleFinding[],
+  findings: MiniMessageBehaviorFinding[],
 ): void {
   const contexts = new Map<string, VariableCountDifference[]>();
   for (const item of difference) {
@@ -753,10 +776,7 @@ function appendDifferenceFindings(
               context: actual.item.context as unknown as JsonValue,
             },
             `变量名称不一致：${expected.item.name} 被译为 ${actual.item.name}`,
-            {
-              context: expected.item.context as unknown as JsonValue,
-              expectedName: expected.item.name,
-            },
+            actual.item.actualPositions[0],
           ),
         );
         expected.remaining -= count;
@@ -787,10 +807,6 @@ function appendDifferenceFindings(
             context: item.item.context as unknown as JsonValue,
           },
           `变量 ${item.item.name} 遗漏或次数不足`,
-          {
-            context: item.item.context as unknown as JsonValue,
-            name: item.item.name,
-          },
         ),
       );
     }
@@ -818,17 +834,14 @@ function appendDifferenceFindings(
             context: item.item.context as unknown as JsonValue,
           },
           `正文新增变量 ${item.item.name} 或出现次数过多`,
-          {
-            context: item.item.context as unknown as JsonValue,
-            name: item.item.name,
-          },
+          item.item.actualPositions[0],
         ),
       );
     }
   }
 }
 
-function clickPayload(interaction: ClickInteraction): JsonValue {
+function clickPayload(interaction: MiniMessageClickInteraction): JsonValue {
   return {
     action: interaction.action,
     value: interaction.value,
@@ -842,64 +855,42 @@ function clickPayload(interaction: ClickInteraction): JsonValue {
   };
 }
 
-function clickGroupKey(interaction: ClickInteraction): string {
+function clickGroupKey(interaction: MiniMessageClickInteraction): string {
   return canonicalJson({
     field: fieldContext(interaction.document),
     parentContext: interaction.parentContext,
   });
 }
 
-function clickBehaviorKey(interaction: ClickInteraction): string {
+function clickBehaviorKey(interaction: MiniMessageClickInteraction): string {
   return canonicalJson({
     action: interaction.action,
     value: interaction.normalizedValue,
   });
 }
 
-function clickOrdinals(
-  groups: ReadonlyMap<string, readonly ClickInteraction[]>,
-): ReadonlyMap<ClickInteraction, number> {
-  const result = new Map<ClickInteraction, number>();
-  for (const group of groups.values()) {
-    group.forEach((interaction, index) => {
-      result.set(interaction, index);
-    });
-  }
-  return result;
-}
-
-function clickFindingIdentity(
-  interaction: ClickInteraction,
-  ordinal: number,
-): JsonValue {
-  return {
-    field: fieldContext(interaction.document) as unknown as JsonValue,
-    parentContext: interaction.parentContext as unknown as JsonValue,
-    ordinal,
-  };
-}
-
-function sortClicks(clicks: readonly ClickInteraction[]): ClickInteraction[] {
+function sortClicks(
+  clicks: readonly MiniMessageClickInteraction[],
+): MiniMessageClickInteraction[] {
   return [...clicks].sort((left, right) =>
     clickBehaviorKey(left).localeCompare(clickBehaviorKey(right)),
   );
 }
 
 function takeMatchingClick(
-  candidates: ClickInteraction[],
-  predicate: (candidate: ClickInteraction) => boolean,
-): ClickInteraction | undefined {
+  candidates: MiniMessageClickInteraction[],
+  predicate: (candidate: MiniMessageClickInteraction) => boolean,
+): MiniMessageClickInteraction | undefined {
   const index = candidates.findIndex(predicate);
   if (index < 0) return undefined;
   return candidates.splice(index, 1)[0];
 }
 
 function appendClickDifference(
-  message: ProjectView["messages"][number],
-  expected: ClickInteraction,
-  actual: ClickInteraction,
-  identity: JsonValue,
-  findings: RuleFinding[],
+  message: MessageIdentity,
+  expected: MiniMessageClickInteraction,
+  actual: MiniMessageClickInteraction,
+  findings: MiniMessageBehaviorFinding[],
 ): void {
   const expectedValue = clickPayload(expected);
   const actualValue = clickPayload(actual);
@@ -913,7 +904,7 @@ function appendClickDifference(
         expectedValue,
         actualValue,
         `click 交互动作从 ${expected.action} 变为 ${actual.action}`,
-        identity,
+        actual.node.position,
       ),
     );
     return;
@@ -928,7 +919,7 @@ function appendClickDifference(
           expectedValue,
           actualValue,
           `click 命令名从 ${expected.commandName || "（空）"} 变为 ${actual.commandName || "（空）"}`,
-          identity,
+          actual.node.position,
         ),
       );
     }
@@ -941,7 +932,7 @@ function appendClickDifference(
           expectedValue,
           actualValue,
           "click 命令参数与原文不同",
-          identity,
+          actual.node.position,
         ),
       );
     }
@@ -956,20 +947,20 @@ function appendClickDifference(
         expectedValue,
         actualValue,
         `click ${expected.action} 行为参数与原文不同`,
-        identity,
+        actual.node.position,
       ),
     );
   }
 }
 
 function appendClickFindings(
-  message: ProjectView["messages"][number],
-  source: readonly ClickInteraction[],
-  target: readonly ClickInteraction[],
-  findings: RuleFinding[],
+  message: MessageIdentity,
+  source: readonly MiniMessageClickInteraction[],
+  target: readonly MiniMessageClickInteraction[],
+  findings: MiniMessageBehaviorFinding[],
 ): void {
-  const sourceGroups = new Map<string, ClickInteraction[]>();
-  const targetGroups = new Map<string, ClickInteraction[]>();
+  const sourceGroups = new Map<string, MiniMessageClickInteraction[]>();
+  const targetGroups = new Map<string, MiniMessageClickInteraction[]>();
   for (const [items, destination] of [
     [source, sourceGroups],
     [target, targetGroups],
@@ -985,13 +976,11 @@ function appendClickFindings(
   const groupKeys = [
     ...new Set([...sourceGroups.keys(), ...targetGroups.keys()]),
   ].sort();
-  const sourceOrdinals = clickOrdinals(sourceGroups);
-  const targetOrdinals = clickOrdinals(targetGroups);
   for (const groupKey of groupKeys) {
     const expected = sortClicks(sourceGroups.get(groupKey) ?? []);
     const actual = sortClicks(targetGroups.get(groupKey) ?? []);
     const unmatchedActual = [...actual];
-    const unmatchedExpected: ClickInteraction[] = [];
+    const unmatchedExpected: MiniMessageClickInteraction[] = [];
     for (const item of expected) {
       const exact = takeMatchingClick(
         unmatchedActual,
@@ -1024,18 +1013,10 @@ function appendClickFindings(
           : undefined;
       const actualItem =
         sameCommand ?? sameAction ?? unmatchedActualSorted.shift()!;
-      const ordinal = sourceOrdinals.get(expectedItem)!;
-      appendClickDifference(
-        message,
-        expectedItem,
-        actualItem,
-        clickFindingIdentity(expectedItem, ordinal),
-        findings,
-      );
+      appendClickDifference(message, expectedItem, actualItem, findings);
     }
 
     for (const item of unmatchedExpectedSorted) {
-      const ordinal = sourceOrdinals.get(item)!;
       findings.push(
         finding(
           message,
@@ -1044,12 +1025,10 @@ function appendClickFindings(
           clickPayload(item),
           { state: "missing" },
           "原文中的 click 交互在译文中缺失",
-          clickFindingIdentity(item, ordinal),
         ),
       );
     }
     for (const item of unmatchedActualSorted) {
-      const ordinal = targetOrdinals.get(item)!;
       findings.push(
         finding(
           message,
@@ -1058,7 +1037,7 @@ function appendClickFindings(
           { state: "not present in source" },
           clickPayload(item),
           "译文新增了原文没有的 click 交互",
-          clickFindingIdentity(item, ordinal),
+          item.node.position,
         ),
       );
     }
@@ -1066,7 +1045,7 @@ function appendClickFindings(
 }
 
 function interactionDistributionSignature(
-  interaction: InteractionDistribution,
+  interaction: MiniMessageInteractionDistribution,
 ): JsonValue {
   const textVariables = Object.fromEntries(
     [...interaction.textVariables].sort(([left], [right]) =>
@@ -1093,9 +1072,9 @@ function interactionDistributionSignature(
 }
 
 function groupInteractionDistributions(
-  interactions: readonly InteractionDistribution[],
-): ReadonlyMap<string, InteractionDistribution[]> {
-  const groups = new Map<string, InteractionDistribution[]>();
+  interactions: readonly MiniMessageInteractionDistribution[],
+): ReadonlyMap<string, MiniMessageInteractionDistribution[]> {
+  const groups = new Map<string, MiniMessageInteractionDistribution[]>();
   for (const interaction of interactions) {
     const group = groups.get(interaction.behaviorKey) ?? [];
     group.push(interaction);
@@ -1105,10 +1084,10 @@ function groupInteractionDistributions(
 }
 
 function appendInteractionDistributionFindings(
-  message: ProjectView["messages"][number],
-  source: readonly InteractionDistribution[],
-  target: readonly InteractionDistribution[],
-  findings: RuleFinding[],
+  message: MessageIdentity,
+  source: readonly MiniMessageInteractionDistribution[],
+  target: readonly MiniMessageInteractionDistribution[],
+  findings: MiniMessageBehaviorFinding[],
 ): void {
   const fieldKeys = [
     ...new Set([
@@ -1118,8 +1097,8 @@ function appendInteractionDistributionFindings(
   ].sort();
 
   const compareSiblings = (
-    expected: readonly InteractionDistribution[],
-    actual: readonly InteractionDistribution[],
+    expected: readonly MiniMessageInteractionDistribution[],
+    actual: readonly MiniMessageInteractionDistribution[],
     parentContext: readonly VariableContextPart[],
   ): void => {
     const expectedGroups = groupInteractionDistributions(expected);
@@ -1185,6 +1164,7 @@ function appendInteractionDistributionFindings(
                   .sort((left, right) => left.start - right.start),
               },
               "同一父交互下多个同类对象的变量及嵌套上下文分配不同；按完整对象分布忽略对象顺序",
+              actualGroup[0]?.position,
             ),
           );
         }
@@ -1206,56 +1186,12 @@ function appendInteractionDistributionFindings(
   }
 }
 
-function appendLimitations(
-  message: ProjectView["messages"][number],
-  side: "原文" | "译文",
-  limitations: readonly CoverageLimitation[],
-  findings: RuleFinding[],
-): void {
-  for (const limitation of limitations) {
-    const context = limitation.context ?? [
-      {
-        kind: "field",
-        identity: { path: [...message.path] },
-      },
-    ];
-    findings.push(
-      finding(
-        message,
-        "minimessage.variable-coverage-unavailable",
-        context,
-        {
-          state: "完整的正文和交互解析结果",
-          context: context as unknown as JsonValue,
-        },
-        {
-          side,
-          limitation: limitation.reason,
-          context: context as unknown as JsonValue,
-          ...(limitation.position === undefined
-            ? {}
-            : {
-                position: {
-                  start: limitation.position.start,
-                  end: limitation.position.end,
-                },
-              }),
-          ...(limitation.object === undefined
-            ? {}
-            : { object: limitation.object }),
-        },
-        `${side}的变量/交互上下文无法完整核对：${limitation.reason}`,
-      ),
-    );
-  }
-}
-
 function unresolvedInteractionLimitations(
-  parsed: NonNullable<ProjectView["miniMessage"]>,
+  parsed: MiniMessageParseProject,
   messageId: string,
   origin: "source" | "target",
-): readonly CoverageLimitation[] {
-  const limitations = new Map<string, CoverageLimitation>();
+): readonly MiniMessageCoverageLimitation[] {
+  const limitations = new Map<string, MiniMessageCoverageLimitation>();
   for (const item of parsed.findings) {
     if (
       item.message?.id !== messageId ||
@@ -1302,7 +1238,7 @@ function unresolvedInteractionLimitations(
       const reason =
         `官方解析器未能解析 ${tagName} 交互${typeof raw === "string" ? ` ${raw}` : ""}；` +
         "已保留其源参数，但完整行为语义无法确认";
-      const limitation: CoverageLimitation = {
+      const limitation: MiniMessageCoverageLimitation = {
         reason,
         context,
         ...(position === undefined ? {} : { position }),
@@ -1316,47 +1252,87 @@ function unresolvedInteractionLimitations(
   );
 }
 
-export const miniMessageVariablesRule: CheckRule = {
-  id: "minimessage-variables",
-  defaultSeverity: "error",
-  requiredInputs: ["minimessage-parse"],
-  evaluate(project) {
-    const parsed = project.miniMessage;
-    if (parsed === undefined) return [];
+/** 从官方 MiniMessage 投影提取可供变量、交互检查共享的源译事实。 */
+export function extractMiniMessageBehavior(
+  project: MiniMessageParseProject,
+): readonly MiniMessageInteractionBehaviorFacts[] {
+  const messages = new Map<string, MessageIdentity>();
+  for (const document of project.documents) {
+    messages.set(document.message.id, document.message);
+  }
 
-    const findings: RuleFinding[] = [];
-    for (const message of project.messages) {
-      const sourceDocuments = parsed.documents.filter(
-        (document) =>
-          document.message.id === message.id && document.origin === "source",
-      );
-      const targetDocuments = parsed.documents.filter(
-        (document) =>
-          document.message.id === message.id && document.origin === "target",
-      );
-      const source = extractSide(
-        sourceDocuments,
-        unresolvedInteractionLimitations(parsed, message.id, "source"),
-      );
-      const target = extractSide(
-        targetDocuments,
-        unresolvedInteractionLimitations(parsed, message.id, "target"),
-      );
-      appendDifferenceFindings(
-        message,
-        compareVariableOccurrences(source.variables, target.variables),
-        findings,
-      );
-      appendClickFindings(message, source.clicks, target.clicks, findings);
-      appendInteractionDistributionFindings(
-        message,
-        source.interactionRoots,
-        target.interactionRoots,
-        findings,
-      );
-      appendLimitations(message, "原文", source.limitations, findings);
-      appendLimitations(message, "译文", target.limitations, findings);
-    }
-    return findings;
-  },
-};
+  return [...messages.values()]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((message) => ({
+      message,
+      source: extractSide(
+        project.documents.filter(
+          (document) =>
+            document.message.id === message.id && document.origin === "source",
+        ),
+        unresolvedInteractionLimitations(project, message.id, "source"),
+      ),
+      target: extractSide(
+        project.documents.filter(
+          (document) =>
+            document.message.id === message.id && document.origin === "target",
+        ),
+        unresolvedInteractionLimitations(project, message.id, "target"),
+      ),
+    }));
+}
+
+/** 将共享提取事实比较为互不依赖的原生 QA 检查结果。 */
+export function compareMiniMessageBehavior(
+  messages: readonly MiniMessageInteractionBehaviorFacts[],
+): readonly MiniMessageBehaviorChecks[] {
+  return messages.map(({ message, source, target }) => {
+    const variables: MiniMessageBehaviorFinding[] = [];
+    const clicks: MiniMessageBehaviorFinding[] = [];
+    const interactions: MiniMessageBehaviorFinding[] = [];
+    appendDifferenceFindings(
+      message,
+      compareVariableOccurrences(source.variables, target.variables),
+      variables,
+    );
+    appendClickFindings(message, source.clicks, target.clicks, clicks);
+    appendInteractionDistributionFindings(
+      message,
+      source.interactionRoots,
+      target.interactionRoots,
+      interactions,
+    );
+    const issues: MiniMessageIncompleteFact[] = [
+      ...source.limitations.map((limitation) =>
+        coverageIssue(message, "source", limitation),
+      ),
+      ...target.limitations.map((limitation) =>
+        coverageIssue(message, "target", limitation),
+      ),
+    ];
+    return {
+      messageId: message.id,
+      variables,
+      clicks,
+      interactions,
+      issues,
+    };
+  });
+}
+
+function coverageIssue(
+  message: MessageIdentity,
+  origin: "source" | "target",
+  limitation: MiniMessageCoverageLimitation,
+): MiniMessageIncompleteFact {
+  return {
+    code: "minimessage.behavior-coverage-unavailable",
+    message,
+    origin,
+    location: {
+      file: origin === "source" ? message.sourceFile : message.targetFile,
+      path: message.path,
+    },
+    reason: `${origin === "source" ? "原文" : "译文"}的变量和交互上下文无法完整核对：${limitation.reason}`,
+  };
+}

@@ -29,6 +29,12 @@ import {
   analyzeMiniMessageTagQuality,
   type MiniMessageTagAnalysis,
 } from "#/minimessage-tag-analysis";
+import {
+  compareMiniMessageBehavior,
+  extractMiniMessageBehavior,
+  type MiniMessageBehaviorChecks,
+  type MiniMessageBehaviorFinding,
+} from "#/minimessage-variables";
 import type { JsonValue, ResourceInventoryEntry } from "#/model";
 import {
   pairTranslatableTextDocuments,
@@ -63,6 +69,7 @@ export interface MiniMessageQualityDependencies {
   readonly projection: MiniMessageParseProject;
   readonly pairing: TranslatableTextPairing;
   readonly tags: MiniMessageTagAnalysis;
+  readonly behaviorChecks: readonly MiniMessageBehaviorChecks[];
   readonly landsProjection?: LandsStructureProjection;
   readonly readIssues: readonly MiniMessageIncompleteFact[];
 }
@@ -139,6 +146,62 @@ export function findingForQuality(
       { role: "actual", object, location, value: finding.actual },
     ],
   };
+}
+
+/** 把变量及交互检查的领域结果映射到原生 QA 诊断位置。 */
+export function behaviorFindingForQuality(
+  finding: MiniMessageBehaviorFinding,
+  candidate: MiniMessageCheckInput["candidate"],
+): QualityFinding<MiniMessageQualityObject> {
+  const object: MiniMessageQualityObject = {
+    kind: "lands-message",
+    key: finding.message.id,
+    language: candidate.language,
+    origin: finding.origin,
+    code: finding.code,
+  };
+  const location: QualityLocation = {
+    language: candidate.language,
+    range: {
+      file: finding.message.targetFile,
+      path: finding.message.path,
+      ...(finding.position === undefined
+        ? {}
+        : {
+            start: finding.position.start,
+            end: finding.position.end,
+          }),
+    },
+  };
+  return {
+    severity: "error",
+    object,
+    location,
+    message: finding.reason,
+    evidence: [
+      { role: "expected", object, location, value: finding.expected },
+      { role: "actual", object, location, value: finding.actual },
+    ],
+  };
+}
+
+export function behaviorChecksForMessage(
+  dependencies: MiniMessageQualityDependencies,
+  sourceKey: string,
+): MiniMessageBehaviorChecks | undefined {
+  return dependencies.behaviorChecks.find(
+    (checks) => checks.messageId === sourceKey,
+  );
+}
+
+export function behaviorIssuesForMessage(
+  dependencies: MiniMessageQualityDependencies,
+  sourceKey: string,
+): readonly MiniMessageIncompleteFact[] {
+  return (
+    dependencies.behaviorChecks.find((checks) => checks.messageId === sourceKey)
+      ?.issues ?? []
+  );
 }
 
 export function issueForQuality(
@@ -260,6 +323,9 @@ export async function projectMiniMessageQualityInputs(
     projection,
     pairing: pairTranslatableTextDocuments(projection),
     tags: analyzeMiniMessageTagQuality(input.messages, projection),
+    behaviorChecks: compareMiniMessageBehavior(
+      extractMiniMessageBehavior(projection),
+    ),
     ...(options.landsProjection === undefined
       ? {}
       : { landsProjection: options.landsProjection }),
