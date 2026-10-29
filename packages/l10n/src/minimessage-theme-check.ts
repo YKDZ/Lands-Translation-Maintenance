@@ -23,7 +23,7 @@ import {
 } from "#/minimessage-quality";
 import type { JsonValue } from "#/model";
 
-function primaryThemeSourceKey(
+function choosePrimaryThemeSourceKey(
   input: MiniMessageCheckInput,
 ): string | undefined {
   return dependenciesOf(input.dependencies)
@@ -37,6 +37,22 @@ function primaryThemeSourceKey(
     )
     .map(({ id }) => id)
     .sort()[0];
+}
+
+/** 缓存键覆盖实际读取的事实快照、依赖对象身份和目标语言，不按候选消息拆分。 */
+function primaryThemeSourceKeyMemoKey(
+  input: MiniMessageCheckInput,
+): readonly unknown[] {
+  return [input.facts, input.dependencies, input.candidate.language];
+}
+
+/** 借用 Lioni 提供的 QA 本轮缓存，在各检查和候选间复用选择，由框架于本轮结束时释放。 */
+function primaryThemeSourceKey(
+  input: MiniMessageCheckInput,
+): string | undefined {
+  return input.memo.memo(choosePrimaryThemeSourceKey, {
+    key: primaryThemeSourceKeyMemoKey,
+  })(input);
 }
 
 function relevantThemeIssues(
