@@ -12,13 +12,11 @@ import {
   translationFieldScenes,
   translationFormats,
 } from "#/model";
-import type { ProjectReport, SyncPlan, SyncPreviewResult } from "#/model";
+import type { ProjectReport } from "#/model";
 import {
-  applySyncProject,
   initializeProject,
   inspectProject,
   operationExitCode,
-  previewSyncProject,
   recordException,
 } from "#/operations";
 
@@ -93,107 +91,6 @@ const reportSchema = z.object({
     .optional(),
 });
 
-const resourceChangesSchema = z.object({
-  added: z.array(z.string()),
-  removed: z.array(z.string()),
-  changed: z.array(z.string()),
-  unchanged: z.array(z.string()),
-  observedOnly: z.object({
-    added: z.array(z.string()),
-    removed: z.array(z.string()),
-    changed: z.array(z.string()),
-  }),
-});
-const syncPlanSchema = z.object({
-  sourceVersion: z.string(),
-  jarSha256: z.string().regex(/^[0-9a-f]{64}$/),
-  resourceChanges: resourceChangesSchema,
-  messages: z.array(
-    z.object({
-      id: z.string(),
-      action: z.enum(["preserve", "seed", "reset", "delete"]),
-      reason: z.enum([
-        "unchanged",
-        "target-path-blocked",
-        "missing-translation",
-        "new-message",
-        "source-changed",
-        "source-removed",
-        "orphaned-translation",
-      ]),
-      sourceFile: z.string(),
-      targetFile: z.string(),
-      path: z.array(z.string()),
-      category: z.enum(translationFieldCategories),
-      scene: z.enum(translationFieldScenes).optional(),
-      format: z.enum(translationFormats).optional(),
-      previousSource: jsonValueSchema.optional(),
-      source: jsonValueSchema.optional(),
-      previousTarget: jsonValueSchema.optional(),
-      target: jsonValueSchema.optional(),
-    }),
-  ),
-  structures: z.array(
-    z.object({
-      sourceFile: z.string(),
-      definitionsSource: z.string(),
-      targetFile: z.string(),
-      path: z.array(z.string()),
-      action: z.enum(["preserve", "update", "delete"]),
-      previous: jsonValueSchema.optional(),
-      expected: jsonValueSchema.optional(),
-    }),
-  ),
-  targetFiles: z.array(
-    z.object({
-      path: z.string(),
-      action: z.enum(["write", "unchanged"]),
-      expectedSha256: z
-        .string()
-        .regex(/^[0-9a-f]{64}$/)
-        .optional(),
-      contentSha256: z.string().regex(/^[0-9a-f]{64}$/),
-    }),
-  ),
-  unmanagedTargets: z.array(z.string()),
-  pendingTranslations: z.array(z.string()),
-  inputSnapshots: z.array(
-    z.object({
-      path: z.string(),
-      sha256: z
-        .string()
-        .regex(/^[0-9a-f]{64}$/)
-        .optional(),
-    }),
-  ),
-  writes: z.array(
-    z.object({
-      kind: z.enum(["target", "baseline", "lock"]),
-      path: z.string(),
-      content: z.string(),
-      expectedSha256: z
-        .string()
-        .regex(/^[0-9a-f]{64}$/)
-        .optional(),
-    }),
-  ),
-});
-const syncPreviewSchema = z.union([
-  z.object({
-    ready: z.literal(true),
-    plan: syncPlanSchema,
-  }),
-  z.object({
-    ready: z.literal(false),
-    blockers: z.array(z.object({ code: z.string(), reason: z.string() })),
-    resourceDifference: z.object({
-      undeclared: z.array(z.string()),
-      missing: z.array(z.string()),
-      duplicates: z.array(z.string()),
-    }),
-    resourceChanges: resourceChangesSchema,
-  }),
-]);
 const exceptionReceiptSchema = z.object({
   id: z.string().regex(/^[0-9a-f]{64}$/),
   contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
@@ -215,18 +112,6 @@ type ReportPayload = z.output<typeof reportSchema>;
 
 function reportPayload(report: ProjectReport): ReportPayload {
   return structuredClone(report) as ReportPayload;
-}
-
-type SyncPlanPayload = z.output<typeof syncPlanSchema>;
-
-function syncPlanPayload(plan: SyncPlan): SyncPlanPayload {
-  return structuredClone(plan) as SyncPlanPayload;
-}
-
-type SyncPreviewPayload = z.output<typeof syncPreviewSchema>;
-
-function syncPreviewPayload(preview: SyncPreviewResult): SyncPreviewPayload {
-  return structuredClone(preview) as SyncPreviewPayload;
 }
 
 function renderReport(report: ReportPayload) {
@@ -300,87 +185,6 @@ function renderReport(report: ReportPayload) {
   return text.lines(lines as [string, ...string[]]);
 }
 
-function renderSyncPreview(preview: SyncPreviewPayload) {
-  if (!preview.ready) {
-    const lines = ["sync：预演已阻断"];
-    const { resourceDifference, blockers } = preview;
-    if (resourceDifference.undeclared.length > 0) {
-      lines.push(
-        `尚未登记的新资源：${resourceDifference.undeclared.join("、")}`,
-      );
-    }
-    if (resourceDifference.missing.length > 0) {
-      lines.push(
-        `声明中不存在的资源：${resourceDifference.missing.join("、")}`,
-      );
-    }
-    if (resourceDifference.duplicates.length > 0) {
-      lines.push(
-        `JAR 中有重复路径：${resourceDifference.duplicates.join("、")}`,
-      );
-    }
-    for (const blocker of blockers) lines.push(blocker.reason);
-    return text.lines(lines as [string, ...string[]]);
-  }
-
-  const { plan } = preview;
-  const actionLabels = {
-    preserve: "保留译文",
-    seed: "填入英文",
-    reset: "重置为英文",
-    delete: "删除译文",
-  } as const;
-  const reasonLabels = {
-    unchanged: "原文未变",
-    "target-path-blocked": "目标路径被现有内容阻断",
-    "missing-translation": "译文缺失",
-    "new-message": "新增消息",
-    "source-changed": "原文变化",
-    "source-removed": "原文已删除",
-    "orphaned-translation": "目标字段不再受维护",
-  } as const;
-  const pendingIds = new Set(plan.pendingTranslations);
-  const counts = {
-    preserve: plan.messages.filter((message) => message.action === "preserve")
-      .length,
-    reset: plan.messages.filter((message) => message.action === "reset").length,
-    seed: plan.messages.filter((message) => message.action === "seed").length,
-    delete: plan.messages.filter((message) => message.action === "delete")
-      .length,
-  };
-  const lines = [
-    `sync：预演就绪（来源 ${plan.sourceVersion}）`,
-    `资源新增 ${plan.resourceChanges.added.length} 项；删除 ${plan.resourceChanges.removed.length} 项；内容变化 ${plan.resourceChanges.changed.length} 项；观察范围内变化 ${plan.resourceChanges.observedOnly.changed.length} 项。`,
-    `消息保留 ${counts.preserve} 条；重置 ${counts.reset} 条；填入英文 ${counts.seed} 条；删除 ${counts.delete} 条；待翻译总数 ${plan.pendingTranslations.length} 条。`,
-  ];
-  for (const message of plan.messages) {
-    const pendingLabel = pendingIds.has(message.id) ? "；待翻译" : "";
-    lines.push(
-      `${actionLabels[message.action]}（${reasonLabels[message.reason]}${pendingLabel}）：${message.sourceFile}:${message.path.join(".")} → ${message.targetFile}:${message.path.join(".")}`,
-    );
-  }
-  if (plan.unmanagedTargets.length > 0) {
-    lines.push(`解除维护并保留目标文件：${plan.unmanagedTargets.join("、")}`);
-  }
-  lines.push(`拟更新 ${plan.writes.length} 个文件；预演未写入项目。`);
-  return text.lines(lines as [string, ...string[]]);
-}
-
-function renderSyncApplied(plan: SyncPlanPayload, status: ReportPayload) {
-  const stateNames = {
-    ready: "正常",
-    issues: "发现问题",
-    incomplete: "覆盖不完整",
-  } as const;
-  const lines = [
-    `sync：已应用来源 ${plan.sourceVersion}`,
-    `更新文件 ${plan.writes.length} 项；待翻译 ${status.summary.pendingTranslations} 条；已修改 ${status.summary.modifiedTranslations} 条；缺失 ${status.summary.missingTranslations} 条。`,
-    `应用后状态：${stateNames[status.state]}；诊断 ${status.diagnostics.length} 条。`,
-  ];
-  if (status.diagnostics.length > 0) lines.push("运行 check 查看具体诊断。");
-  return text.lines(lines as [string, ...string[]]);
-}
-
 const define = defineCli<CliDependencies>();
 
 const initCommand = define.command("init")({
@@ -424,92 +228,6 @@ const initCommand = define.command("init")({
     try {
       const report = await initializeProject(input.project, input.jar);
       return outcome.data.report({ report: reportPayload(report) });
-    } catch (error) {
-      return outcome.failure.rejected({
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  },
-});
-
-const syncCommand = define.command("sync")({
-  kind: "command",
-  parent: "lands",
-  name: "sync",
-  description: "预演或应用指定上游 JAR 的同步计划",
-  fields: {
-    project: {
-      kind: "valueOption",
-      longOption: "--project",
-      description: "消费者项目目录",
-    },
-    jar: {
-      kind: "valueOption",
-      longOption: "--jar",
-      description: "指定的上游 JAR 文件",
-    },
-    dryRun: {
-      kind: "flag",
-      longOption: "--dry-run",
-      negatedLongOption: "--no-dry-run",
-      description: "只生成计划，不写入项目",
-    },
-  },
-  input: z.object({
-    project: z.string().min(1),
-    jar: z.string().min(1),
-    dryRun: z.boolean().default(false),
-  }),
-  success: {
-    kind: "data",
-    variants: {
-      plan: {
-        description: "同步预演计划",
-        schema: z.object({ plan: syncPlanSchema }),
-        exitCode: 0,
-        text: ({ plan }) =>
-          renderSyncPreview({ ready: true, plan } as SyncPreviewPayload),
-      },
-      applied: {
-        description: "同步计划已应用",
-        schema: z.object({ plan: syncPlanSchema, status: reportSchema }),
-        exitCode: 0,
-        text: ({ plan, status }) => renderSyncApplied(plan, status),
-      },
-    },
-  },
-  failures: {
-    blocked: {
-      description: "同步计划被资源差异或目标结构阻断",
-      schema: z.object({ preview: syncPreviewSchema }),
-      exitCode: 1,
-      text: ({ preview }) => renderSyncPreview(preview),
-    },
-    rejected: {
-      description: "同步输入或写入无法安全处理",
-      schema: z.object({ message: z.string() }),
-      exitCode: 1,
-      text: ({ message }) => text.line(`同步失败：${message}`),
-    },
-  },
-  async handler({ input, outcome }) {
-    try {
-      if (!input.dryRun) {
-        const result = await applySyncProject(input.project, input.jar);
-        return result.applied
-          ? outcome.data.applied({
-              plan: syncPlanPayload(result.plan),
-              status: reportPayload(result.status),
-            })
-          : outcome.failure.blocked({
-              preview: syncPreviewPayload(result.preview),
-            });
-      }
-
-      const preview = await previewSyncProject(input.project, input.jar);
-      return preview.ready
-        ? outcome.data.plan({ plan: syncPlanPayload(preview.plan) })
-        : outcome.failure.blocked({ preview: syncPreviewPayload(preview) });
     } catch (error) {
       return outcome.failure.rejected({
         message: error instanceof Error ? error.message : String(error),
@@ -732,7 +450,6 @@ export const cli = define({
       description: "维护 Lands 简体中文翻译项目",
     },
     ...initCommand,
-    ...syncCommand,
     ...statusCommand,
     ...checkCommand,
     ...exemptCommand,
