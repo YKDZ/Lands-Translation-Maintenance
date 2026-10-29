@@ -21,7 +21,7 @@ import {
   type MiniMessageCheckInput,
   type MiniMessageQualityObject,
 } from "#/minimessage-quality";
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 
 function interactionBasis(input: MiniMessageCheckInput): JsonValue {
   const dependencies = dependenciesOf(input.dependencies);

@@ -1,7 +1,16 @@
 import { isMap, LineCounter, parseDocument, type Document } from "yaml";
 
-import type { JsonValue, ProjectFileIssue } from "#/model";
+import type { JsonValue } from "#/json-value";
 import { toJsonValue } from "#/value";
+
+export interface YamlIssue {
+  readonly file: string;
+  readonly code: string;
+  readonly reason: string;
+  readonly path: readonly (string | number)[];
+  readonly line?: number;
+  readonly column?: number;
+}
 
 export interface ParsedYaml {
   readonly document: Document;
@@ -10,7 +19,7 @@ export interface ParsedYaml {
 
 export type ParsedYamlResult =
   | { readonly ok: true; readonly parsed: ParsedYaml }
-  | { readonly ok: false; readonly issues: readonly ProjectFileIssue[] };
+  | { readonly ok: false; readonly issues: readonly YamlIssue[] };
 
 export function parseYaml(source: string, file: string): ParsedYamlResult {
   const lineCounter = new LineCounter();

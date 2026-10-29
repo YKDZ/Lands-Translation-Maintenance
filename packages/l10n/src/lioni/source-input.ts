@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { readJarResources } from "#/jar";
 import { landsProjectPaths } from "#/lioni/project-paths";
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 import { sha256 } from "#/value";
 import { parseYaml } from "#/yaml-data";
 

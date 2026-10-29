@@ -1,12 +1,12 @@
-import { LineCounter, parseDocument } from "yaml";
 import { z } from "zod";
 
 import { sceneMatchesCategory } from "#/field-metadata";
-import type { ConsumerConfiguration, RuleConfiguration } from "#/model";
-import { translationFieldCategories, translationFieldScenes } from "#/model";
-import { canonicalJson, compareText, sha256 } from "#/value";
+import type { LandsProjectConfiguration } from "#/lioni/lands-model";
+import {
+  translationFieldCategories,
+  translationFieldScenes,
+} from "#/lioni/lands-model";
 
-const severitySchema = z.enum(["error", "warning", "info"]);
 const safePathSchema = z
   .string()
   .min(1)
@@ -73,30 +73,6 @@ const projectConfigurationSchema = z
   })
   .strict();
 
-const configurationSchema = projectConfigurationSchema
-  .extend({
-    schemaVersion: z.literal(1),
-    source: z
-      .object({
-        version: z.string().trim().min(1),
-        translationHistory: z.string().trim().min(1),
-      })
-      .strict(),
-    rules: z
-      .record(
-        z.string().min(1),
-        z
-          .object({
-            enabled: z.boolean().optional(),
-            severity: severitySchema.optional(),
-            parameters: z.record(z.string(), z.json()).optional(),
-          })
-          .strict(),
-      )
-      .optional(),
-  })
-  .strict();
-
 export const landsProjectFieldsSchema = projectConfigurationSchema;
 
 export interface ConfigurationIssue {
@@ -106,12 +82,8 @@ export interface ConfigurationIssue {
   readonly actual: string;
 }
 
-export type ParsedConfiguration =
-  | { readonly ok: true; readonly value: ConsumerConfiguration }
-  | { readonly ok: false; readonly issues: readonly ConfigurationIssue[] };
-
 export function validateConfiguration(
-  configuration: Pick<ConsumerConfiguration, "resources" | "translationScope">,
+  configuration: LandsProjectConfiguration,
 ): readonly ConfigurationIssue[] {
   const issues: ConfigurationIssue[] = [];
   const resources = new Map<string, number>();
@@ -473,7 +445,7 @@ export function validateConfiguration(
     mappingIndex,
     mapping,
   ] of configuration.translationScope.mappings.entries()) {
-    if (mapping.target === ".l10n" || mapping.target.startsWith(".l10n/")) {
+    if (mapping.target === ".lioni" || mapping.target.startsWith(".lioni/")) {
       issues.push({
         code: "configuration.mapping-target-reserved",
         path: ["translationScope", "mappings", mappingIndex, "target"],
@@ -503,10 +475,7 @@ export function validateConfiguration(
   return issues;
 }
 
-function pathsMayOverlap(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
+function pathsMayOverlap(left: readonly string[], right: readonly string[]): boolean {
   const length = Math.min(left.length, right.length);
   for (let index = 0; index < length; index += 1) {
     const leftPart = left[index]!;
@@ -517,130 +486,4 @@ function pathsMayOverlap(
     }
   }
   return true;
-}
-
-export function syncConfigurationFingerprint(
-  configuration: ConsumerConfiguration,
-): string {
-  const syncConfiguration = {
-    schemaVersion: configuration.schemaVersion,
-    source: configuration.source,
-    resources: [...configuration.resources].sort((left, right) =>
-      compareText(left.path, right.path),
-    ),
-    translationScope: {
-      sourceLanguage: configuration.translationScope.sourceLanguage,
-      targetLanguage: configuration.translationScope.targetLanguage,
-      mappings: configuration.translationScope.mappings
-        .map((mapping) => ({
-          ...mapping,
-          fields: [...mapping.fields].sort((left, right) =>
-            compareText(canonicalJson(left.path), canonicalJson(right.path)),
-          ),
-        }))
-        .sort((left, right) => compareText(left.source, right.source)),
-    },
-  };
-  return sha256(canonicalJson(syncConfiguration));
-}
-
-export function parseConfiguration(source: string): ParsedConfiguration {
-  const lineCounter = new LineCounter();
-  const document = parseDocument(source, {
-    uniqueKeys: true,
-    prettyErrors: false,
-    lineCounter,
-    stringKeys: true,
-  });
-  if (document.errors.length > 0) {
-    return {
-      ok: false,
-      issues: document.errors.map((error) => {
-        const linePos = lineCounter.linePos(error.pos[0]);
-        return {
-          code:
-            error.code === "DUPLICATE_KEY"
-              ? "configuration.duplicate-key"
-              : "configuration.yaml-invalid",
-          path: [],
-          reason: error.message,
-          actual: linePos === null ? "YAML 文档无效" : `第 ${linePos.line} 行`,
-        };
-      }),
-    };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = document.toJS({ mapAsMap: false, maxAliasCount: 0 });
-  } catch (error) {
-    return {
-      ok: false,
-      issues: [
-        {
-          code: "configuration.yaml-invalid",
-          path: [],
-          reason: error instanceof Error ? error.message : String(error),
-          actual: "YAML 文档无法转换为配置数据",
-        },
-      ],
-    };
-  }
-
-  const result = configurationSchema.safeParse(parsed);
-  if (!result.success) {
-    return {
-      ok: false,
-      issues: result.error.issues.map((issue) => ({
-        code: "configuration.invalid",
-        path: issue.path.filter(
-          (part): part is string | number =>
-            typeof part === "string" || typeof part === "number",
-        ),
-        reason: issue.message,
-        actual: "配置值不符合契约",
-      })),
-    };
-  }
-
-  const normalizedRules: Record<string, RuleConfiguration> = {};
-  for (const [id, settings] of Object.entries(result.data.rules ?? {})) {
-    normalizedRules[id] = {
-      ...(settings.enabled === undefined ? {} : { enabled: settings.enabled }),
-      ...(settings.severity === undefined
-        ? {}
-        : { severity: settings.severity }),
-      ...(settings.parameters === undefined
-        ? {}
-        : { parameters: settings.parameters }),
-    };
-  }
-  const configuration: ConsumerConfiguration = {
-    schemaVersion: result.data.schemaVersion,
-    source: result.data.source,
-    resources: result.data.resources,
-    translationScope: {
-      sourceLanguage: result.data.translationScope.sourceLanguage,
-      targetLanguage: result.data.translationScope.targetLanguage,
-      mappings: result.data.translationScope.mappings.map((mapping) => ({
-        source: mapping.source,
-        target: mapping.target,
-        ...(mapping.definitionsSource === undefined
-          ? {}
-          : { definitionsSource: mapping.definitionsSource }),
-        fields: mapping.fields.map((field) => ({
-          path: field.path,
-          category: field.category,
-          ...(field.scene === undefined ? {} : { scene: field.scene }),
-        })),
-      })),
-    },
-    ...(result.data.rules === undefined ? {} : { rules: normalizedRules }),
-  };
-  const semanticIssues = validateConfiguration(configuration);
-  if (semanticIssues.length > 0) {
-    return { ok: false, issues: semanticIssues };
-  }
-
-  return { ok: true, value: configuration };
 }

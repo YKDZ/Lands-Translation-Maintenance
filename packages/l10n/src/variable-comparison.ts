@@ -1,4 +1,7 @@
-import type { VariableCountDifference, VariableOccurrence } from "#/model";
+import type {
+  VariableCountDifference,
+  VariableOccurrence,
+} from "#/mini-message-model";
 import { canonicalJson } from "#/value";
 
 interface VariableCount {

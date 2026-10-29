@@ -3,5 +3,9 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["*.config.ts", "scripts/**/*.ts"]
+  "include": [
+    "*.config.ts",
+    "scripts/**/*.ts",
+    "translations/zhcn/.lioni/lioni.config.ts"
+  ]
 }

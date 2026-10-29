@@ -42,7 +42,7 @@ import {
   textRunReference,
   type MiniMessageTextRun,
 } from "#/minimessage-text-runs";
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 import { canonicalJson } from "#/value";
 
 const sourceLanguage = "en-US";

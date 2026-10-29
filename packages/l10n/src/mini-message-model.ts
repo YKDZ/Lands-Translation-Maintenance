@@ -1,9 +1,10 @@
+import type { JsonValue } from "#/json-value";
 import type {
-  DiagnosticLocation,
-  JsonValue,
-  MessageIdentity,
   ResourceInventoryEntry,
-} from "#/model";
+  TranslationFieldCategory,
+  TranslationFieldScene,
+  TranslationFormat,
+} from "#/lioni/lands-model";
 
 export type MiniMessageSurface = "chat" | "gui" | "dialog" | "bedrock";
 
@@ -17,6 +18,43 @@ export interface MiniMessageThemeSnapshot {
 export interface MiniMessagePosition {
   readonly start: number;
   readonly end: number;
+}
+
+export interface DiagnosticLocation {
+  readonly file: string;
+  readonly path: readonly (string | number)[];
+  readonly line?: number;
+  readonly column?: number;
+}
+
+export interface MessageIdentity {
+  readonly id: string;
+  readonly sourceFile: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
+  readonly category: TranslationFieldCategory;
+  readonly scene?: TranslationFieldScene;
+  readonly format?: TranslationFormat;
+}
+
+export interface VariableContextPart {
+  readonly kind: string;
+  readonly identity: JsonValue;
+}
+
+export interface VariableOccurrence {
+  readonly name: string;
+  readonly context: readonly VariableContextPart[];
+  readonly position?: MiniMessagePosition;
+}
+
+export interface VariableCountDifference {
+  readonly name: string;
+  readonly context: readonly VariableContextPart[];
+  readonly expectedCount: number;
+  readonly actualCount: number;
+  readonly expectedPositions: readonly MiniMessagePosition[];
+  readonly actualPositions: readonly MiniMessagePosition[];
 }
 
 /** MiniMessage 接收适配后的内容，同时保留到原始 UTF-16 边界的位置映射。 */

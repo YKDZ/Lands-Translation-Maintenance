@@ -2,7 +2,7 @@ import type {
   MiniMessageTagNode,
   ParsedMiniMessageDocument,
   TranslatableTextSegment,
-} from "#/model";
+} from "#/mini-message-model";
 
 const translationFallbackTags = new Set(["translate_or", "lang_or", "tr_or"]);
 

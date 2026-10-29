@@ -13,7 +13,7 @@ import type {
   MiniMessageThemeEntry,
   ParsedMiniMessageDocument,
 } from "#/mini-message-model";
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 import { canonicalJson, compareText } from "#/value";
 
 const namedColors = new Set([

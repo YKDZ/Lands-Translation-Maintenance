@@ -1,15 +1,15 @@
 import { parseFragment, type DefaultTreeAdapterTypes } from "parse5";
 
 import { translationFallbackSegment } from "#/minimessage-text";
+import type { JsonValue } from "#/json-value";
 import type {
-  JsonValue,
   MiniMessageContextFrame,
   MiniMessageFinding,
   MiniMessagePosition,
   MiniMessageSourceNode,
   ParsedMiniMessageDocument,
   TranslatableTextSegment,
-} from "#/model";
+} from "#/mini-message-model";
 
 type HtmlNode = DefaultTreeAdapterTypes.ChildNode;
 type HtmlElement = DefaultTreeAdapterTypes.Element;

@@ -35,9 +35,9 @@ import type {
 } from "#/mini-message-model";
 import { translationFallbackSegment } from "#/minimessage-text";
 import type {
-  JsonValue,
   ResourceInventoryEntry as LandsResourceInventoryEntry,
-} from "#/model";
+} from "#/lioni/lands-model";
+import type { JsonValue } from "#/json-value";
 import { parseYaml } from "#/yaml-data";
 
 interface ThemeDefinition {

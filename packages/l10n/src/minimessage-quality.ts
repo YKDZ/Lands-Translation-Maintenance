@@ -35,7 +35,8 @@ import {
   type MiniMessageBehaviorChecks,
   type MiniMessageBehaviorFinding,
 } from "#/minimessage-variables";
-import type { JsonValue, ResourceInventoryEntry } from "#/model";
+import type { JsonValue } from "#/json-value";
+import type { ResourceInventoryEntry } from "#/lioni/lands-model";
 import {
   pairTranslatableTextDocuments,
   type TranslatableTextPairing,

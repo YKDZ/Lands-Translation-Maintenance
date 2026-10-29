@@ -4,17 +4,14 @@ import {
   landsProjectFieldsSchema,
   validateConfiguration,
 } from "#/configuration";
-import type { ConsumerConfiguration } from "#/model";
+import type { LandsProjectConfiguration } from "#/lioni/lands-model";
 import { parseYaml } from "#/yaml-data";
 
 const projectManifestSchema = landsProjectFieldsSchema
   .extend({ format: z.literal("lands-l10n-project/v1") })
   .strict();
 
-export type LandsProjectConfiguration = Pick<
-  ConsumerConfiguration,
-  "resources" | "translationScope"
->;
+export type { LandsProjectConfiguration } from "#/lioni/lands-model";
 
 /** 读取 Lioni 项目目录中的 Lands 资源与字段声明。 */
 export function parseLandsProjectConfiguration(

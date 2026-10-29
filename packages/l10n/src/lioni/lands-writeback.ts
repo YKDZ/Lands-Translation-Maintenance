@@ -9,7 +9,7 @@ import type {
 import { z } from "zod";
 
 import type { LandsProjectPaths } from "#/lioni/project-paths";
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 import { isYamlDocumentRootMap, parseYaml, setDocumentPath } from "#/yaml-data";
 
 interface LandsTarget {

@@ -29,7 +29,7 @@ import {
   positionsForTextRun,
   sameTranslatableText,
 } from "#/minimessage-text-runs";
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 import { canonicalJson } from "#/value";
 
 const targetLanguage = "zh-CN";

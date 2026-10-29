@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import {
   createFormatProject,
   createGuiProject,
-  writeLioniProjectDeclaration,
 } from "../cli-fixtures.ts";
 
 const packageDirectory = resolve(
@@ -68,7 +67,6 @@ async function prepareNativeProject(
   t: TestContext,
   project: { readonly directory: string; readonly jarFile: string },
 ) {
-  await writeLioniProjectDeclaration(project.directory);
   const configPath = join(project.directory, ".lioni/lioni.config.ts");
   await mkdir(join(project.directory, ".lioni"), { recursive: true });
   await writeFile(

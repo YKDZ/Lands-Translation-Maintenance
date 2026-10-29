@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { JsonValue } from "#/model";
+import type { JsonValue } from "#/json-value";
 
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
