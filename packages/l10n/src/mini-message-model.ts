@@ -87,7 +87,7 @@ export interface MiniMessageInputMessage extends MessageIdentity {
 }
 
 export interface ParsedMiniMessageDocument {
-  readonly message: MessageIdentity;
+  readonly message: MiniMessageInputMessage;
   readonly documentIndex: number;
   readonly origin: "source" | "target";
   readonly file: string;
@@ -115,7 +115,7 @@ export interface TranslatableTextSegment {
 
 /** 供术语和文风检查只读消费的正文视图；每个嵌套 hover 仍是独立文档。 */
 export interface TranslatableTextDocument {
-  readonly message: MessageIdentity;
+  readonly message: MiniMessageInputMessage;
   readonly documentIndex: number;
   readonly origin: "source" | "target";
   readonly file: string;

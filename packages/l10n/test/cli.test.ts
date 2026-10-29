@@ -14,9 +14,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { initializeProject, recordException } from "@lands-l10n/l10n";
+import { initializeProject } from "@lands-l10n/l10n";
 import { zipSync, strToU8 } from "fflate";
-import { parse as parseYaml } from "yaml";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliFile = resolve(packageDirectory, "dist/cli.js");
@@ -652,19 +651,11 @@ void describe("CLI 制品", () => {
       assert.equal(await readFile(targetPath, "utf8"), original);
       const report = readReport(initialized.stdout);
       assert.equal(report.state, "issues");
-      assert.equal(
-        (report.summary as Record<string, unknown>).missingTranslations,
-        0,
-      );
       assert.ok(
         (report.diagnostics as Array<Record<string, unknown>>).some(
           (item) => item.code === "message.type-mismatch",
         ),
       );
-      const lock = JSON.parse(
-        await readFile(join(project.directory, ".l10n/lock.json"), "utf8"),
-      ) as { readonly translationSeeds: readonly unknown[] };
-      assert.equal(lock.translationSeeds.length, 0);
       const baseline = JSON.parse(
         await readFile(
           join(project.directory, ".l10n/upstream/source-baseline.json"),
@@ -839,76 +830,6 @@ void describe("CLI 制品", () => {
     assert.doesNotMatch(savedTarget, /greeting: Hello/);
   });
 
-  void it("目标路径与字段类别变化时仍使用原文资源和字段身份", async (t) => {
-    const scalarProject = await createProject(t);
-    const scalarConfigPath = join(scalarProject.directory, ".l10n/config.yml");
-    const scalarConfig = await readFile(scalarConfigPath, "utf8");
-    await writeFile(
-      scalarConfigPath,
-      scalarConfig.replace(
-        "        - path: [messages]\n          category: chat-string\n        - path: [list, entries]\n          category: chat-string-list",
-        "        - path: [messages, greeting]\n          category: chat-string",
-      ),
-    );
-    await rm(join(scalarProject.directory, "lang/zh.yml"));
-    const scalarInit = runCli(
-      "init",
-      "--project",
-      scalarProject.directory,
-      "--jar",
-      scalarProject.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(scalarInit.status, 0, scalarInit.stderr);
-
-    const listProject = await createProject(t);
-    const listConfigPath = join(listProject.directory, ".l10n/config.yml");
-    const listConfig = await readFile(listConfigPath, "utf8");
-    await writeFile(
-      listConfigPath,
-      listConfig
-        .replace("target: lang/zh.yml", "target: lang/zh-new.yml")
-        .replace(
-          "        - path: [messages]\n          category: chat-string\n        - path: [list, entries]\n          category: chat-string-list",
-          "        - path: [messages, greeting]\n          category: chat-string-list",
-        ),
-    );
-    await writeFile(
-      listProject.jarFile,
-      zipSync({
-        "lang/en.yml": strToU8("messages:\n  greeting: [Hello]\n"),
-        "plugin.yml": strToU8("name: Lands\n"),
-        "settings.yml": strToU8("enabled: true\n"),
-        "bedrock/lang/en_us.json": strToU8("not parsed by the first scope\n"),
-        "me/lands/Plugin.class": strToU8("class bytes"),
-      }),
-    );
-    const listInit = runCli(
-      "init",
-      "--project",
-      listProject.directory,
-      "--jar",
-      listProject.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(listInit.status, 0, listInit.stderr);
-
-    const scalarLock = JSON.parse(
-      await readFile(join(scalarProject.directory, ".l10n/lock.json"), "utf8"),
-    ) as { readonly translationSeeds: readonly { readonly id: string }[] };
-    const listLock = JSON.parse(
-      await readFile(join(listProject.directory, ".l10n/lock.json"), "utf8"),
-    ) as { readonly translationSeeds: readonly { readonly id: string }[] };
-    assert.equal(scalarLock.translationSeeds.length, 1);
-    assert.equal(listLock.translationSeeds.length, 1);
-    assert.equal(
-      scalarLock.translationSeeds[0]?.id,
-      listLock.translationSeeds[0]?.id,
-    );
-  });
-
   void it("SIGKILL 后重试先回滚残留，再建立完整待翻译状态", async (t) => {
     const project = await createInterruptedProject(t);
     const interrupted = await killCliWhenFileAppears(
@@ -942,21 +863,13 @@ void describe("CLI 制品", () => {
       "structured",
     );
     assert.equal(retried.status, 0, retried.stderr);
-    const summary = readReport(retried.stdout).summary as Record<
-      string,
-      unknown
-    >;
-    assert.equal(summary.messages, project.targetPaths.length);
-    assert.equal(summary.pendingTranslations, project.targetPaths.length);
-    assert.equal(summary.sameTextCandidates, 0);
-    const lock = JSON.parse(
-      await readFile(join(project.directory, ".l10n/lock.json"), "utf8"),
-    ) as {
-      readonly translationSeeds: readonly unknown[];
-      readonly sameTextCandidates: readonly unknown[];
-    };
-    assert.equal(lock.translationSeeds.length, project.targetPaths.length);
-    assert.equal(lock.sameTextCandidates.length, 0);
+    for (const [index, target] of project.targetPaths.entries()) {
+      const suffix = String(index).padStart(3, "0");
+      assert.match(
+        await readFile(join(project.directory, target), "utf8"),
+        new RegExp(`greeting: Hello ${suffix}`),
+      );
+    }
   });
 
   void it("只读查询拒绝尚未提交的晚期事务，并保持文件不变", async (t) => {
@@ -1004,12 +917,10 @@ void describe("CLI 制品", () => {
       "structured",
     );
     assert.equal(retried.status, 0, retried.stderr);
-    const summary = readReport(retried.stdout).summary as Record<
-      string,
-      unknown
-    >;
-    assert.equal(summary.pendingTranslations, project.targetPaths.length);
-    assert.equal(summary.sameTextCandidates, 0);
+    assert.equal(
+      (readReport(retried.stdout).summary as Record<string, unknown>).messages,
+      project.targetPaths.length,
+    );
   });
 
   void it("只读查询接受已提交但尚未清理的事务", async (t) => {
@@ -1197,80 +1108,6 @@ void describe("CLI 制品", () => {
     assert.equal(coverage.complete, false);
   });
 
-  void it("结构规则禁用后仍按映射事实阻止同文确认", async (t) => {
-    const project = await createProject(t);
-    const targetPath = join(project.directory, "lang/zh.yml");
-    const initialTarget = await readFile(targetPath, "utf8");
-    await writeFile(
-      targetPath,
-      initialTarget.replace("greeting: 你好", "greeting: Hello"),
-    );
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(initialized.status, 0, initialized.stderr);
-
-    const configPath = join(project.directory, ".l10n/config.yml");
-    const config = await readFile(configPath, "utf8");
-    await writeFile(
-      configPath,
-      `${config}\nrules:\n  structure:\n    enabled: false\n`,
-    );
-    await writeFile(
-      targetPath,
-      (await readFile(targetPath, "utf8")).replace(
-        "welcome: Welcome",
-        "welcome: [broken]",
-      ),
-    );
-
-    const status = runCli(
-      "status",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(status.status, 0, status.stderr);
-    const candidate = (
-      readReport(status.stdout || status.stderr)
-        .exceptionCandidates as readonly Record<string, unknown>[]
-    )
-      .filter((candidate) => candidate.ruleId === "translation-review")
-      .find(
-        (item) =>
-          (item.message as Record<string, unknown>).path !== undefined &&
-          JSON.stringify((item.message as Record<string, unknown>).path) ===
-            '["messages","greeting"]',
-      );
-    assert.ok(candidate);
-    if (candidate === undefined) throw new Error("缺少同文候选");
-
-    const confirmation = runCli(
-      "exempt",
-      "--project",
-      project.directory,
-      "--id",
-      String(candidate.id),
-      "--reason",
-      "结构规则关闭时仍须检查映射前提",
-      "--output-format",
-      "structured",
-    );
-    assert.equal(confirmation.status, 1);
-    assert.match(confirmation.stdout || confirmation.stderr, /执行前提/u);
-    await assert.rejects(
-      readFile(join(project.directory, ".l10n/exceptions.yml")),
-      { code: "ENOENT" },
-    );
-  });
-
   void it("同步锁内部状态不一致时拒绝状态查询", async (t) => {
     const project = await createProject(t);
     const initialized = runCli(
@@ -1289,7 +1126,7 @@ void describe("CLI 制品", () => {
       string,
       unknown
     >;
-    lock.translationSeeds = [];
+    lock.integritySha256 = "0".repeat(64);
     await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 
     const status = runCli(
@@ -1301,351 +1138,5 @@ void describe("CLI 制品", () => {
     );
     assert.equal(status.status, 1);
     assert.match(status.stdout || status.stderr, /锁文件校验/);
-  });
-
-  void it("历史同文只记录候选，不标为待翻译或已审核", async (t) => {
-    const project = await createProject(t);
-    const targetPath = join(project.directory, "lang/zh.yml");
-    const target = await readFile(targetPath, "utf8");
-    await writeFile(
-      targetPath,
-      target.replace("greeting: 你好", "greeting: Hello"),
-    );
-
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(initialized.status, 0, initialized.stderr);
-    const summary = readReport(initialized.stdout).summary as Record<
-      string,
-      unknown
-    >;
-    assert.equal(summary.pendingTranslations, 1);
-    assert.equal(summary.sameTextCandidates, 1);
-
-    const status = runCli(
-      "status",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(status.status, 0, status.stderr);
-    const statusSummary = readReport(status.stdout).summary as Record<
-      string,
-      unknown
-    >;
-    assert.equal(statusSummary.sameTextCandidates, 1);
-  });
-
-  void it("同一例外模型接受不同检查结论，分别派生待译状态和质量报告", async (t) => {
-    const project = await createProject(t);
-    const targetPath = join(project.directory, "lang/zh.yml");
-    await writeFile(
-      targetPath,
-      (await readFile(targetPath, "utf8")).replace(
-        "greeting: 你好",
-        "greeting: Hello",
-      ),
-    );
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-    );
-    assert.equal(initialized.status, 0, initialized.stderr);
-    await writeFile(
-      targetPath,
-      (await readFile(targetPath, "utf8"))
-        .replace("  welcome: Welcome\n", "")
-        .replace("  commands:\n    registered: 已注册\n", ""),
-    );
-    const checked = runCli(
-      "check",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    const report = readReport(checked.stdout || checked.stderr);
-    const candidates = report.exceptionCandidates as readonly Record<
-      string,
-      unknown
-    >[];
-    const sameText = candidates.find(
-      (candidate) =>
-        candidate.ruleId === "translation-review" &&
-        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
-          '["messages","greeting"]',
-    );
-    const missing = candidates.find(
-      (candidate) =>
-        candidate.ruleId !== "translation-review" &&
-        candidate.code === "message.missing" &&
-        JSON.stringify((candidate.message as Record<string, unknown>).path) ===
-          '["messages","welcome"]',
-    );
-    assert.ok(sameText);
-    assert.ok(missing);
-    for (const candidate of [sameText, missing]) {
-      const recorded = runCli(
-        "exempt",
-        "--project",
-        project.directory,
-        "--id",
-        String(candidate.id),
-        "--reason",
-        "已复核此具体例外",
-        "--output-format",
-        "structured",
-      );
-      assert.equal(recorded.status, 0, recorded.stdout || recorded.stderr);
-      const receipt = readEnvelope(recorded.stdout).data?.exception as Record<
-        string,
-        unknown
-      >;
-      assert.equal(receipt.id, candidate.id);
-      assert.equal(receipt.contentFingerprint, candidate.contentFingerprint);
-    }
-    const renewed = runCli(
-      "exempt",
-      "--project",
-      project.directory,
-      "--id",
-      String(missing.id),
-      "--reason",
-      "补充接受理由",
-    );
-    assert.equal(renewed.status, 0, renewed.stdout || renewed.stderr);
-    const saved = parseYaml(
-      await readFile(join(project.directory, ".l10n/exceptions.yml"), "utf8"),
-    ) as {
-      schemaVersion: number;
-      records: readonly Record<string, unknown>[];
-    };
-    assert.equal(saved.schemaVersion, 3);
-    assert.equal(saved.records.length, 2);
-    assert.deepEqual(
-      new Set(saved.records.map((record) => record.ruleId)),
-      new Set(["structure", "translation-review"]),
-    );
-    assert.equal(
-      saved.records.find((record) => record.id === missing.id)?.reason,
-      "补充接受理由",
-    );
-    const beforeStatus = await snapshotProjectFiles(project.directory);
-    const status = runCli(
-      "status",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    const after = readReport(status.stdout || status.stderr);
-    assert.equal(status.status, 1);
-    const summary = after.summary as Record<string, unknown>;
-    assert.equal(summary.confirmedSameText, 1);
-    assert.equal(summary.sameTextCandidates, 0);
-    assert.equal(summary.pendingTranslations, 0);
-    const remaining = after.exceptionCandidates as readonly Record<
-      string,
-      unknown
-    >[];
-    assert.ok(
-      !remaining.some(
-        (candidate) =>
-          candidate.id === sameText.id || candidate.id === missing.id,
-      ),
-    );
-    const diagnostics = after.diagnostics as readonly Record<string, unknown>[];
-    assert.ok(
-      !diagnostics.some((diagnostic) => diagnostic.diagnosticId === missing.id),
-    );
-    assert.ok(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.code === "message.missing" &&
-          JSON.stringify(
-            (diagnostic.message as Record<string, unknown>).path,
-          ) === '["messages","commands","registered"]',
-      ),
-    );
-    assert.deepEqual(
-      await snapshotProjectFiles(project.directory),
-      beforeStatus,
-    );
-  });
-
-  void it("同文确认与诊断豁免都不能绕过尚未同步的维护声明", async (t) => {
-    const project = await createProject(t);
-    const targetPath = join(project.directory, "lang/zh.yml");
-    const target = await readFile(targetPath, "utf8");
-    await writeFile(
-      targetPath,
-      target.replace("greeting: 你好", "greeting: Hello"),
-    );
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(initialized.status, 0, initialized.stderr);
-    await writeFile(
-      targetPath,
-      (await readFile(targetPath, "utf8")).replace("  welcome: Welcome\n", ""),
-    );
-
-    const status = runCli(
-      "status",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    const sameTextCandidate = (
-      readReport(status.stdout || status.stderr)
-        .exceptionCandidates as readonly Record<string, unknown>[]
-    )
-      .filter((candidate) => candidate.ruleId === "translation-review")
-      .find(
-        (candidate) =>
-          JSON.stringify(
-            (candidate.message as Record<string, unknown>).path,
-          ) === '["messages","greeting"]',
-      );
-    assert.ok(sameTextCandidate);
-    if (sameTextCandidate === undefined)
-      throw new Error("缺少待确认的同文候选");
-    const check = runCli(
-      "check",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    const missing = (
-      readReport(check.stdout || check.stderr).diagnostics as readonly Record<
-        string,
-        unknown
-      >[]
-    ).find(
-      (diagnostic) =>
-        diagnostic.code === "message.missing" &&
-        JSON.stringify((diagnostic.message as Record<string, unknown>).path) ===
-          '["messages","welcome"]',
-    );
-    assert.ok(missing);
-    if (missing === undefined) throw new Error("缺少目标消息诊断");
-
-    const configPath = join(project.directory, ".l10n/config.yml");
-    const config = await readFile(configPath, "utf8");
-    await writeFile(
-      configPath,
-      config.replace(
-        "b8f6985a4ad2af1b76b05f0f79b718a2234623ad",
-        "a8f6985a4ad2af1b76b05f0f79b718a2234623ad",
-      ),
-    );
-
-    for (const result of [
-      runCli(
-        "exempt",
-        "--project",
-        project.directory,
-        "--id",
-        String(sameTextCandidate.id),
-        "--reason",
-        "未同步时不得确认",
-        "--output-format",
-        "structured",
-      ),
-      runCli(
-        "exempt",
-        "--project",
-        project.directory,
-        "--id",
-        String(missing.diagnosticId),
-        "--reason",
-        "未同步时不得豁免",
-        "--output-format",
-        "structured",
-      ),
-    ]) {
-      assert.equal(result.status, 1);
-      assert.match(result.stdout || result.stderr, /执行前提/u);
-    }
-    await assert.rejects(
-      readFile(join(project.directory, ".l10n/exceptions.yml")),
-      { code: "ENOENT" },
-    );
-  });
-
-  void it("写入前诊断对象变化时拒绝记录豁免", async (t) => {
-    const project = await createProject(t);
-    const initialized = runCli(
-      "init",
-      "--project",
-      project.directory,
-      "--jar",
-      project.jarFile,
-      "--output-format",
-      "structured",
-    );
-    assert.equal(initialized.status, 0, initialized.stderr);
-
-    const targetPath = join(project.directory, "lang/zh.yml");
-    const originalTarget = await readFile(targetPath, "utf8");
-    const missingTarget = originalTarget.replace("  welcome: Welcome\n", "");
-    await writeFile(targetPath, missingTarget);
-    const checked = runCli(
-      "check",
-      "--project",
-      project.directory,
-      "--output-format",
-      "structured",
-    );
-    const diagnostics = readReport(checked.stdout || checked.stderr)
-      .diagnostics as readonly Record<string, unknown>[];
-    const missing = diagnostics.find(
-      (diagnostic) =>
-        diagnostic.code === "message.missing" &&
-        JSON.stringify(
-          (diagnostic.message as Record<string, unknown> | undefined)?.path,
-        ) === '["messages","welcome"]',
-    );
-    assert.ok(missing);
-    if (missing === undefined) throw new Error("缺少待豁免的消息诊断");
-
-    await assert.rejects(
-      recordException(
-        project.directory,
-        String(missing.diagnosticId),
-        "写入前对象发生变化",
-        {
-          beforeApply: async () => {
-            await writeFile(targetPath, originalTarget);
-          },
-        },
-      ),
-      (error: unknown) =>
-        error instanceof Error && /写入前例外对象已变化/u.test(error.message),
-    );
-    await assert.rejects(
-      readFile(join(project.directory, ".l10n/exceptions.yml")),
-      { code: "ENOENT" },
-    );
-    assert.equal(await readFile(targetPath, "utf8"), originalTarget);
   });
 });

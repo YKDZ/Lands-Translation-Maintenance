@@ -52,18 +52,6 @@ const structureRule: CheckRule = {
       });
     }
 
-    for (const message of project.messages) {
-      if (message.targetStatus === "missing") {
-        findings.push({
-          code: "message.missing",
-          message,
-          location: { file: message.targetFile, path: message.path },
-          reason: "受管理的译文消息缺失",
-          expected: message.source,
-          actual: { state: "missing" },
-        });
-      }
-    }
     return findings;
   },
 };

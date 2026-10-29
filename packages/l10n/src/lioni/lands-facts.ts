@@ -712,57 +712,37 @@ async function readSource(
   return { scopes };
 }
 
-function fieldPaths(
-  mapping: LandsProjectConfiguration["translationScope"]["mappings"][number],
-  definitions: JsonValue,
-): { readonly paths: ReadonlySet<string>; readonly issues: readonly string[] } {
-  const paths = new Set<string>();
-  const issues: string[] = [];
-  for (const field of mapping.fields) {
-    const selected = collectFieldEntries(
-      definitions,
-      field,
-      mapping.definitionsSource ?? mapping.source,
-      false,
-    );
-    issues.push(...selected.issues);
-    for (const entry of selected.entries) {
-      paths.add(canonicalJson(entry.path));
-    }
-  }
-  return { paths, issues };
-}
-
 function structureEntries(
+  mapping: LandsMapping,
   definitions: JsonValue,
   target: ReadResourceResult,
-  translatedPaths: ReadonlySet<string>,
-) {
-  const entries: {
+): {
+  readonly entries: readonly {
     readonly path: readonly string[];
     readonly expected: JsonValue;
     readonly actual: PathValue;
-  }[] = [];
-
-  function visit(value: JsonValue, path: readonly string[]): void {
-    if (translatedPaths.has(canonicalJson(path))) return;
-    if (isRecord(value) && Object.keys(value).length > 0) {
-      for (const key of Object.keys(value).sort(compareText)) {
-        visit(value[key]!, [...path, key]);
-      }
-      return;
-    }
-    const actual =
-      target.status === "available"
-        ? readPath(target.value!, path)
-        : target.status === "missing"
-          ? { status: "missing" as const }
-          : { status: "unavailable" as const, error: target.error! };
-    entries.push({ path, expected: value, actual });
-  }
-
-  visit(definitions, []);
-  return entries;
+  }[];
+  readonly issues: readonly string[];
+} {
+  // 与原文结构单元共用遍历，保留结构字段作为一个整体时的路径粒度。
+  const structures = collectStructuralFields(
+    definitions,
+    mapping.fields,
+    mapping.definitionsSource ?? mapping.source,
+  );
+  return {
+    entries: structures.entries.map(({ path, value }) => ({
+      path,
+      expected: value,
+      actual:
+        target.status === "available"
+          ? readPath(target.value!, path)
+          : target.status === "missing"
+            ? { status: "missing" as const }
+            : { status: "unavailable" as const, error: target.error! },
+    })),
+    issues: structures.issues,
+  };
 }
 
 async function readTargetResource(
@@ -786,23 +766,13 @@ async function readTargetResource(
   return parseResource(bytes, path);
 }
 
-interface LandsSourceUnitLocation {
-  readonly unit: {
-    readonly context: {
-      readonly sourceFile: string;
-      readonly targetFile: string;
-      readonly path: readonly string[];
-    };
-  };
-}
-
 interface MappingStructureProjection {
   readonly sourceFile: string;
   readonly targetFile: string;
   readonly definitionsSource?: string;
   readonly fields: LandsMapping["fields"];
   readonly targetStatus: ReadResourceResult["status"];
-  readonly structures: ReturnType<typeof structureEntries>;
+  readonly structures: ReturnType<typeof structureEntries>["entries"];
   readonly enumeration: "complete" | "partial" | "failed";
   readonly error?: string;
 }
@@ -853,27 +823,16 @@ function mappingStructures(
   mapping: LandsMapping,
   snapshot: LandsSourceSnapshot,
   target: ReadResourceResult,
-  sourceUnits: readonly LandsSourceUnitLocation[],
 ): MappingStructureProjection {
   const definition = mappingDefinitions(mapping, snapshot);
   const issues: string[] = [];
-  const translatedPaths = new Set(
-    sourceUnits
-      .filter(
-        ({ unit }) =>
-          unit.context.sourceFile === mapping.source &&
-          unit.context.targetFile === mapping.target,
-      )
-      .map(({ unit }) => canonicalJson(unit.context.path)),
-  );
-  let structures: ReturnType<typeof structureEntries> = [];
+  let structures: ReturnType<typeof structureEntries>["entries"] = [];
   if (definition.status === "unavailable") {
     issues.push(definition.error);
   } else if (definition.status === "available") {
-    const fields = fieldPaths(mapping, definition.value);
-    issues.push(...fields.issues);
-    for (const path of fields.paths) translatedPaths.add(path);
-    structures = structureEntries(definition.value, target, translatedPaths);
+    const projection = structureEntries(mapping, definition.value, target);
+    issues.push(...projection.issues);
+    structures = projection.entries;
   }
   if (target.status === "unavailable") {
     issues.push(target.error ?? `${mapping.target} 无法读取`);
@@ -900,7 +859,6 @@ function mappingStructures(
 /** 读取供格式与结构检查共享的当前只读资料，不写入比较基线或译文。 */
 export async function readLandsStructureProjection(
   entryUrl: string | URL,
-  sourceUnits: readonly LandsSourceUnitLocation[] = [],
 ): Promise<LandsStructureProjection> {
   const paths = landsProjectPaths(entryUrl);
   const { configuration, snapshot } = await readProjectInput(paths);
@@ -931,7 +889,7 @@ export async function readLandsStructureProjection(
       paths.projectDirectory,
       mapping.target,
     );
-    mappings.push(mappingStructures(mapping, snapshot, target, sourceUnits));
+    mappings.push(mappingStructures(mapping, snapshot, target));
   }
   return {
     sourceVersion: snapshot.manifest.sourceVersion,
