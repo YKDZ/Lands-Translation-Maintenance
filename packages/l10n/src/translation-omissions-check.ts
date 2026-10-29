@@ -246,7 +246,7 @@ function runPosition(
 }
 
 function isTranslatableBody(value: string): boolean {
-  return /\S/u.test(value);
+  return /[\p{L}\p{N}]/u.test(value);
 }
 
 function relatedPairingIssues(
@@ -338,7 +338,7 @@ export const translationOmissionsCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "translation-omissions",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: omissionsBasis,

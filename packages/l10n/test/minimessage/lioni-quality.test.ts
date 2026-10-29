@@ -746,6 +746,81 @@ void test("普通非空原文列表的空译文只产生漏译警告", async (t)
   );
 });
 
+void test("纯可见装饰跳过漏译判断而混合文字与数字仍报告", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      chatList: {
+        source: ["━━★", "───", "• ‹ › « » ·", "• 中文 ‹", "· 123 ·"],
+        target: ["━━★", "───", "• ‹ › « » ·", "• 中文 ‹", "· 123 ·"],
+      },
+    },
+  );
+  const sourceKey = 'Locale/en-US_messages.yml:["messages","entries"]';
+  const targetPath = join(project.directory, "Locale/zh-CN_messages.yml");
+  const sameTextRun = runLioni(["qa", project.configPath]);
+  const sameTextReport = qualityReport(sameTextRun).report;
+  const sameText = checkResult(
+    sameTextReport,
+    "translation-omissions",
+  ).diagnostics.filter(
+    ({ object }) =>
+      object.key === sourceKey && object.code === "translation.same-text",
+  );
+
+  assert.equal(sameTextRun.status, 0, JSON.stringify(sameTextReport, null, 2));
+  assert.equal(sameTextReport.status, "complete");
+  assert.deepEqual(
+    sameText.map(({ location }) => location.range.path),
+    [
+      ["messages", "entries", 3],
+      ["messages", "entries", 4],
+    ],
+  );
+  assert.ok(
+    sameText.every(
+      ({ severity, handling }) =>
+        severity === "warning" && handling.status === "active",
+    ),
+    JSON.stringify(sameText, null, 2),
+  );
+
+  await writeFile(targetPath, "messages:\n  entries: []\n");
+  const emptyTextRun = runLioni(["qa", project.configPath]);
+  const emptyTextReport = qualityReport(emptyTextRun).report;
+  const emptyText = checkResult(
+    emptyTextReport,
+    "translation-omissions",
+  ).diagnostics.filter(
+    ({ object }) =>
+      object.key === sourceKey && object.code === "translation.empty-text",
+  );
+
+  assert.equal(
+    emptyTextRun.status,
+    0,
+    JSON.stringify(emptyTextReport, null, 2),
+  );
+  assert.equal(emptyTextReport.status, "complete");
+  assert.deepEqual(
+    emptyText.map(({ location }) => location.range.path),
+    [
+      ["messages", "entries", 3],
+      ["messages", "entries", 4],
+    ],
+  );
+  assert.ok(
+    emptyText.every(
+      ({ severity, handling }) =>
+        severity === "warning" && handling.status === "active",
+    ),
+    JSON.stringify(emptyText, null, 2),
+  );
+});
+
 void test("空列表译文仍检查被删除的 MiniMessage 标签与变量", async (t) => {
   const project = await createQualityProject(
     t,
