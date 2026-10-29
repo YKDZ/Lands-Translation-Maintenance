@@ -171,14 +171,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
         capability.includes("Java"),
       ),
     );
-    assert.ok(
-      (
-        missingJavaReport.diagnostics as readonly Record<string, unknown>[]
-      ).some(
-        (diagnostic) =>
-          diagnostic.code === "minimessage.variable-coverage-unavailable",
-      ),
-    );
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
       initialFiles,
@@ -211,14 +203,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
             .complete,
           false,
         );
-        assert.ok(
-          (
-            incompleteReport.diagnostics as readonly Record<string, unknown>[]
-          ).some(
-            (diagnostic) =>
-              diagnostic.code === "minimessage.variable-coverage-unavailable",
-          ),
-        );
         assert.deepEqual(
           await snapshotProjectFiles(projectDirectory),
           initialFiles,
@@ -245,12 +229,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
       readonly unavailableCapabilities: readonly string[];
     };
     assert.equal(coverage.complete, true);
-    for (const ruleId of [
-      "structure",
-      "minimessage-variables",
-      "map-html",
-      "translation-consistency",
-    ]) {
+    for (const ruleId of ["structure", "map-html", "translation-consistency"]) {
       assert.ok(coverage.enabledRuleIds.includes(ruleId), ruleId);
     }
     assert.ok(
@@ -378,14 +357,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
     assert.deepEqual(
       await snapshotProjectFiles(projectDirectory),
       checkInputFiles,
-    );
-    assert.ok(
-      (editedReport.diagnostics as readonly Record<string, unknown>[]).some(
-        (diagnostic) =>
-          diagnostic.ruleId === "minimessage-variables" &&
-          diagnostic.code === "minimessage.variable-missing",
-      ),
-      JSON.stringify(editedReport.diagnostics),
     );
     const consistencyDiagnostics = (
       editedReport.diagnostics as readonly Record<string, unknown>[]

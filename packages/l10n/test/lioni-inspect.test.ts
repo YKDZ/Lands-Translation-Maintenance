@@ -127,7 +127,19 @@ interface InspectedFacts {
     };
     readonly units: readonly {
       readonly key: string;
-      readonly unit: unknown;
+      readonly unit: {
+        readonly source: unknown;
+        readonly context: {
+          readonly role: "message" | "structure";
+          readonly sourceFile: string;
+          readonly targetFile: string;
+          readonly path: readonly string[];
+          readonly category?: string;
+          readonly scene?: string;
+          readonly format?: string;
+          readonly fieldPath?: readonly string[];
+        };
+      };
       readonly bodyAvailability: string;
     }[];
   };
@@ -147,7 +159,14 @@ interface InspectedFacts {
         readonly namespace: string;
         readonly key: string;
       };
-      readonly translation: unknown;
+      readonly translation: {
+        readonly role: "message" | "structure";
+        readonly sourceFile: string;
+        readonly targetFile: string;
+        readonly path: readonly string[];
+        readonly category?: string;
+        readonly content: unknown;
+      };
       readonly bodyAvailability: string;
     }[];
   };
@@ -225,7 +244,58 @@ void test("原生 inspect 离线读取 Lands 消息、结构及稳定身份", as
   const reorderedFacts = inspect(reorderedConfigPath);
   assert.equal(facts.source.read.status, "complete");
   assert.equal(facts.translations.reads[0]?.status, "complete");
-  assert.equal(facts.source.units.length, 4);
+  const messageUnits = facts.source.units.filter(
+    ({ unit }) => unit.context.role === "message",
+  );
+  const structureUnits = facts.source.units.filter(
+    ({ unit }) => unit.context.role === "structure",
+  );
+  assert.equal(messageUnits.length, 4);
+  assert.equal(structureUnits.length, 3);
+  assert.deepEqual(
+    messageUnits
+      .map(({ key, unit }) => ({ key, source: unit.source }))
+      .sort((left, right) =>
+        left.key < right.key ? -1 : left.key > right.key ? 1 : 0,
+      ),
+    [
+      { key: 'Locale/en-US.yml:["messages","command"]', source: "/lands" },
+      { key: 'Locale/en-US.yml:["messages","greet"]', source: "Hello" },
+      { key: 'Locale/en-US.yml:["messages","leave"]', source: "Goodbye" },
+      {
+        key: 'Locale/en-US_gui.yml:["gui","main","items","confirm","name"]',
+        source: "Confirm",
+      },
+    ],
+  );
+  assert.deepEqual(
+    structureUnits
+      .map(({ key, unit }) => ({
+        key,
+        path: unit.context.path,
+        source: unit.source,
+      }))
+      .sort((left, right) =>
+        left.key < right.key ? -1 : left.key > right.key ? 1 : 0,
+      ),
+    [
+      {
+        key: 'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","action"]',
+        path: ["gui", "main", "items", "confirm", "action"],
+        source: "confirm",
+      },
+      {
+        key: 'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","material"]',
+        path: ["gui", "main", "items", "confirm", "material"],
+        source: "DIAMOND",
+      },
+      {
+        key: 'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","slot"]',
+        path: ["gui", "main", "items", "confirm", "slot"],
+        source: 4,
+      },
+    ],
+  );
   assert.deepEqual(
     facts.source.units.map(({ key }) => key),
     repeatedFacts.source.units.map(({ key }) => key),
@@ -253,6 +323,53 @@ void test("原生 inspect 离线读取 Lands 消息、结构及稳定身份", as
       key.includes('"command"'),
     )?.[1],
     "missing",
+  );
+  assert.deepEqual(
+    structureUnits.map(({ key }) => [key, associationByKey.get(key)]),
+    [
+      [
+        'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","action"]',
+        "missing",
+      ],
+      [
+        'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","material"]',
+        "matched",
+      ],
+      [
+        'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","slot"]',
+        "matched",
+      ],
+    ],
+  );
+  assert.deepEqual(
+    facts.translations.records
+      .filter(({ translation }) => translation.role === "structure")
+      .map(({ identity, translation }) => ({
+        key: identity.key,
+        namespace: identity.namespace,
+        sourceFile: translation.sourceFile,
+        path: translation.path,
+        content: translation.content,
+      }))
+      .sort((left, right) =>
+        left.key < right.key ? -1 : left.key > right.key ? 1 : 0,
+      ),
+    [
+      {
+        key: '["gui","main","items","confirm","material"]',
+        namespace: "Locale/zh-CN_gui.yml",
+        sourceFile: "Locale/definitions_gui.yml",
+        path: ["gui", "main", "items", "confirm", "material"],
+        content: "EMERALD",
+      },
+      {
+        key: '["gui","main","items","confirm","slot"]',
+        namespace: "Locale/zh-CN_gui.yml",
+        sourceFile: "Locale/definitions_gui.yml",
+        path: ["gui", "main", "items", "confirm", "slot"],
+        content: 4,
+      },
+    ],
   );
 
   const guiUnit = facts.source.units.find(({ key }) =>

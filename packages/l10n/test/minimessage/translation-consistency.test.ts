@@ -1103,7 +1103,7 @@ void describe("跨消息翻译一致性", () => {
     assert.equal(actual.semanticEquivalence, "unknown");
   });
 
-  void it("不把待翻译英文种子纳入译文分歧，同时继续检查变量遗漏", async (t) => {
+  void it("不把待翻译英文种子纳入译文分歧", async (t) => {
     const project = await createMessageProject(
       t,
       [repeatedSource, repeatedSource, repeatedSource, repeatedSource],
@@ -1118,12 +1118,6 @@ void describe("跨消息翻译一致性", () => {
     );
     const report = readReport(checked.stdout || checked.stderr);
     assert.deepEqual(consistencyDiagnostics(report), []);
-    assert.ok(
-      (report.diagnostics as readonly Record<string, unknown>[]).some(
-        (diagnostic) => diagnostic.code === "minimessage.variable-missing",
-      ),
-      checked.stderr || checked.stdout,
-    );
   });
 
   void it("同文确认只解除待翻译原因，部分列表仍保留未处理英文项", async (t) => {
@@ -1518,7 +1512,7 @@ void describe("跨消息翻译一致性", () => {
     const configuration = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
+      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
     );
     const disabledCheck = runCliWithoutJava(
       "check",
