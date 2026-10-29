@@ -52,6 +52,10 @@ interface NativeDiagnostic {
     };
   };
   readonly severity: "error" | "warning" | "info";
+  readonly evidence: readonly {
+    readonly role: string;
+    readonly value: unknown;
+  }[];
   readonly handling: { readonly status: string };
 }
 
@@ -112,6 +116,7 @@ interface QualityProjectOptions {
   readonly omitTargetAction?: boolean;
   readonly omitTargetName?: boolean;
   readonly targetCustomField?: boolean;
+  readonly nestedStructure?: boolean;
   readonly chat?: { readonly source: string; readonly target: string };
 }
 
@@ -122,6 +127,7 @@ function landsJar(
   sourceVersion: string,
   chat: QualityProjectOptions["chat"],
   structureMaterial = "EMERALD",
+  nestedStructure = false,
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
@@ -147,6 +153,13 @@ function landsJar(
         `        lore: ${JSON.stringify(sourceLore)}`,
         "        action: confirm",
         "        customSettings: {}",
+        ...(nestedStructure
+          ? [
+              "        structureSettings:",
+              "          nested:",
+              "            enabled: true",
+            ]
+          : []),
         "",
       ].join("\n"),
     ),
@@ -285,6 +298,13 @@ async function createQualityProject(
       ...(options.targetCustomField ? ["        customSetting: true"] : []),
       "        customSettings:",
       "          pluginValue: true",
+      ...(options.nestedStructure
+        ? [
+            "        structureSettings:",
+            "          nested:",
+            "            enabled: false",
+          ]
+        : []),
       ...(options.omitTargetName
         ? []
         : [`        name: ${JSON.stringify(targetName)}`]),
@@ -322,6 +342,7 @@ async function createQualityProject(
       sourceVersion,
       options.chat,
       options.structureMaterial,
+      options.nestedStructure,
     ),
   );
   const prepared = spawnSync(
@@ -640,6 +661,74 @@ void test("结构一致性 QA 只读检查受管值并允许自定义字段", as
     "material",
   ]);
   assert.deepEqual(await readFile(targetPath), before);
+});
+
+void test("结构一致性按源字段单位核对嵌套结构对象", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    { nestedStructure: true },
+  );
+  const result = runLioni(["qa", project.configPath]);
+  const report = qualityReport(result).report;
+  const sourceKey =
+    'structure:Locale/definitions_gui.yml:["gui","main","items","confirm","structureSettings"]';
+  const association = report.factCoverage.associations.find(
+    ({ sourceKey: key }) => key === sourceKey,
+  );
+  assert.equal(
+    association?.status,
+    "matched",
+    JSON.stringify(
+      {
+        status: report.status,
+        candidates: report.candidates,
+        factCoverage: report.factCoverage,
+        diagnostics: report.diagnostics,
+        checks: report.checks.map(({ checkId, status, issues }) => ({
+          checkId,
+          status,
+          issues,
+        })),
+      },
+      null,
+      2,
+    ),
+  );
+  assert.equal(association?.candidateSelected, true);
+  const structures = checkResult(report, "lands-structure-consistency");
+  const mismatch = structures.diagnostics.find(
+    ({ object }) => object.code === "lands.structure-mismatch",
+  );
+
+  assert.equal(
+    structures.status,
+    "complete",
+    JSON.stringify(structures, null, 2),
+  );
+  assert.ok(mismatch, JSON.stringify(structures, null, 2));
+  assert.deepEqual(mismatch.location.range.path, [
+    "gui",
+    "main",
+    "items",
+    "confirm",
+    "structureSettings",
+  ]);
+  assert.deepEqual(
+    mismatch.evidence.map(({ role, value }) => ({ role, value })),
+    [
+      {
+        role: "expected",
+        value: { nested: { enabled: true } },
+      },
+      {
+        role: "actual",
+        value: { nested: { enabled: false } },
+      },
+    ],
+  );
 });
 
 void test("结构和正文缺失由漏译 QA 各报告一次且 QA 不写入目标", async (t) => {
