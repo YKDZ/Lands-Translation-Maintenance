@@ -11,7 +11,6 @@ import type {
   Severity,
   RuleInputDependency,
 } from "#/model";
-import { translationConsistencyRule } from "#/translation-consistency";
 import { canonicalJson, compareText, deepFreeze, sha256 } from "#/value";
 
 const diagnosticInputDependencies = new WeakMap<
@@ -69,10 +68,7 @@ const structureRule: CheckRule = {
   },
 };
 
-export const builtInRules: readonly CheckRule[] = [
-  structureRule,
-  translationConsistencyRule,
-];
+export const builtInRules: readonly CheckRule[] = [structureRule];
 
 export interface RuleEvaluationOptions {
   readonly configuration?: ConsumerConfiguration["rules"];
