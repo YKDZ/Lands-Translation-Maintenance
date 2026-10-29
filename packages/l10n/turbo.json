@@ -22,6 +22,12 @@
       "outputs": ["target/minimessage/**"],
       "tags": ["work:preparation"]
     },
+    "source:prepare": {
+      "cache": false,
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": [],
+      "tags": ["work:on-demand"]
+    },
     "format:check": {
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": [],

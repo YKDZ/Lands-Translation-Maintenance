@@ -111,7 +111,7 @@ function messageIdentity(
   };
 }
 
-function formatForMessagePath(
+export function formatForMessagePath(
   path: readonly string[],
   category: TranslationFieldCategory,
   purpose: ResourcePurpose | undefined,

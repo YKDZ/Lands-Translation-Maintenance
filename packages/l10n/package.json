@@ -21,11 +21,17 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./lioni.config": {
+      "source": "./lioni.config.ts",
+      "types": "./lioni.config.ts",
+      "default": "./lioni.config.ts"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json --pretty false && chmod +x dist/cli.js",
     "build:minimessage": "node --conditions=source scripts/build-minimessage.ts",
+    "source:prepare": "node --conditions=source scripts/prepare-lioni-source.ts",
     "format:check": "oxfmt --list-different .",
     "format:write": "oxfmt --write .",
     "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
@@ -35,6 +41,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
+    "@lioni/lioni": "0.2.0",
     "@ykdz/cli-contract": "0.3.0",
     "fflate": "0.8.3",
     "parse5": "8.0.1",
