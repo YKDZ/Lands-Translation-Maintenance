@@ -60,6 +60,7 @@ export type LandsMessageFamilyOptions = MessageFamilyCheckerOptions<
 
 type SelectionInput = Parameters<LandsMessageFamilyOptions["select"]>[0];
 type ProjectionInput = Parameters<LandsMessageFamilyOptions["project"]>[0];
+type ReferenceProjectionInput = Extract<ProjectionInput, { kind: "reference" }>;
 type CandidateInput = Parameters<
   NonNullable<LandsMessageFamilyOptions["projectCandidate"]>
 >[0];
@@ -599,6 +600,27 @@ async function projectMessage(
   };
 }
 
+// sourceUnit 参与 MemoScope 默认键，避免同键原文事实误共享；内容来自保存记录。
+async function projectSavedMessageFamilyReference(
+  dependencies: MiniMessageQualityDependencies,
+  _sourceUnit: ReferenceProjectionInput["sourceUnit"],
+  sourceKey: string,
+  translation: ReferenceProjectionInput["translation"],
+  language: string,
+): Promise<MessageFamilyInput> {
+  const message = messageForCandidate(dependencies, sourceKey);
+  if (message === undefined || !usesMiniMessage(message)) return { groups: [] };
+  const content =
+    translation.bodyAvailability === "available"
+      ? translation.content
+      : undefined;
+  return projectMessage(
+    dependencies,
+    messageWithReference(message, content),
+    language,
+  );
+}
+
 export async function selectLandsMessageFamilyCandidate(
   input: SelectionInput,
 ): Promise<SelectionResult> {
@@ -648,15 +670,12 @@ export async function projectLandsMessageFamilyReference(
     return { groups: [] };
   }
   const dependencies = dependenciesOf(context.dependencies);
-  const message = messageForCandidate(dependencies, input.sourceKey);
-  if (message === undefined || !usesMiniMessage(message)) return { groups: [] };
-  const content =
-    input.translation.bodyAvailability === "available"
-      ? input.translation.content
-      : undefined;
-  return projectMessage(
+  // 同一 QA 本轮的两个检查共享此保存参照投影；候选草稿走上方独立路径。
+  return context.memo.memo(projectSavedMessageFamilyReference)(
     dependencies,
-    messageWithReference(message, content),
+    input.sourceUnit,
+    input.sourceKey,
+    input.translation,
     input.language,
   );
 }
