@@ -1,8 +1,3 @@
-import {
-  legacyVariableRule,
-  mapHtmlRule,
-  mapHtmlSourceLimitRule,
-} from "#/format-rules";
 import type {
   CheckCoverage,
   CheckRule,
@@ -76,9 +71,6 @@ const structureRule: CheckRule = {
 
 export const builtInRules: readonly CheckRule[] = [
   structureRule,
-  legacyVariableRule,
-  mapHtmlRule,
-  mapHtmlSourceLimitRule,
   translationConsistencyRule,
 ];
 

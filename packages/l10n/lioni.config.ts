@@ -4,9 +4,13 @@ import {
   loadTermbaseYaml,
 } from "@lioni/lioni/node";
 
+import { legacyFormatCheck } from "#/legacy-format-check";
+import { legacyVariableCheck } from "#/legacy-variable-check";
 import { landsFactAdapters } from "#/lioni/lands-facts";
 import { landsUpdatePolicy } from "#/lioni/lands-update-policy";
 import { landsProjectPaths } from "#/lioni/project-paths";
+import { mapHtmlCheck } from "#/map-html-check";
+import { mapHtmlSourceLimitsCheck } from "#/map-html-source-limits-check";
 import { miniMessageClickBehaviorCheck } from "#/minimessage-click-behavior-check";
 import { miniMessageHonorificCheck } from "#/minimessage-honorific-check";
 import { miniMessageInteractionDistributionCheck } from "#/minimessage-interaction-distribution-check";
@@ -36,6 +40,10 @@ export function createLandsConfig(entryUrl: string | URL) {
         miniMessageTagCorrespondenceCheck,
         miniMessageNestingCheck,
         miniMessageLandsControlsCheck,
+        mapHtmlCheck,
+        mapHtmlSourceLimitsCheck,
+        legacyFormatCheck,
+        legacyVariableCheck,
         landsTerminologyCheck,
         miniMessagePunctuationCheck,
         miniMessageHonorificCheck,
