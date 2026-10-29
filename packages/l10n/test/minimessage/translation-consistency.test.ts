@@ -1512,7 +1512,7 @@ void describe("跨消息翻译一致性", () => {
     const configuration = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
+      `${configuration}\nrules:\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
     );
     const disabledCheck = runCliWithoutJava(
       "check",

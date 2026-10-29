@@ -229,7 +229,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
       readonly unavailableCapabilities: readonly string[];
     };
     assert.equal(coverage.complete, true);
-    for (const ruleId of ["structure", "map-html", "translation-consistency"]) {
+    for (const ruleId of ["structure", "translation-consistency"]) {
       assert.ok(coverage.enabledRuleIds.includes(ruleId), ruleId);
     }
     assert.ok(
@@ -343,14 +343,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
           JSON.stringify(
             (diagnostic.message as Record<string, unknown>).path,
           ) === '["messages","draft"]',
-      ),
-      JSON.stringify(editedDiagnostics),
-    );
-    assert.ok(
-      editedDiagnostics.some(
-        (diagnostic) =>
-          diagnostic.ruleId === "map-html" &&
-          diagnostic.code === "map-html.behavior-attribute-mismatch",
       ),
       JSON.stringify(editedDiagnostics),
     );
