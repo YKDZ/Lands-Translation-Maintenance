@@ -87,6 +87,7 @@ import {
   type FileSnapshot,
   type FileWrite,
 } from "#/transaction";
+import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { translationReviewRule } from "#/translation-review";
 import { canonicalJson, compareText, sameValue, sha256 } from "#/value";
 import { parseYaml, setDocumentPath, valueAtPath } from "#/yaml-data";
@@ -1234,6 +1235,42 @@ function translatableTextCoverageUnavailable(
 ): readonly string[] {
   const parsed = view.miniMessage;
   if (parsed === undefined) return [];
+  const expectedTextKeys = new Set<string>();
+  for (const document of parsed.documents) {
+    const listItems = document.listItems;
+    const paths =
+      listItems === undefined
+        ? [document.path]
+        : document.parent === undefined
+          ? listItems.map(({ path }) => path)
+          : listItems
+              .filter(
+                ({ position }) =>
+                  position.start <= document.range.start &&
+                  document.range.end <= position.end,
+              )
+              .map(({ path }) => path);
+    for (const path of paths) {
+      expectedTextKeys.add(
+        canonicalJson({
+          messageId: document.message.id,
+          path,
+          documentIndex: document.documentIndex,
+          origin: document.origin,
+        }),
+      );
+    }
+  }
+  const actualTextKeys = new Set(
+    parsed.translatableText.map((document) =>
+      canonicalJson({
+        messageId: document.message.id,
+        path: document.path,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+      }),
+    ),
+  );
   const sourceKeys = new Set(
     parsed.translatableText
       .filter((document) => document.origin === "source")
@@ -1256,29 +1293,13 @@ function translatableTextCoverageUnavailable(
         }),
       ),
   );
-  const translatableKeys = new Set(
-    parsed.translatableText.map((document) =>
-      canonicalJson({
-        messageId: document.message.id,
-        path: document.path,
-        documentIndex: document.documentIndex,
-        origin: document.origin,
-      }),
-    ),
-  );
+  const pairing = pairTranslatableTextDocuments(parsed);
   if (
+    expectedTextKeys.size !== actualTextKeys.size ||
+    [...expectedTextKeys].some((key) => !actualTextKeys.has(key)) ||
+    parsed.incompleteFacts.length > 0 ||
+    pairing.incomplete.length > 0 ||
     parsed.documents.some((document) => document.status !== "parsed") ||
-    parsed.documents.some(
-      (document) =>
-        !translatableKeys.has(
-          canonicalJson({
-            messageId: document.message.id,
-            path: document.path,
-            documentIndex: document.documentIndex,
-            origin: document.origin,
-          }),
-        ),
-    ) ||
     [...sourceKeys].some((key) => !targetKeys.has(key)) ||
     [...targetKeys].some((key) => !sourceKeys.has(key))
   ) {
@@ -2681,12 +2702,28 @@ function requiredInputDependencyUnavailable(
   }
   if (current === undefined) return false;
 
+  // GUI lore 共享根文档，正文项按投影位置映射回各列表路径。
+  const documentMatchesPath = (
+    document: NonNullable<typeof miniMessage>["documents"][number],
+  ) => {
+    if (canonicalJson(document.path) === canonicalJson(dependency.path))
+      return true;
+    const item = document.listItems?.find(
+      ({ path }) => canonicalJson(path) === canonicalJson(dependency.path),
+    );
+    return (
+      item !== undefined &&
+      (document.parent === undefined ||
+        (item.position.start <= document.range.start &&
+          document.range.end <= item.position.end))
+    );
+  };
   const documentsForDependency = miniMessage.documents.filter(
     (document) =>
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === dependency.documentIndex &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      documentMatchesPath(document),
   );
   if (documentsForDependency.length > 0) {
     return documentsForDependency.some(
@@ -2700,7 +2737,7 @@ function requiredInputDependencyUnavailable(
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === 0 &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      documentMatchesPath(document),
   );
   return (
     rootDocuments.length === 0 ||

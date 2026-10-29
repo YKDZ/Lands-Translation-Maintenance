@@ -47,7 +47,7 @@ interface QualityCheckResult {
   readonly checkId: string;
   readonly status: string;
   readonly diagnostics: readonly NativeDiagnostic[];
-  readonly issues: readonly unknown[];
+  readonly issues: readonly { readonly code: string }[];
   readonly executions: readonly {
     readonly executionId: number;
     readonly sourceKey: string;
@@ -72,7 +72,7 @@ interface NativeEnvelope {
   readonly report?: QualityReport;
 }
 
-function landsJar(theme: string): Uint8Array {
+function landsJar(theme: string, sourceName: string): Uint8Array {
   return zipSync({
     "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
     "Locale/en-US_gui.yml": strToU8(
@@ -81,7 +81,7 @@ function landsJar(theme: string): Uint8Array {
         "  main:",
         "    items:",
         "      confirm:",
-        '        name: "<red>Confirm</red>"',
+        `        name: ${JSON.stringify(sourceName)}`,
         '        lore: ["<red>First line", "Second line</red>"]',
         "",
       ].join("\n"),
@@ -106,7 +106,8 @@ function landsJar(theme: string): Uint8Array {
 
 async function createQualityProject(
   t: TestContext,
-  theme = "theme:\n  tokens:\n    known: red\n",
+  theme = 'theme:\n  tokens:\n    known: "<red>"\n',
+  sourceName = "<red>Confirm</red>",
 ): Promise<{ readonly directory: string; readonly configPath: string }> {
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
   t.after(() => rm(directory, { force: true, recursive: true }));
@@ -175,7 +176,7 @@ async function createQualityProject(
   await symlink(packageDirectory, join(scopedPackageDirectory, "l10n"), "dir");
 
   const jarPath = join(directory, "Lands.jar");
-  await writeFile(jarPath, landsJar(theme));
+  await writeFile(jarPath, landsJar(theme, sourceName));
   const prepared = spawnSync(
     process.execPath,
     [
@@ -229,6 +230,7 @@ function checkResult(
   report: QualityReport,
   checkId: string,
 ): QualityCheckResult {
+  assert.ok(Array.isArray(report.checks), JSON.stringify(report, null, 2));
   const result = report.checks.find((check) => check.checkId === checkId);
   assert.ok(result, `QA 缺少 ${checkId} 检查项`);
   return result;
@@ -277,9 +279,12 @@ void test("原生 QA 用官方解析器报告语法与主题并独立应用原�
     "confirm",
     "name",
   ]);
-  assert.ok(
-    syntaxFinding.location.range.start !== undefined &&
-      syntaxFinding.location.range.end !== undefined,
+  assert.deepEqual(
+    {
+      start: syntaxFinding.location.range.start,
+      end: syntaxFinding.location.range.end,
+    },
+    { start: 3, end: 5 },
   );
 
   const theme = checkResult(failedResult.report, "minimessage-theme");
@@ -296,14 +301,19 @@ void test("原生 QA 用官方解析器报告语法与主题并独立应用原�
     "lore",
     1,
   ]);
-  assert.ok(
-    themeFinding.location.range.start !== undefined &&
-      themeFinding.location.range.end !== undefined,
+  assert.deepEqual(
+    {
+      start: themeFinding.location.range.start,
+      end: themeFinding.location.range.end,
+    },
+    { start: 0, end: 11 },
   );
 
   const reportPath = join(project.directory, "qa-report.json");
   await writeFile(reportPath, JSON.stringify(failedResult.envelope));
-  const syntaxExecution = syntax.executions[0];
+  const syntaxExecution = syntax.executions.find(
+    ({ sourceKey }) => sourceKey === syntaxFinding.object.key,
+  );
   assert.ok(syntaxExecution);
   const upserted = runLioni([
     "exceptions",
@@ -328,6 +338,7 @@ void test("原生 QA 用官方解析器报告语法与主题并独立应用原�
       ({ object }) => object.code === "minimessage.syntax-invalid",
     )?.handling.status,
     "excepted",
+    JSON.stringify(acceptedSyntax.diagnostics, null, 2),
   );
   assert.equal(
     checkResult(accepted.report, "minimessage-theme").diagnostics.find(
@@ -369,11 +380,11 @@ void test("主题 YAML 不可读与 Java 不可用都保留为原生不完整结
   const malformedTheme = qualityReport(runLioni(["qa", project.configPath]));
   const theme = checkResult(malformedTheme.report, "minimessage-theme");
   assert.equal(theme.status, "complete");
-  assert.ok(
-    theme.diagnostics.some(
-      ({ object }) => object.code === "yaml.syntax-invalid",
-    ),
+  const yamlFindings = theme.diagnostics.filter(
+    ({ object }) => object.code === "yaml-invalid",
   );
+  assert.equal(yamlFindings.length, 1, JSON.stringify(theme, null, 2));
+  assert.equal(yamlFindings[0]?.location.range.file, "Locale/theme.yml");
 
   const noJava = qualityReport(
     runLioni(["qa", project.configPath], { JAVA_COMMAND: "/missing/java" }),
@@ -383,4 +394,91 @@ void test("主题 YAML 不可读与 Java 不可用都保留为原生不完整结
     "incomplete",
   );
   assert.ok(checkResult(noJava.report, "minimessage-syntax").issues.length > 0);
+});
+
+void test("官方 Java 语法结果保留来源和主题的实际位置", async (t) => {
+  const sourceProject = await createQualityProject(
+    t,
+    undefined,
+    "<red>Source §c error</red>",
+  );
+  const sourceReport = qualityReport(
+    runLioni(["qa", sourceProject.configPath]),
+  );
+  const sourceFinding = checkResult(
+    sourceReport.report,
+    "minimessage-syntax",
+  ).diagnostics.find(
+    ({ object }) =>
+      object.code === "minimessage.syntax-invalid" &&
+      object.origin === "source",
+  );
+  assert.ok(sourceFinding, JSON.stringify(sourceReport.report, null, 2));
+  assert.equal(sourceFinding.location.range.file, "Locale/en-US_gui.yml");
+  assert.deepEqual(sourceFinding.location.range.path, [
+    "gui",
+    "main",
+    "items",
+    "confirm",
+    "name",
+  ]);
+  assert.ok(
+    sourceFinding.location.range.start !== undefined &&
+      sourceFinding.location.range.end !== undefined,
+  );
+
+  const themeProject = await createQualityProject(
+    t,
+    'theme:\n  tokens:\n    invalid: "<unknown>"\n',
+  );
+  const themeReport = qualityReport(runLioni(["qa", themeProject.configPath]));
+  const themeFinding = checkResult(
+    themeReport.report,
+    "minimessage-theme",
+  ).diagnostics.find(
+    ({ object }) => object.code === "minimessage.theme-definition-invalid",
+  );
+  assert.ok(themeFinding, JSON.stringify(themeReport.report, null, 2));
+  assert.equal(themeFinding.location.range.file, "Locale/theme.yml");
+  assert.deepEqual(themeFinding.location.range.path, [
+    "theme",
+    "tokens",
+    "invalid",
+  ]);
+});
+
+void test("未识别的扩展标签有原生诊断并保留不完整限制", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<verbose>有日志权限</verbose> <future:extension>未知标签</future>",
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath]));
+  const syntax = checkResult(report.report, "minimessage-syntax");
+  const unknownTag = syntax.diagnostics.find(
+    ({ object }) =>
+      object.code === "minimessage.tag-unknown" && object.origin === "source",
+  );
+  assert.ok(unknownTag, JSON.stringify(syntax, null, 2));
+  assert.equal(unknownTag.object.origin, "source");
+  assert.equal(unknownTag.location.range.file, "Locale/en-US_gui.yml");
+  assert.ok(
+    syntax.issues.some(
+      (issue) => issue.code === "minimessage.extension-unrecognized",
+    ),
+    JSON.stringify(syntax.issues, null, 2),
+  );
+  assert.equal(syntax.status, "incomplete");
+});
+
+void test("官方 MiniMessage 别名与颜色写法通过原生语法检查", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<c:red><grey><#00ff88><!bold>正文",
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath]));
+  const syntax = checkResult(report.report, "minimessage-syntax");
+  assert.equal(syntax.status, "complete");
+  assert.deepEqual(syntax.diagnostics, []);
 });

@@ -28,7 +28,6 @@ import type {
   MiniMessageSurface,
   MiniMessageTagNode,
   MiniMessageThemeEntry,
-  MiniMessageThemeInput,
   MiniMessageThemeSnapshot,
   ParsedMiniMessageDocument,
   TranslatableTextDocument,
@@ -2071,9 +2070,13 @@ export async function parseMiniMessages(
       code.startsWith("minimessage.theme-") ||
       code.startsWith("theme."),
   );
+  const formatFindings = findings.filter(({ code }) =>
+    code.startsWith("legacy-format."),
+  );
   const syntaxFindings = findings.filter(
     ({ code, origin }) =>
       origin !== "theme" &&
+      !code.startsWith("legacy-format.") &&
       !code.startsWith("minimessage.theme-") &&
       !code.startsWith("theme."),
   );
@@ -2090,6 +2093,7 @@ export async function parseMiniMessages(
     findings,
     syntaxFindings,
     themeFindings,
+    formatFindings,
     mapFindings,
     incompleteFacts,
     unavailableCapabilities: [...unavailable].sort(),

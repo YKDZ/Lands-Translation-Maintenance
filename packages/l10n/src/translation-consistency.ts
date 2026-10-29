@@ -400,10 +400,12 @@ function messageIsPendingSeed(
 
 function comparisonRecords(project: ProjectView): ComparisonRecord[] {
   const records: ComparisonRecord[] = [];
+  const miniMessage = project.miniMessage;
+  if (miniMessage === undefined) return records;
   for (const {
     sourceDocument,
     targetDocument,
-  } of pairTranslatableTextDocuments(project.miniMessage!).pairs) {
+  } of pairTranslatableTextDocuments(miniMessage).pairs) {
     if (messageIsPendingSeed(project, sourceDocument, targetDocument)) continue;
 
     const targetRegions = regionsForDocument(targetDocument);

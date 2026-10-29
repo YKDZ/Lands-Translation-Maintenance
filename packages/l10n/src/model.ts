@@ -2,7 +2,6 @@ import type {
   MiniMessageOrigin,
   MiniMessageParseProject,
   MiniMessagePosition,
-  MiniMessageProjectionInput,
 } from "#/mini-message-model";
 
 export type {

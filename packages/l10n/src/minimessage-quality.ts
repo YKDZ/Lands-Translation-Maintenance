@@ -55,7 +55,7 @@ interface MiniMessageQualityObject extends QualityObject {
 export interface MiniMessageQualityDependencies {
   readonly sourceVersion: string;
   readonly resources: readonly ResourceInventoryEntry[];
-  readonly messages: ReadonlyMap<string, MiniMessageInputMessage>;
+  readonly messages: readonly MiniMessageInputMessage[];
   readonly themeInput: MiniMessageThemeInput;
   readonly projection: MiniMessageParseProject;
   readonly pairing: TranslatableTextPairing;
@@ -189,7 +189,7 @@ function messageForCandidate(
   dependencies: MiniMessageQualityDependencies,
   sourceKey: string,
 ): MiniMessageInputMessage | undefined {
-  return dependencies.messages.get(sourceKey);
+  return dependencies.messages.find((message) => message.id === sourceKey);
 }
 
 function qualityBasis(value: unknown): JsonValue {
@@ -222,12 +222,15 @@ function relevantThemeIssues(
   dependencies: MiniMessageQualityDependencies,
 ): readonly MiniMessageIncompleteFact[] {
   const sourceKey = input.candidate.sourceKey;
+  const projectIssueOwner = primaryThemeSourceKey(dependencies);
   return [
     ...dependencies.readIssues,
     ...dependencies.projection.incompleteFacts,
   ].filter(
     (issue) =>
-      (issue.message === undefined || issue.message.id === sourceKey) &&
+      (issue.message === undefined
+        ? sourceKey === projectIssueOwner
+        : issue.message.id === sourceKey) &&
       (issue.origin === "theme" ||
         issue.code.startsWith("minimessage.theme-") ||
         issue.code === "minimessage.java-unavailable" ||
@@ -235,6 +238,15 @@ function relevantThemeIssues(
         issue.code === "minimessage.parser-failed" ||
         issue.code === "minimessage.project-input-unavailable"),
   );
+}
+
+function primaryThemeSourceKey(
+  dependencies: MiniMessageQualityDependencies,
+): string | undefined {
+  return dependencies.messages
+    .filter(usesMiniMessage)
+    .map(({ id }) => id)
+    .sort()[0];
 }
 
 function syntaxFindingsFor(
@@ -250,11 +262,12 @@ function themeFindingsFor(
   input: MiniMessageCheckInput,
   dependencies: MiniMessageQualityDependencies,
 ) {
-  return dependencies.projection.themeFindings.filter(
-    (finding) =>
-      finding.message === undefined ||
-      finding.message.id === input.candidate.sourceKey,
-  );
+  const projectIssueOwner = primaryThemeSourceKey(dependencies);
+  return dependencies.projection.themeFindings.filter((finding) => {
+    if (finding.message === undefined)
+      return input.candidate.sourceKey === projectIssueOwner;
+    return finding.message.id === input.candidate.sourceKey;
+  });
 }
 
 function syntaxBasis(
@@ -355,13 +368,10 @@ export async function projectMiniMessageQualityInputs(
   } = {},
 ): Promise<MiniMessageQualityDependencies> {
   const projection = await parseMiniMessages(input);
-  const messages = new Map(
-    input.messages.map((message) => [message.id, message]),
-  );
   return {
     sourceVersion: input.sourceVersion,
     resources: input.resources,
-    messages,
+    messages: input.messages,
     themeInput: input.theme,
     projection,
     pairing: pairTranslatableTextDocuments(projection),
@@ -593,7 +603,7 @@ export function miniMessageFactsInput(
         ? {}
         : { format: unit.context.format }),
       source: unit.source,
-      target,
+      ...(target === undefined ? {} : { target }),
       targetStatus:
         association?.status === "matched" && target !== undefined
           ? "present"

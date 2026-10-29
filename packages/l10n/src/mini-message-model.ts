@@ -80,7 +80,7 @@ export interface MiniMessageListItemRange {
 
 export interface MiniMessageInputMessage extends MessageIdentity {
   readonly source: JsonValue;
-  readonly target: JsonValue | undefined;
+  readonly target?: JsonValue | undefined;
   readonly targetStatus: "present" | "missing" | "blocked";
   /** GUI lore 仍按完整字段解析；此映射把解析位置还原到原列表项。 */
   readonly listItems?: readonly MiniMessageListItemRange[];
@@ -170,6 +170,7 @@ export interface MiniMessageParseProject {
   readonly findings: readonly MiniMessageFinding[];
   readonly syntaxFindings: readonly MiniMessageFinding[];
   readonly themeFindings: readonly MiniMessageFinding[];
+  readonly formatFindings: readonly MiniMessageFinding[];
   readonly mapFindings: readonly MiniMessageFinding[];
   readonly incompleteFacts: readonly MiniMessageIncompleteFact[];
   readonly unavailableCapabilities: readonly string[];
