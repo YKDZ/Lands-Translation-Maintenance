@@ -373,7 +373,8 @@ export function miniMessageFactsInput(
       association,
     ]),
   );
-  const messages = facts.source.units.map(({ key, unit }) => {
+  const messages = facts.source.units.flatMap(({ key, unit }) => {
+    if (unit.context.role !== "message") return [];
     const association = associations.get(key);
     const targetRecord =
       association?.status === "matched" &&
@@ -384,27 +385,29 @@ export function miniMessageFactsInput(
       targetRecord?.bodyAvailability === "available"
         ? targetRecord.content
         : undefined;
-    return {
-      id: key,
-      sourceFile: unit.context.sourceFile,
-      targetFile: unit.context.targetFile,
-      path: unit.context.path,
-      category: unit.context.category,
-      ...(unit.context.scene === undefined
-        ? {}
-        : { scene: unit.context.scene }),
-      ...(unit.context.format === undefined
-        ? {}
-        : { format: unit.context.format }),
-      source: unit.source,
-      ...(target === undefined ? {} : { target }),
-      targetStatus:
-        association?.status === "matched" && target !== undefined
-          ? "present"
-          : association?.status === "missing"
-            ? "missing"
-            : "blocked",
-    } satisfies MiniMessageInputMessage;
+    return [
+      {
+        id: key,
+        sourceFile: unit.context.sourceFile,
+        targetFile: unit.context.targetFile,
+        path: unit.context.path,
+        category: unit.context.category,
+        ...(unit.context.scene === undefined
+          ? {}
+          : { scene: unit.context.scene }),
+        ...(unit.context.format === undefined
+          ? {}
+          : { format: unit.context.format }),
+        source: unit.source,
+        ...(target === undefined ? {} : { target }),
+        targetStatus:
+          association?.status === "matched" && target !== undefined
+            ? "present"
+            : association?.status === "missing"
+              ? "missing"
+              : "blocked",
+      } satisfies MiniMessageInputMessage,
+    ];
   });
   return { messages, resources };
 }

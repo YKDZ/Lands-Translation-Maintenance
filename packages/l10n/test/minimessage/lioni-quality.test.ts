@@ -11,9 +11,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { readFacts } from "@lioni/lioni";
 import { strToU8, zipSync } from "fflate";
+
+import { createLandsConfig } from "../../lioni.config.ts";
+import { miniMessageFactsInput } from "../../src/minimessage-quality.ts";
 
 const packageDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -83,6 +87,7 @@ interface QualityProjectOptions {
   readonly sourceLore?: readonly string[];
   readonly targetLore?: readonly string[];
   readonly sourceVersion?: string;
+  readonly structureMaterial?: string;
   readonly chat?: { readonly source: string; readonly target: string };
 }
 
@@ -92,6 +97,7 @@ function landsJar(
   sourceLore: readonly string[],
   sourceVersion: string,
   chat: QualityProjectOptions["chat"],
+  structureMaterial = "EMERALD",
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
@@ -111,7 +117,7 @@ function landsJar(
         "  main:",
         "    items:",
         "      confirm:",
-        "        material: EMERALD",
+        `        material: ${JSON.stringify(structureMaterial)}`,
         "        slot: 1",
         '        name: "<red>Confirm</red>"',
         `        lore: ${JSON.stringify(sourceLore)}`,
@@ -236,7 +242,14 @@ async function createQualityProject(
   const jarPath = join(directory, "Lands.jar");
   await writeFile(
     jarPath,
-    landsJar(theme, sourceName, sourceLore, sourceVersion, options.chat),
+    landsJar(
+      theme,
+      sourceName,
+      sourceLore,
+      sourceVersion,
+      options.chat,
+      options.structureMaterial,
+    ),
   );
   const prepared = spawnSync(
     process.execPath,
@@ -997,5 +1010,36 @@ void test("官方 MiniMessage 别名与颜色写法通过原生语法检查", as
   const report = qualityReport(runLioni(["qa", project.configPath]));
   const syntax = checkResult(report.report, "minimessage-syntax");
   assert.equal(syntax.status, "complete");
+  assert.deepEqual(syntax.diagnostics, []);
+});
+
+void test("标记为结构的字符串不进入 MiniMessage 正文检查", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    { structureMaterial: "<red>Structure §c error</red>" },
+  );
+  const facts = await readFacts(
+    createLandsConfig(pathToFileURL(project.configPath)),
+  );
+  const structure = facts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "structure" &&
+      unit.context.path.at(-1) === "material",
+  );
+  assert.ok(structure);
+  assert.equal(structure.unit.source, "<red>Structure §c error</red>");
+
+  const factInputs = miniMessageFactsInput(facts, []);
+  assert.equal(
+    factInputs.messages.some(({ path }) => path.at(-1) === "material"),
+    false,
+  );
+
+  const report = qualityReport(runLioni(["qa", project.configPath]));
+  const syntax = checkResult(report.report, "minimessage-syntax");
+  assert.equal(syntax.status, "complete", JSON.stringify(syntax, null, 2));
   assert.deepEqual(syntax.diagnostics, []);
 });
