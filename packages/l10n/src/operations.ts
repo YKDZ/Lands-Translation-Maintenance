@@ -27,7 +27,6 @@ import type {
   CheckConclusion,
   ConclusionSubject,
   ExceptionRecord,
-  SameTextPendingReason,
   JsonValue,
   KnownExcludedResource,
   KnownOutOfScopeVisibleText,
@@ -63,10 +62,8 @@ import {
   type MappingSnapshot,
   type ReleasedTranslationPath,
   type ResourceSnapshot,
-  type SameTextCandidate,
   type SourceBaseline,
   type SyncLock,
-  type TranslationSeed,
   exceptionsFileName,
 } from "#/state";
 import {
@@ -79,7 +76,6 @@ import {
   type FileWrite,
 } from "#/transaction";
 import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
-import { translationReviewRule } from "#/translation-review";
 import { canonicalJson, compareText, sameValue, sha256 } from "#/value";
 import { parseYaml, setDocumentPath, valueAtPath } from "#/yaml-data";
 
@@ -389,32 +385,6 @@ function sourceMessageIssues(
   );
 }
 
-function isValidTargetValue(
-  category: ObservedMessage["category"],
-  target: JsonValue | undefined,
-): boolean {
-  if (
-    category === "chat-string" ||
-    category === "gui-string" ||
-    category === "dialog-string" ||
-    category === "dialog-label-format" ||
-    category === "configuration-string"
-  ) {
-    return typeof target === "string";
-  }
-  if (category === "gui-lore") {
-    return (
-      typeof target === "string" ||
-      (Array.isArray(target) &&
-        target.every((item) => typeof item === "string"))
-    );
-  }
-  if (Array.isArray(target)) {
-    return target.every((item) => typeof item === "string");
-  }
-  return false;
-}
-
 function updateDocumentValue(
   document: TargetFileInput["document"],
   path: readonly string[],
@@ -496,55 +466,10 @@ async function readTargets(
   return { targets: inputs, snapshots, issues };
 }
 
-function stateSummary(project: ProjectView, lock: SyncLock): ProjectSummary {
-  const messages = new Map(
-    project.messages.map((message) => [message.id, message]),
-  );
-  let pendingTranslations = 0;
-  let sameTextCandidates = 0;
-  let confirmedSameText = 0;
-  let modifiedTranslations = 0;
-  let missingTranslations = 0;
-
-  for (const message of project.messages) {
-    if (message.targetStatus === "missing") missingTranslations += 1;
-  }
-  for (const seed of lock.translationSeeds) {
-    const message = messages.get(seed.id);
-    if (
-      message === undefined ||
-      message.targetStatus !== "present" ||
-      message.target === undefined
-    )
-      continue;
-    if (sameValue(message.target, message.source)) {
-      if (message.translationReview?.confirmedSameText === true)
-        confirmedSameText += 1;
-      else pendingTranslations += 1;
-    } else modifiedTranslations += 1;
-  }
-  for (const candidate of lock.sameTextCandidates) {
-    const message = messages.get(candidate.id);
-    if (
-      message !== undefined &&
-      message.targetStatus === "present" &&
-      message.target !== undefined &&
-      sameValue(message.target, message.source)
-    ) {
-      if (message.translationReview?.confirmedSameText === true)
-        confirmedSameText += 1;
-      else sameTextCandidates += 1;
-    }
-  }
-
+function stateSummary(project: ProjectView): ProjectSummary {
   return {
     resourceFiles: project.resources.length,
     messages: project.messages.length,
-    pendingTranslations,
-    sameTextCandidates,
-    confirmedSameText,
-    modifiedTranslations,
-    missingTranslations,
   };
 }
 
@@ -601,7 +526,6 @@ function checkConclusion(finding: Diagnostic): CheckConclusion {
 function makeReport(
   operation: ProjectReport["operation"],
   project: ProjectView,
-  lock: SyncLock,
   diagnostics: readonly Diagnostic[],
   coverage?: CheckCoverage,
   exceptionCandidates: readonly CheckConclusion[] = [],
@@ -614,7 +538,7 @@ function makeReport(
   return {
     operation,
     state,
-    summary: stateSummary(project, lock),
+    summary: stateSummary(project),
     diagnostics: [...diagnostics].sort((left, right) =>
       compareText(canonicalJson(left), canonicalJson(right)),
     ),
@@ -705,21 +629,6 @@ function makeProjectStructures(
   return structures;
 }
 
-function emptyLock(): SyncLock {
-  return {
-    schemaVersion: 1,
-    sourceVersion: "",
-    translationHistory: "",
-    jarSha256: "0".repeat(64),
-    syncConfigurationSha256: "0".repeat(64),
-    sourceBaselineSha256: "0".repeat(64),
-    resourcesSha256: "0".repeat(64),
-    translationSeeds: [],
-    sameTextCandidates: [],
-    integritySha256: "0".repeat(64),
-  };
-}
-
 function invalidStateReport(
   operation: ProjectReport["operation"],
   reason: string,
@@ -735,7 +644,7 @@ function invalidStateReport(
     { state: "consistent" },
     { state: "invalid" },
   );
-  return makeReport(operation, emptyView(), emptyLock(), [problem]);
+  return makeReport(operation, emptyView(), [problem]);
 }
 
 function projectView(
@@ -772,11 +681,7 @@ function projectView(
     targetMessages: collected.targetMessages,
     structures,
     knownOutOfScopeVisibleTexts: baseline.knownOutOfScopeVisibleTexts ?? [],
-    fileIssues: [
-      ...extraIssues,
-      ...collected.issues,
-      ...structureFindingIssues(structures),
-    ],
+    fileIssues: [...extraIssues, ...collected.issues],
   };
 }
 
@@ -1130,53 +1035,6 @@ function applyStructureChanges(
   }
 }
 
-function structureFindingIssues(
-  structures: readonly ProjectStructure[],
-): readonly ProjectFileIssue[] {
-  const issues: ProjectFileIssue[] = [];
-  for (const structure of structures) {
-    const expected = new Map<
-      string,
-      { path: readonly string[]; value: JsonValue }
-    >();
-    const visit = (value: JsonValue, path: readonly string[]): void => {
-      if (selectedAt(structure.translationPaths, path)) return;
-      if (isRecord(value)) {
-        if (Object.keys(value).length === 0) {
-          expected.set(canonicalJson(path), { path, value });
-          return;
-        }
-        for (const key of Object.keys(value).sort(compareText)) {
-          visit(value[key]!, [...path, key]);
-        }
-        return;
-      }
-      expected.set(canonicalJson(path), { path, value });
-    };
-    visit(structure.definitions, []);
-    for (const { path, value } of expected.values()) {
-      const actual = valueAtPath(structure.target, path);
-      if (
-        isRecord(value) &&
-        Object.keys(value).length === 0 &&
-        isRecord(actual)
-      ) {
-        continue;
-      }
-      if (actual !== undefined && sameValue(actual, value)) continue;
-      issues.push({
-        file: structure.targetFile,
-        code: "structure.definition-mismatch",
-        reason: "目标结构字段与已登记的上游定义不一致",
-        path,
-        expected: value,
-        actual: actual === undefined ? { state: "missing" } : actual,
-      });
-    }
-  }
-  return issues;
-}
-
 function translatableTextCoverageUnavailable(
   view: ProjectView,
 ): readonly string[] {
@@ -1394,24 +1252,10 @@ export async function initializeProject(
       initialStructures.blockers[0]!.code,
     );
   }
-  const seeds: TranslationSeed[] = [];
-  const sameTextCandidates: SameTextCandidate[] = [];
   const messagesNeedingSeed = new Set<string>();
   for (const message of initialCollection.messages) {
     if (message.targetStatus === "missing") {
-      seeds.push({
-        id: message.id,
-        sourceSha256: sha256(canonicalJson(message.source)),
-        reason: "missing",
-      });
       messagesNeedingSeed.add(message.id);
-    } else if (!isValidTargetValue(message.category, message.target)) {
-      continue;
-    } else if (sameValue(message.target, message.source)) {
-      sameTextCandidates.push({
-        id: message.id,
-        sourceSha256: sha256(canonicalJson(message.source)),
-      });
     }
   }
 
@@ -1467,12 +1311,8 @@ export async function initializeProject(
     syncConfigurationSha256: syncConfigurationFingerprint(configuration),
     sourceBaselineSha256: baselineSha256,
     resourcesSha256: resourceSetFingerprint(resources),
-    translationSeeds: seeds.sort((left, right) =>
-      compareText(left.id, right.id),
-    ),
-    sameTextCandidates: sameTextCandidates.sort((left, right) =>
-      compareText(left.id, right.id),
-    ),
+    translationSeeds: [],
+    sameTextCandidates: [],
   };
   const lock: SyncLock = {
     ...lockContents,
@@ -1514,19 +1354,10 @@ export async function initializeProject(
 
   const targetAfter = await readTargets(project, baseline);
   const view = projectView(baseline, targetAfter.targets, targetAfter.issues);
-  const reviewedView = withTranslationReview(view, lock, new Set());
-  const evaluated = evaluateRules(reviewedView, builtInRules, {
+  const evaluated = evaluateRules(view, builtInRules, {
     configuration: configuration.rules,
   });
-  const review = evaluateRules(reviewedView, [translationReviewRule]);
-  return makeReport(
-    "init",
-    reviewedView,
-    lock,
-    evaluated.diagnostics,
-    undefined,
-    review.diagnostics.map(checkConclusion),
-  );
+  return makeReport("init", view, evaluated.diagnostics);
 }
 
 interface LoadedSavedProject {
@@ -1675,38 +1506,6 @@ async function loadSavedProject(
   };
 }
 
-function pendingReasonForMessage(
-  messageId: string,
-  lock: SyncLock,
-): SameTextPendingReason | undefined {
-  if (lock.translationSeeds.some((seed) => seed.id === messageId)) {
-    return "translation-seed";
-  }
-  return lock.sameTextCandidates.some((candidate) => candidate.id === messageId)
-    ? "same-text-candidate"
-    : undefined;
-}
-
-function withTranslationReview(
-  view: ProjectView,
-  lock: SyncLock,
-  confirmedSameTextIds: ReadonlySet<string>,
-): ProjectView {
-  return {
-    ...view,
-    messages: view.messages.map((message) => {
-      const pendingReason = pendingReasonForMessage(message.id, lock);
-      return {
-        ...message,
-        translationReview: {
-          ...(pendingReason === undefined ? {} : { pendingReason }),
-          confirmedSameText: confirmedSameTextIds.has(message.id),
-        },
-      };
-    }),
-  };
-}
-
 function enabledRulesRequireInput(
   configuration: ConsumerConfiguration,
   input: RuleInput,
@@ -1743,59 +1542,16 @@ async function evaluateSavedProject(
           }),
         }
       : loaded.view;
-  // 翻译状态检查先形成结论；通用例外匹配结果随后参与状态派生和质量检查。
-  const reviewView = withTranslationReview(view, loaded.lock, new Set());
-  const review = evaluateRules(reviewView, [translationReviewRule]);
-  const reviewConclusions = review.diagnostics.map(checkConclusion);
-  const reviewContext: ConclusionContext = {
-    view: reviewView,
-    diagnostics: review.diagnostics,
-    coverage: review.coverage,
-    registeredRules: [translationReviewRule],
-  };
-  const reviewResolutions = resolveExceptionRecords(
-    loaded.exceptions.records,
-    reviewConclusions,
-    reviewContext,
-    operation,
-  );
-  const accepted = new Set(
-    reviewResolutions.flatMap((resolution) =>
-      resolution.state === "active" ? [resolution.conclusion.id] : [],
-    ),
-  );
-  const reviewedView = withTranslationReview(
-    view,
-    loaded.lock,
-    new Set(
-      reviewConclusions.flatMap((conclusion) =>
-        accepted.has(conclusion.id) && conclusion.message !== undefined
-          ? [conclusion.message.id]
-          : [],
-      ),
-    ),
-  );
-  const evaluation = evaluateProject(reviewedView, loaded.configuration, rules);
+  const evaluation = evaluateProject(view, loaded.configuration, rules);
   const diagnostics = [...loaded.staticDiagnostics, ...evaluation.diagnostics];
   return {
     ...loaded,
-    view: reviewedView,
+    view,
     diagnostics,
-    coverage: {
-      ...evaluation.coverage,
-      complete: review.coverage.complete && evaluation.coverage.complete,
-      enabledRuleIds: [
-        ...review.coverage.enabledRuleIds,
-        ...evaluation.coverage.enabledRuleIds,
-      ],
-      unsupportedRuleIds: [
-        ...review.coverage.unsupportedRuleIds,
-        ...evaluation.coverage.unsupportedRuleIds,
-      ],
-    },
+    coverage: evaluation.coverage,
     qualityCoverage: evaluation.coverage,
-    registeredRules: [translationReviewRule, ...rules],
-    conclusions: [...reviewConclusions, ...diagnostics.map(checkConclusion)],
+    registeredRules: rules,
+    conclusions: diagnostics.map(checkConclusion),
   };
 }
 
@@ -2324,7 +2080,6 @@ export async function inspectProject(
   return makeReport(
     operation,
     evaluated.view,
-    evaluated.lock,
     resolved.diagnostics,
     operation === "check" ? evaluated.qualityCoverage : undefined,
     exceptionCandidates(evaluated, resolved.acceptedConclusionIds, operation),
