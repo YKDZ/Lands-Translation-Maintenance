@@ -247,7 +247,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
     assert.equal(coverage.complete, true);
     for (const ruleId of [
       "structure",
-      "minimessage-syntax",
       "minimessage-tags",
       "minimessage-variables",
       "map-html",
@@ -722,14 +721,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
     >[];
     assert.ok(
       finalDiagnostics.some(
-        (diagnostic) =>
-          diagnostic.ruleId === "minimessage-syntax" &&
-          diagnostic.code === "minimessage.syntax-invalid" &&
-          diagnostic.origin === "target",
-      ),
-    );
-    assert.ok(
-      finalDiagnostics.some(
         (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
       ),
     );
@@ -757,7 +748,6 @@ void describe("无 JAR 保存项目检查旅程", () => {
         .replaceAll("\0", "\\0");
       assert.ok(textOutput.includes(`尚未覆盖：${escapedCapability}`));
     }
-    assert.ok(textOutput.includes("minimessage.syntax-invalid"));
     assert.ok(textOutput.includes("exception.unable-to-evaluate"));
     for (const diagnostic of finalDiagnostics) {
       assert.ok(textOutput.includes(String(diagnostic.code)));
@@ -854,7 +844,7 @@ void describe("无 JAR 保存项目检查旅程", () => {
     );
     assert.match(
       changedDeclarationText.stdout || changedDeclarationText.stderr,
-      /lands-l10n sync --project <项目目录> --jar <候选 JAR>/u,
+      /Lioni 原生 `update <配置入口>`/u,
     );
     assert.deepEqual(
       await snapshotProjectFiles(declarationProject),

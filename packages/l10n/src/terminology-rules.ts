@@ -7,7 +7,7 @@ import type {
 } from "#/model";
 import { terminologyEntries, terminologyStyleSource } from "#/terminology-data";
 import {
-  pairedTextDocuments,
+  pairTranslatableTextDocuments,
   translatableTextOwnerIdentity,
 } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
@@ -165,9 +165,11 @@ function textRuns(
     for (const [index, frame] of context.entries()) {
       if (frame.kind === "tag") {
         if (frame.name === "click") {
-          const owner = translatableTextOwnerIdentity(project, document, [
-            frame,
-          ]);
+          const owner = translatableTextOwnerIdentity(
+            project.miniMessage!,
+            document,
+            [frame],
+          );
           frames.push(
             `tag:click-owner:${canonicalJson(owner ?? { state: "unknown-owner" })}`,
           );
@@ -683,7 +685,7 @@ export const terminologyRule: CheckRule = {
     for (const {
       sourceDocument: source,
       targetDocument: target,
-    } of pairedTextDocuments(project)) {
+    } of pairTranslatableTextDocuments(parsed).pairs) {
       if (exactSeed(project, source)) continue;
       const sourceDocument = parsed.documents.find(
         (document) =>
@@ -801,10 +803,12 @@ export const translationStyleRule: CheckRule = {
     if (parsed === undefined) return [];
     const findings: ReturnType<CheckRule["evaluate"]>[number][] = [];
     const sourceByTarget = new Map(
-      pairedTextDocuments(project).map(({ sourceDocument, targetDocument }) => [
-        targetDocument,
-        sourceDocument,
-      ]),
+      pairTranslatableTextDocuments(parsed).pairs.map(
+        ({ sourceDocument, targetDocument }) => [
+          targetDocument,
+          sourceDocument,
+        ],
+      ),
     );
     for (const document of parsed.translatableText) {
       if (document.origin !== "target") continue;

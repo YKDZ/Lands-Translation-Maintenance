@@ -1,3 +1,32 @@
+import type {
+  MiniMessageOrigin,
+  MiniMessageParseProject,
+  MiniMessagePosition,
+} from "#/mini-message-model";
+
+export type {
+  AdaptedMiniMessageInput,
+  MiniMessageContextFrame,
+  MiniMessageFinding,
+  MiniMessageIncompleteFact,
+  MiniMessageInputMessage,
+  MiniMessageListItemRange,
+  MiniMessageOrigin,
+  MiniMessageParseProject,
+  MiniMessagePosition,
+  MiniMessageSourceNode,
+  MiniMessageSurface,
+  MiniMessageTagNode,
+  MiniMessageTextNode,
+  MiniMessageThemeEntry,
+  MiniMessageThemeInput,
+  MiniMessageThemeSnapshot,
+  MiniMessageThemeStyle,
+  ParsedMiniMessageDocument,
+  TranslatableTextDocument,
+  TranslatableTextSegment,
+} from "#/mini-message-model";
+
 export type JsonValue =
   | null
   | boolean
@@ -101,27 +130,6 @@ export const translationFormats = [
   "map-html-minimessage",
 ] as const satisfies readonly TranslationFormat[];
 
-export type MiniMessageSurface = "chat" | "gui" | "dialog" | "bedrock";
-
-export type MiniMessageOrigin = "source" | "target" | "theme";
-
-export interface MiniMessageThemeSnapshot {
-  readonly file: string;
-  readonly source: string;
-}
-
-export interface MiniMessagePosition {
-  readonly start: number;
-  readonly end: number;
-}
-
-/** MiniMessage 接收适配后的内容，同时保留到原始 UTF-16 边界的位置映射。 */
-export interface AdaptedMiniMessageInput {
-  readonly input: string;
-  readonly sourceOffsets: readonly number[];
-  readonly exact: boolean;
-}
-
 export interface VariableContextPart {
   readonly kind: string;
   readonly identity: JsonValue;
@@ -140,129 +148,6 @@ export interface VariableCountDifference {
   readonly actualCount: number;
   readonly expectedPositions: readonly MiniMessagePosition[];
   readonly actualPositions: readonly MiniMessagePosition[];
-}
-
-export interface MiniMessageContextFrame {
-  readonly kind:
-    | "tag"
-    | "hover-text"
-    | "tag-argument"
-    | "html-element"
-    | "html-attribute";
-  readonly name: string;
-  readonly position: MiniMessagePosition;
-}
-
-export interface MiniMessageTextNode {
-  readonly kind: "text";
-  readonly raw: string;
-  /** 官方 MiniMessage 树节点实际贡献给 PlainText 的可见文本。 */
-  readonly visibleText: string;
-  /** visibleText 每个 UTF-16 边界对应的原始消息边界。 */
-  readonly visibleSourceOffsets: readonly number[];
-  readonly position: MiniMessagePosition;
-  readonly context: readonly MiniMessageContextFrame[];
-}
-
-export interface MiniMessageTagNode {
-  readonly kind: "tag";
-  readonly raw: string;
-  /** 官方插入组件或字面化节点实际贡献给 PlainText 的可见文本。 */
-  readonly visibleText: string;
-  /** visibleText 每个 UTF-16 边界对应的原始消息边界。 */
-  readonly visibleSourceOffsets: readonly number[];
-  readonly name: string;
-  readonly parameters: readonly string[];
-  readonly parameterPositions: readonly MiniMessagePosition[];
-  readonly parameterSourceOffsets: readonly (readonly number[])[];
-  readonly closing: boolean;
-  readonly selfClosing: boolean;
-  readonly semanticKind:
-    | "style"
-    | "content"
-    | "lands-control"
-    | "lands-preprocess"
-    | "unknown";
-  readonly position: MiniMessagePosition;
-  readonly context: readonly MiniMessageContextFrame[];
-}
-
-export type MiniMessageSourceNode = MiniMessageTextNode | MiniMessageTagNode;
-
-export interface ParsedMiniMessageDocument {
-  readonly message: MessageIdentity;
-  readonly documentIndex: number;
-  readonly origin: "source" | "target";
-  readonly file: string;
-  readonly path: readonly (string | number)[];
-  readonly surface: MiniMessageSurface;
-  readonly input: string;
-  readonly range: MiniMessagePosition;
-  readonly status: "parsed" | "syntax-invalid" | "parser-failed";
-  readonly plainText?: string;
-  readonly nodes: readonly MiniMessageSourceNode[];
-  readonly context: readonly MiniMessageContextFrame[];
-  readonly parent?: MiniMessageContextFrame;
-}
-
-export interface TranslatableTextSegment {
-  readonly kind: "text" | "variable" | "command" | "structure" | "boundary";
-  /** 可读正文或受保护对象的身份；命令、结构片段不会作为正文检查。 */
-  readonly value: string;
-  readonly raw: string;
-  readonly position: MiniMessagePosition;
-  readonly context: readonly MiniMessageContextFrame[];
-}
-
-/** 供术语和文风检查只读消费的正文视图；每个嵌套 hover 仍是独立文档。 */
-export interface TranslatableTextDocument {
-  readonly message: MessageIdentity;
-  readonly documentIndex: number;
-  readonly origin: "source" | "target";
-  readonly file: string;
-  readonly path: readonly (string | number)[];
-  readonly surface: MiniMessageSurface;
-  readonly range: MiniMessagePosition;
-  readonly context: readonly MiniMessageContextFrame[];
-  readonly segments: readonly TranslatableTextSegment[];
-}
-
-export interface MiniMessageThemeStyle {
-  readonly color: string | null;
-  readonly decorations: Readonly<Record<string, "true" | "false" | "not_set">>;
-}
-
-export interface MiniMessageThemeEntry {
-  readonly file: string;
-  readonly path: readonly (string | number)[];
-  readonly surface: MiniMessageSurface;
-  readonly name: string;
-  readonly source: string;
-  readonly style?: MiniMessageThemeStyle;
-}
-
-export interface MiniMessageFinding {
-  readonly code: string;
-  /** 用于区分同一规则、消息和路径下的不同出现位置；不要包含可变内容。 */
-  readonly identity?: JsonValue;
-  /** 此诊断实际依赖的规则配置或外部内容。 */
-  readonly fingerprint?: JsonValue;
-  readonly message?: MessageIdentity;
-  readonly origin: MiniMessageOrigin;
-  readonly location: DiagnosticLocation;
-  readonly reason: string;
-  readonly expected: JsonValue;
-  readonly actual: JsonValue;
-}
-
-export interface MiniMessageParseProject {
-  readonly sourceVersion: string;
-  readonly documents: readonly ParsedMiniMessageDocument[];
-  readonly translatableText: readonly TranslatableTextDocument[];
-  readonly themes: readonly MiniMessageThemeEntry[];
-  readonly findings: readonly MiniMessageFinding[];
-  readonly mapFindings: readonly MiniMessageFinding[];
-  readonly unavailableCapabilities: readonly string[];
 }
 
 export interface ResourceInventoryEntry {
@@ -506,102 +391,8 @@ export interface CheckResult {
   readonly report: ProjectReport;
 }
 
-export interface SyncMessageChange {
-  readonly id: string;
-  readonly action: "preserve" | "seed" | "reset" | "delete";
-  readonly reason:
-    | "unchanged"
-    | "target-path-blocked"
-    | "missing-translation"
-    | "new-message"
-    | "source-changed"
-    | "source-removed"
-    | "orphaned-translation";
-  readonly sourceFile: string;
-  readonly targetFile: string;
-  readonly path: readonly string[];
-  readonly category: TranslationFieldCategory;
-  readonly scene?: TranslationFieldScene;
-  readonly format?: TranslationFormat;
-  readonly previousSource?: JsonValue;
-  readonly source?: JsonValue;
-  readonly previousTarget?: JsonValue;
-  readonly target?: JsonValue;
-}
-
-export interface SyncStructureChange {
-  readonly sourceFile: string;
-  readonly definitionsSource: string;
-  readonly targetFile: string;
-  readonly path: readonly string[];
-  readonly action: "preserve" | "update" | "delete";
-  readonly previous?: JsonValue;
-  readonly expected?: JsonValue;
-}
-
-export interface SyncResourceChanges {
-  readonly added: readonly string[];
-  readonly removed: readonly string[];
-  readonly changed: readonly string[];
-  readonly unchanged: readonly string[];
-  readonly observedOnly: {
-    readonly added: readonly string[];
-    readonly removed: readonly string[];
-    readonly changed: readonly string[];
-  };
-}
-
-export interface SyncResourceDifference {
+export interface ResourceInventoryDifference {
   readonly undeclared: readonly string[];
   readonly missing: readonly string[];
   readonly duplicates: readonly string[];
 }
-
-export interface SyncBlocker {
-  readonly code: string;
-  readonly reason: string;
-}
-
-export interface SyncInputSnapshot {
-  readonly path: string;
-  readonly sha256?: string;
-}
-
-export interface SyncWrite {
-  readonly kind: "target" | "baseline" | "lock";
-  readonly path: string;
-  readonly content: string;
-  readonly expectedSha256?: string;
-}
-
-export interface SyncTargetFilePlan {
-  readonly path: string;
-  readonly action: "write" | "unchanged";
-  readonly expectedSha256?: string;
-  readonly contentSha256: string;
-}
-
-export interface SyncPlan {
-  readonly sourceVersion: string;
-  readonly jarSha256: string;
-  readonly resourceChanges: SyncResourceChanges;
-  readonly messages: readonly SyncMessageChange[];
-  readonly structures: readonly SyncStructureChange[];
-  readonly targetFiles: readonly SyncTargetFilePlan[];
-  readonly unmanagedTargets: readonly string[];
-  readonly pendingTranslations: readonly string[];
-  readonly inputSnapshots: readonly SyncInputSnapshot[];
-  readonly writes: readonly SyncWrite[];
-}
-
-export type SyncPreviewResult =
-  | {
-      readonly ready: true;
-      readonly plan: SyncPlan;
-    }
-  | {
-      readonly ready: false;
-      readonly blockers: readonly SyncBlocker[];
-      readonly resourceDifference: SyncResourceDifference;
-      readonly resourceChanges: SyncResourceChanges;
-    };

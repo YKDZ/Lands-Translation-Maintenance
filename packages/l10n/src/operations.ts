@@ -14,14 +14,11 @@ import {
   type ExceptionRecords,
 } from "#/exceptions";
 import { readJarResources } from "#/jar";
-import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
+import { collectMessages } from "#/messages";
+import type { MiniMessageThemeSnapshot } from "#/mini-message-model";
 import { parseMiniMessages } from "#/minimessage";
 import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
-import {
-  captureMiniMessageTheme,
-  validateMiniMessageThemeYaml,
-  type MiniMessageThemeSnapshot,
-} from "#/minimessage-theme";
+import { captureMiniMessageTheme } from "#/minimessage-theme";
 import type {
   CheckCoverage,
   CheckRule,
@@ -41,18 +38,10 @@ import type {
   ProjectSummary,
   ProjectStructure,
   ProjectView,
+  ResourceInventoryDifference,
   RuleInput,
   RuleInputDependency,
   ResourceInventoryEntry,
-  SyncInputSnapshot,
-  SyncMessageChange,
-  SyncPlan,
-  SyncPreviewResult,
-  SyncResourceChanges,
-  SyncResourceDifference,
-  SyncStructureChange,
-  SyncTargetFilePlan,
-  SyncWrite,
   Severity,
 } from "#/model";
 import {
@@ -90,6 +79,7 @@ import {
   type FileSnapshot,
   type FileWrite,
 } from "#/transaction";
+import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { translationReviewRule } from "#/translation-review";
 import { canonicalJson, compareText, sameValue, sha256 } from "#/value";
 import { parseYaml, setDocumentPath, valueAtPath } from "#/yaml-data";
@@ -114,10 +104,6 @@ export interface InitializationOptions {
   readonly beforeApply?: () => Promise<void>;
 }
 
-export interface SyncApplyOptions {
-  readonly beforeApply?: () => Promise<void>;
-}
-
 export interface ExceptionRecordingOptions {
   readonly beforeApply?: () => Promise<void>;
 }
@@ -127,17 +113,6 @@ export interface ExceptionReceipt {
   readonly contentFingerprint: string;
   readonly reason: string;
 }
-
-export type SyncApplyResult =
-  | {
-      readonly applied: true;
-      readonly plan: SyncPlan;
-      readonly status: ProjectReport;
-    }
-  | {
-      readonly applied: false;
-      readonly preview: Extract<SyncPreviewResult, { readonly ready: false }>;
-    };
 
 interface ReadBytes {
   readonly bytes: Uint8Array;
@@ -276,46 +251,11 @@ function requireConfiguration(source: string) {
   return result.value;
 }
 
-function requireMiniMessageTheme(
+function miniMessageThemeForBaseline(
   resources: readonly ResourceInventoryEntry[],
   resourceBytes: ReadonlyMap<string, Uint8Array>,
 ): MiniMessageThemeSnapshot | undefined {
-  const captured = captureMiniMessageTheme(resources, resourceBytes);
-  if (captured.ambiguousFiles.length > 0) {
-    throw new ProjectOperationError(
-      `主题资源不唯一：${captured.ambiguousFiles.join("、")}`,
-      "minimessage.theme-ambiguous",
-      { file: captured.ambiguousFiles[0]!, path: [] },
-    );
-  }
-  if (captured.unavailableFiles.length > 0) {
-    throw new ProjectOperationError(
-      `无法读取主题资源：${captured.unavailableFiles.join("、")}`,
-      "minimessage.theme-unavailable",
-      { file: captured.unavailableFiles[0]!, path: [] },
-    );
-  }
-  if (captured.theme === undefined) return undefined;
-
-  const issues = validateMiniMessageThemeYaml(captured.theme);
-  if (issues.length === 0) return captured.theme;
-  const details = issues
-    .map(
-      (issue) =>
-        `${issue.file}${issue.path.length === 0 ? "" : `:${issue.path.join(".")}`}：${issue.reason}`,
-    )
-    .join("；");
-  const firstIssue = issues[0]!;
-  throw new ProjectOperationError(
-    `主题 YAML 无法安全读取：${details}`,
-    firstIssue.code,
-    {
-      file: firstIssue.file,
-      path: firstIssue.path,
-      ...(firstIssue.line === undefined ? {} : { line: firstIssue.line }),
-      ...(firstIssue.column === undefined ? {} : { column: firstIssue.column }),
-    },
-  );
+  return captureMiniMessageTheme(resources, resourceBytes).theme;
 }
 
 function readYaml(bytes: Uint8Array, file: string) {
@@ -425,7 +365,7 @@ function compareResourceInventory(
   declared: readonly ResourceInventoryEntry[],
   actual: readonly { readonly path: string }[],
   duplicates: readonly string[],
-): SyncResourceDifference {
+): ResourceInventoryDifference {
   const declaredPaths = declared.map((entry) => entry.path).sort(compareText);
   const actualPaths = actual.map((entry) => entry.path).sort(compareText);
   const declaredSet = new Set(declaredPaths);
@@ -841,8 +781,18 @@ function projectView(
   };
 }
 
+interface StructurePlanChange {
+  readonly sourceFile: string;
+  readonly definitionsSource: string;
+  readonly targetFile: string;
+  readonly path: readonly string[];
+  readonly action: "preserve" | "update" | "delete";
+  readonly previous?: JsonValue;
+  readonly expected?: JsonValue;
+}
+
 interface StructurePlanResult {
-  readonly changes: readonly SyncStructureChange[];
+  readonly changes: readonly StructurePlanChange[];
   readonly blockers: readonly {
     readonly code: string;
     readonly reason: string;
@@ -854,6 +804,16 @@ function selectedAt(
   path: readonly string[],
 ): boolean {
   return paths.some((selected) => samePath(selected, path));
+}
+
+function pathStartsWith(
+  path: readonly string[],
+  prefix: readonly string[],
+): boolean {
+  return (
+    path.length >= prefix.length &&
+    prefix.every((segment, index) => path[index] === segment)
+  );
 }
 
 function selectedBelow(
@@ -868,55 +828,6 @@ function selectedBelow(
 
 function samePath(left: readonly string[], right: readonly string[]): boolean {
   return canonicalJson(left) === canonicalJson(right);
-}
-
-function makeReleasedTranslationPaths(
-  previous: readonly ReleasedTranslationPath[],
-  currentMappings: readonly MappingSnapshot[],
-  previousMessages: readonly ObservedMessage[],
-): ReleasedTranslationPath[] {
-  const mappingsByAddress = new Map(
-    currentMappings.map((snapshot) => [
-      canonicalJson([snapshot.mapping.source, snapshot.mapping.target]),
-      snapshot.mapping,
-    ]),
-  );
-  const currentMapping = (sourceFile: string, targetFile: string) =>
-    mappingsByAddress.get(canonicalJson([sourceFile, targetFile]));
-  const released = new Map<string, ReleasedTranslationPath>();
-  const retain = (candidate: ReleasedTranslationPath): void => {
-    const mapping = currentMapping(candidate.sourceFile, candidate.targetFile);
-    if (
-      mapping === undefined ||
-      mapping.fields.some((field) =>
-        fieldSelectorMatchesPath(candidate.path, field),
-      )
-    ) {
-      return;
-    }
-    released.set(canonicalJson(candidate), candidate);
-  };
-
-  for (const path of previous) retain(path);
-  for (const message of previousMessages) {
-    const mapping = currentMapping(message.sourceFile, message.targetFile);
-    if (
-      mapping !== undefined &&
-      !mapping.fields.some((field) =>
-        fieldSelectorMatchesPath(message.path, field),
-      )
-    ) {
-      retain({
-        sourceFile: message.sourceFile,
-        targetFile: message.targetFile,
-        path: message.path,
-      });
-    }
-  }
-
-  return [...released.values()].sort((left, right) =>
-    compareText(canonicalJson(left), canonicalJson(right)),
-  );
 }
 
 function sortedKeys(...values: readonly (JsonValue | undefined)[]): string[] {
@@ -939,7 +850,7 @@ function planStructureChanges(
   const previousBySource = new Map(
     previousMappings.map((snapshot) => [snapshot.mapping.source, snapshot]),
   );
-  const changes: SyncStructureChange[] = [];
+  const changes: StructurePlanChange[] = [];
   const blockers: { code: string; reason: string }[] = [];
 
   for (const snapshot of currentMappings) {
@@ -973,14 +884,14 @@ function planStructureChanges(
 
     if (!isRecord(currentDefinitions)) {
       blockers.push({
-        code: "sync.structure-source-shape",
+        code: "init.structure-source-shape",
         reason: `${definitionsSource} 的结构根节点必须是映射`,
       });
       continue;
     }
     if (previousDefinitions !== undefined && !isRecord(previousDefinitions)) {
       blockers.push({
-        code: "sync.structure-source-shape",
+        code: "init.structure-source-shape",
         reason: `${definitionsSource} 的旧结构根节点不是映射`,
       });
       continue;
@@ -994,7 +905,7 @@ function planStructureChanges(
         );
         if (definitionParent !== undefined && !isRecord(definitionParent)) {
           blockers.push({
-            code: "sync.structure-source-shape",
+            code: "init.structure-source-shape",
             reason: `${definitionsSource}:${message.path.slice(0, depth).join(".")} 无法与已选择的译文路径对应`,
           });
           break;
@@ -1023,7 +934,7 @@ function planStructureChanges(
       expected: JsonValue,
     ): void => {
       blockers.push({
-        code: "sync.structure-target-path-type",
+        code: "init.structure-target-path-type",
         reason: `${mapping.target}:${path.join(".")} 的目标类型为${structureValueType(actual)}，上游结构类型为${structureValueType(expected)}`,
       });
     };
@@ -1145,7 +1056,7 @@ function planStructureChanges(
 
       if (hasSelectedDescendant) {
         blockers.push({
-          code: "sync.structure-source-shape",
+          code: "init.structure-source-shape",
           reason: `${definitionsSource}:${path.join(".")} 无法与已选择的译文路径对应`,
         });
         return;
@@ -1185,7 +1096,7 @@ function planStructureChanges(
 
 function applyStructureChanges(
   targets: ReadonlyMap<string, TargetFileInput>,
-  changes: readonly SyncStructureChange[],
+  changes: readonly StructurePlanChange[],
   changedTargetPaths: Set<string>,
 ): void {
   const applicable = changes
@@ -1272,6 +1183,42 @@ function translatableTextCoverageUnavailable(
 ): readonly string[] {
   const parsed = view.miniMessage;
   if (parsed === undefined) return [];
+  const expectedTextKeys = new Set<string>();
+  for (const document of parsed.documents) {
+    const listItems = document.listItems;
+    const paths =
+      listItems === undefined
+        ? [document.path]
+        : document.parent === undefined
+          ? listItems.map(({ path }) => path)
+          : listItems
+              .filter(
+                ({ position }) =>
+                  position.start <= document.range.start &&
+                  document.range.end <= position.end,
+              )
+              .map(({ path }) => path);
+    for (const path of paths) {
+      expectedTextKeys.add(
+        canonicalJson({
+          messageId: document.message.id,
+          path,
+          documentIndex: document.documentIndex,
+          origin: document.origin,
+        }),
+      );
+    }
+  }
+  const actualTextKeys = new Set(
+    parsed.translatableText.map((document) =>
+      canonicalJson({
+        messageId: document.message.id,
+        path: document.path,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+      }),
+    ),
+  );
   const sourceKeys = new Set(
     parsed.translatableText
       .filter((document) => document.origin === "source")
@@ -1294,29 +1241,13 @@ function translatableTextCoverageUnavailable(
         }),
       ),
   );
-  const translatableKeys = new Set(
-    parsed.translatableText.map((document) =>
-      canonicalJson({
-        messageId: document.message.id,
-        path: document.path,
-        documentIndex: document.documentIndex,
-        origin: document.origin,
-      }),
-    ),
-  );
+  const pairing = pairTranslatableTextDocuments(parsed);
   if (
+    expectedTextKeys.size !== actualTextKeys.size ||
+    [...expectedTextKeys].some((key) => !actualTextKeys.has(key)) ||
+    parsed.incompleteFacts.length > 0 ||
+    pairing.incomplete.length > 0 ||
     parsed.documents.some((document) => document.status !== "parsed") ||
-    parsed.documents.some(
-      (document) =>
-        !translatableKeys.has(
-          canonicalJson({
-            messageId: document.message.id,
-            path: document.path,
-            documentIndex: document.documentIndex,
-            origin: document.origin,
-          }),
-        ),
-    ) ||
     [...sourceKeys].some((key) => !targetKeys.has(key)) ||
     [...targetKeys].some((key) => !sourceKeys.has(key))
   ) {
@@ -1403,7 +1334,7 @@ export async function initializeProject(
   const jarByPath = new Map(
     jar.resources.map((resource) => [resource.path, resource.bytes]),
   );
-  const miniMessageTheme = requireMiniMessageTheme(
+  const miniMessageTheme = miniMessageThemeForBaseline(
     configuration.resources,
     jarByPath,
   );
@@ -1605,778 +1536,6 @@ export async function initializeProject(
   );
 }
 
-function currentResourceChanges(
-  previous: readonly ResourceSnapshot[],
-  actual: readonly { readonly path: string; readonly bytes: Uint8Array }[],
-  maintainedSources: ReadonlySet<string>,
-): SyncResourceChanges {
-  const previousByPath = new Map(
-    previous.map((resource) => [resource.path, resource]),
-  );
-  const actualByPath = new Map(
-    actual.map((resource) => [resource.path, sha256(resource.bytes)]),
-  );
-  const added = [...actualByPath.keys()]
-    .filter((path) => !previousByPath.has(path))
-    .sort(compareText);
-  const removed = [...previousByPath.keys()]
-    .filter((path) => !actualByPath.has(path))
-    .sort(compareText);
-  const changed = [...actualByPath]
-    .filter(([path, digest]) => previousByPath.get(path)?.sha256 !== digest)
-    .map(([path]) => path)
-    .filter((path) => previousByPath.has(path))
-    .sort(compareText);
-  const unchanged = [...actualByPath]
-    .filter(([path, digest]) => previousByPath.get(path)?.sha256 === digest)
-    .map(([path]) => path)
-    .sort(compareText);
-
-  return {
-    added,
-    removed,
-    changed,
-    unchanged,
-    observedOnly: {
-      added: added.filter((path) => !maintainedSources.has(path)),
-      removed: removed.filter((path) => !maintainedSources.has(path)),
-      changed: changed.filter((path) => !maintainedSources.has(path)),
-    },
-  };
-}
-
-function targetAddress(file: string, path: readonly string[]): string {
-  return `${file}\u0000${canonicalJson(path)}`;
-}
-
-function pathStartsWith(
-  path: readonly string[],
-  prefix: readonly string[],
-): boolean {
-  return (
-    path.length >= prefix.length &&
-    prefix.every((segment, index) => path[index] === segment)
-  );
-}
-
-function targetValueMap(
-  targets: ReadonlyMap<string, TargetFileInput>,
-): ReadonlyMap<string, JsonValue | undefined> {
-  return new Map(
-    [...targets].map(([path, target]) => [path, target.value] as const),
-  );
-}
-
-function addSnapshot(
-  snapshots: Map<string, SyncInputSnapshot>,
-  snapshot: SyncInputSnapshot,
-): void {
-  snapshots.set(snapshot.path, snapshot);
-}
-
-function makeSyncResourceSnapshots(
-  configuration: ConsumerConfiguration,
-  jarResources: readonly {
-    readonly path: string;
-    readonly bytes: Uint8Array;
-  }[],
-): ResourceSnapshot[] {
-  const jarByPath = new Map(
-    jarResources.map((resource) => [resource.path, resource.bytes]),
-  );
-  return configuration.resources
-    .map((resource) => ({
-      ...resource,
-      sha256: sha256(jarByPath.get(resource.path)!),
-    }))
-    .sort((left, right) => compareText(left.path, right.path));
-}
-
-function makeSyncMappings(
-  configuration: ConsumerConfiguration,
-  jarResources: readonly {
-    readonly path: string;
-    readonly bytes: Uint8Array;
-  }[],
-): MappingSnapshot[] {
-  const jarByPath = new Map(
-    jarResources.map((resource) => [resource.path, resource.bytes]),
-  );
-  return configuration.translationScope.mappings.map((mapping) =>
-    readMappingSnapshot(mapping, jarByPath),
-  );
-}
-
-export async function previewSyncProject(
-  projectDirectory: string,
-  jarPath: string,
-): Promise<SyncPreviewResult> {
-  const project = await realpath(resolve(projectDirectory));
-  const configFile = join(project, configurationFileName);
-  await assertNoSymlinkPath(project, configurationFileName);
-  const jarFile = resolve(jarPath);
-  const [configInput, jarInput] = await Promise.all([
-    readBytes(configFile, "维护清单"),
-    readBinary(jarFile, "JAR"),
-  ]);
-  const configuration = requireConfiguration(configInput.text);
-  const state = await readState(project);
-  if (!state.ok) {
-    throw new ProjectOperationError(state.message, "state.invalid", {
-      file: stateDirectoryName,
-      path: [],
-    });
-  }
-
-  const jar = await readJarResources(jarInput.bytes);
-  const resourceDifference = compareResourceInventory(
-    configuration.resources,
-    jar.resources,
-    jar.duplicatePaths,
-  );
-  const maintainedSources = new Set(
-    configuration.translationScope.mappings.map((mapping) => mapping.source),
-  );
-  const resourceChanges = currentResourceChanges(
-    state.baseline.resources,
-    jar.resources,
-    maintainedSources,
-  );
-  const hasResourceDifference =
-    resourceDifference.undeclared.length > 0 ||
-    resourceDifference.missing.length > 0 ||
-    resourceDifference.duplicates.length > 0;
-  if (hasResourceDifference) {
-    return {
-      ready: false,
-      blockers: [
-        {
-          code: "resource.inventory-mismatch",
-          reason: "JAR 的完整非 .class 文件集合必须与资源声明一致",
-        },
-      ],
-      resourceDifference,
-      resourceChanges,
-    };
-  }
-
-  const jarByPath = new Map(
-    jar.resources.map((resource) => [resource.path, resource.bytes]),
-  );
-  const miniMessageTheme = requireMiniMessageTheme(
-    configuration.resources,
-    jarByPath,
-  );
-  const resources = makeSyncResourceSnapshots(configuration, jar.resources);
-  const mappings = makeSyncMappings(configuration, jar.resources);
-  const invalidSourceIssues = sourceMessageIssues(mappings, resources);
-  if (invalidSourceIssues.length > 0) {
-    const detail = invalidSourceIssues
-      .map((issue) => `${issue.file} ${issue.path.join(".")}: ${issue.reason}`)
-      .join("；");
-    throw new ProjectOperationError(`原文不符合已声明的字段类型：${detail}`);
-  }
-
-  const combinedBaseline: SourceBaseline = {
-    ...state.baseline,
-    resources,
-    mappings: [
-      ...state.baseline.mappings.filter(({ mapping }) =>
-        maintainedSources.has(mapping.source),
-      ),
-      ...mappings,
-    ],
-  };
-  const targetInput = await readTargets(project, combinedBaseline);
-  const invalidTargetIssues = targetInput.issues.filter((issue) =>
-    ["yaml-invalid", "yaml-duplicate-key", "yaml-root-invalid"].includes(
-      issue.code,
-    ),
-  );
-  if (invalidTargetIssues.length > 0) {
-    const details = invalidTargetIssues
-      .map((issue) => `${issue.file}：${issue.reason}`)
-      .join("；");
-    throw new ProjectOperationError(`现有目标 YAML 无法安全读取：${details}`);
-  }
-
-  const targets = targetInput.targets;
-  const currentCollection = collectMessages(
-    mappings,
-    targetValueMap(targets),
-    resources,
-  );
-  const previousCollection = collectMessages(
-    state.baseline.mappings,
-    targetValueMap(targets),
-    state.baseline.resources,
-  );
-  const releasedTranslationPaths = makeReleasedTranslationPaths(
-    state.baseline.releasedTranslationPaths ?? [],
-    mappings,
-    previousCollection.messages,
-  );
-  const structurePlan = planStructureChanges(
-    state.baseline.mappings,
-    mappings,
-    targets,
-    currentCollection.messages,
-    releasedTranslationPaths,
-  );
-  if (structurePlan.blockers.length > 0) {
-    return {
-      ready: false,
-      blockers: structurePlan.blockers,
-      resourceDifference,
-      resourceChanges,
-    };
-  }
-  const previousMessages = new Map(
-    previousCollection.messages.map((message) => [message.id, message]),
-  );
-  const previousMessagesByAddress = new Map(
-    previousCollection.messages.map((message) => [
-      targetAddress(message.targetFile, message.path),
-      message,
-    ]),
-  );
-  const currentMessages = currentCollection.messages;
-  const currentMessageAddresses = new Set(
-    currentMessages.map((message) =>
-      targetAddress(message.targetFile, message.path),
-    ),
-  );
-  const currentMessageIds = new Set(currentMessages.map(({ id }) => id));
-  const sourceRemovedMessages = previousCollection.messages.filter(
-    (previous) =>
-      !currentMessageIds.has(previous.id) &&
-      mappings.some(
-        ({ mapping }) =>
-          mapping.target === previous.targetFile &&
-          mapping.fields.some((field) =>
-            fieldSelectorMatchesPath(previous.path, field),
-          ),
-      ),
-  );
-  const blockedRemovedMessages = sourceRemovedMessages.filter(
-    (message) => message.targetStatus === "blocked",
-  );
-  if (blockedRemovedMessages.length > 0) {
-    const paths = blockedRemovedMessages
-      .map((message) => `${message.targetFile}:${message.path.join(".")}`)
-      .sort(compareText);
-    return {
-      ready: false,
-      blockers: [
-        {
-          code: "sync.target-path-blocked",
-          reason: `目标路径被现有结构阻断，无法安全删除已移除的原文：${paths.join("、")}`,
-        },
-      ],
-      resourceDifference,
-      resourceChanges,
-    };
-  }
-  const deletableRemovedMessages = sourceRemovedMessages.filter(
-    (message) => message.targetStatus !== "blocked",
-  );
-  const messagesUnblockedByRemoval = new Set(
-    currentMessages
-      .filter(
-        (message) =>
-          message.targetStatus === "blocked" &&
-          deletableRemovedMessages.some(
-            (previous) =>
-              previous.targetStatus === "present" &&
-              previous.targetFile === message.targetFile &&
-              pathStartsWith(message.path, previous.path),
-          ),
-      )
-      .map(({ id }) => id),
-  );
-  const unsafeBlockedMessages = currentMessages.filter((message) => {
-    if (
-      message.targetStatus !== "blocked" ||
-      messagesUnblockedByRemoval.has(message.id)
-    ) {
-      return false;
-    }
-    const previous = previousMessages.get(message.id);
-    return (
-      previous === undefined || !sameValue(previous.source, message.source)
-    );
-  });
-  if (unsafeBlockedMessages.length > 0) {
-    const paths = unsafeBlockedMessages
-      .map((message) => `${message.targetFile}:${message.path.join(".")}`)
-      .sort(compareText);
-    return {
-      ready: false,
-      blockers: [
-        {
-          code: "sync.target-path-blocked",
-          reason: `新增或变化的原文无法写入被现有结构阻断的目标路径：${paths.join("、")}`,
-        },
-      ],
-      resourceDifference,
-      resourceChanges,
-    };
-  }
-  const currentMappingsByTarget = new Map(
-    mappings.map(({ mapping }) => [mapping.target, mapping]),
-  );
-  const currentTargetPaths = new Set(currentMappingsByTarget.keys());
-  const changedTargetPaths = new Set<string>();
-  for (const [path, target] of targets) {
-    if (target.originalSha256 === undefined) changedTargetPaths.add(path);
-  }
-  applyStructureChanges(targets, structurePlan.changes, changedTargetPaths);
-
-  const plannedMessages: SyncMessageChange[] = [];
-  const targetAfter = new Map<string, JsonValue>();
-  const requiresTranslation = new Set<string>();
-  for (const previous of deletableRemovedMessages) {
-    const target = targets.get(previous.targetFile);
-    if (previous.targetStatus === "present") {
-      if (target === undefined || previous.target === undefined) {
-        throw new ProjectOperationError(
-          `无法准备目标文件：${previous.targetFile}`,
-        );
-      }
-      const removedByStructure = structurePlan.changes.some(
-        (change) =>
-          change.action === "delete" &&
-          change.targetFile === previous.targetFile &&
-          pathStartsWith(previous.path, change.path),
-      );
-      if (!removedByStructure) {
-        target.document.deleteIn(previous.path);
-        changedTargetPaths.add(previous.targetFile);
-      }
-    }
-    plannedMessages.push({
-      id: previous.id,
-      action: "delete",
-      reason: "source-removed",
-      sourceFile: previous.sourceFile,
-      targetFile: previous.targetFile,
-      path: previous.path,
-      category: previous.category,
-      ...(previous.scene === undefined ? {} : { scene: previous.scene }),
-      ...(previous.format === undefined ? {} : { format: previous.format }),
-      previousSource: previous.source,
-      ...(previous.target === undefined
-        ? {}
-        : { previousTarget: previous.target }),
-    });
-  }
-  for (const message of currentMessages) {
-    const previous = previousMessages.get(message.id);
-    if (
-      message.targetStatus === "blocked" &&
-      !messagesUnblockedByRemoval.has(message.id)
-    ) {
-      plannedMessages.push({
-        id: message.id,
-        action: "preserve",
-        reason: "target-path-blocked",
-        sourceFile: message.sourceFile,
-        targetFile: message.targetFile,
-        path: message.path,
-        category: message.category,
-        ...(message.scene === undefined ? {} : { scene: message.scene }),
-        ...(message.format === undefined ? {} : { format: message.format }),
-        ...(previous === undefined ? {} : { previousSource: previous.source }),
-        source: message.source,
-      });
-      continue;
-    }
-    const previousTargetRoot =
-      previous === undefined
-        ? undefined
-        : targets.get(previous.targetFile)?.value;
-    const previousTarget =
-      previous === undefined
-        ? undefined
-        : valueAtPath(previousTargetRoot, previous.path);
-    const currentTargetRoot = targets.get(message.targetFile)?.value;
-    const currentTarget = valueAtPath(currentTargetRoot, message.path);
-    const selectedPreviousTarget =
-      currentTarget !== undefined ? currentTarget : previousTarget;
-    const sourceUnchanged =
-      previous !== undefined && sameValue(previous.source, message.source);
-    let action: SyncMessageChange["action"];
-    let reason: SyncMessageChange["reason"];
-    let plannedTarget: JsonValue;
-
-    if (sourceUnchanged && selectedPreviousTarget !== undefined) {
-      action = "preserve";
-      reason = "unchanged";
-      plannedTarget = selectedPreviousTarget;
-      if (currentTarget === undefined) {
-        const destination = targets.get(message.targetFile);
-        if (destination === undefined) {
-          throw new ProjectOperationError(
-            `无法准备目标文件：${message.targetFile}`,
-          );
-        }
-        updateDocumentValue(destination.document, message.path, plannedTarget);
-        changedTargetPaths.add(message.targetFile);
-      }
-    } else if (sourceUnchanged) {
-      action = "seed";
-      reason = "missing-translation";
-      plannedTarget = message.source;
-      requiresTranslation.add(message.id);
-      const destination = targets.get(message.targetFile);
-      if (destination === undefined) {
-        throw new ProjectOperationError(
-          `无法准备目标文件：${message.targetFile}`,
-        );
-      }
-      updateDocumentValue(destination.document, message.path, plannedTarget);
-      changedTargetPaths.add(message.targetFile);
-    } else {
-      action = previous === undefined ? "seed" : "reset";
-      reason = previous === undefined ? "new-message" : "source-changed";
-      plannedTarget = message.source;
-      requiresTranslation.add(message.id);
-      const destination = targets.get(message.targetFile);
-      if (destination === undefined) {
-        throw new ProjectOperationError(
-          `无法准备目标文件：${message.targetFile}`,
-        );
-      }
-      updateDocumentValue(destination.document, message.path, plannedTarget);
-      changedTargetPaths.add(message.targetFile);
-    }
-
-    targetAfter.set(message.id, plannedTarget);
-    plannedMessages.push({
-      id: message.id,
-      action,
-      reason,
-      sourceFile: message.sourceFile,
-      targetFile: message.targetFile,
-      path: message.path,
-      category: message.category,
-      ...(message.scene === undefined ? {} : { scene: message.scene }),
-      ...(message.format === undefined ? {} : { format: message.format }),
-      ...(previous === undefined ? {} : { previousSource: previous.source }),
-      source: message.source,
-      ...(selectedPreviousTarget === undefined
-        ? {}
-        : { previousTarget: selectedPreviousTarget }),
-      target: plannedTarget,
-    });
-  }
-
-  for (const targetMessage of currentCollection.targetMessages) {
-    const address = targetAddress(targetMessage.targetFile, targetMessage.path);
-    if (currentMessageAddresses.has(address)) continue;
-    if (
-      deletableRemovedMessages.some(
-        (previous) =>
-          previous.targetFile === targetMessage.targetFile &&
-          pathStartsWith(targetMessage.path, previous.path),
-      )
-    ) {
-      continue;
-    }
-    if (
-      currentMessages.some(
-        (message) =>
-          message.targetStatus === "blocked" &&
-          message.targetFile === targetMessage.targetFile &&
-          targetMessage.path.length < message.path.length &&
-          targetMessage.path.every(
-            (segment, index) => message.path[index] === segment,
-          ),
-      )
-    ) {
-      continue;
-    }
-    if (
-      currentMessages.some(
-        (message) =>
-          message.targetStatus === "present" &&
-          message.target !== undefined &&
-          !isValidTargetValue(message.category, message.target) &&
-          message.targetFile === targetMessage.targetFile &&
-          message.path.length < targetMessage.path.length &&
-          message.path.every(
-            (segment, index) => targetMessage.path[index] === segment,
-          ),
-      )
-    ) {
-      continue;
-    }
-    const target = targets.get(targetMessage.targetFile);
-    if (target === undefined) continue;
-    target.document.deleteIn(targetMessage.path);
-    changedTargetPaths.add(targetMessage.targetFile);
-    const previous = previousMessagesByAddress.get(address);
-    const mapping = currentMappingsByTarget.get(targetMessage.targetFile);
-    plannedMessages.push({
-      id: targetMessage.id,
-      action: "delete",
-      reason:
-        previous === undefined ? "orphaned-translation" : "source-removed",
-      sourceFile: previous?.sourceFile ?? mapping?.source ?? "",
-      targetFile: targetMessage.targetFile,
-      path: targetMessage.path,
-      category: targetMessage.category,
-      ...(targetMessage.scene === undefined
-        ? {}
-        : { scene: targetMessage.scene }),
-      ...(targetMessage.format === undefined
-        ? {}
-        : { format: targetMessage.format }),
-      ...(previous === undefined ? {} : { previousSource: previous.source }),
-      previousTarget: targetMessage.value,
-    });
-  }
-
-  const translationSeeds = new Map(
-    state.lock.translationSeeds.map((seed) => [seed.id, seed]),
-  );
-  const sameTextCandidates = new Map(
-    state.lock.sameTextCandidates.map((candidate) => [candidate.id, candidate]),
-  );
-  const nextSeeds = new Map<string, TranslationSeed>();
-  const nextSameTextCandidates = new Map<string, SameTextCandidate>();
-  for (const message of currentMessages) {
-    const sourceSha256 = sha256(canonicalJson(message.source));
-    const oldSeed = translationSeeds.get(message.id);
-    const oldCandidate = sameTextCandidates.get(message.id);
-    const newSeed = requiresTranslation.has(message.id);
-    if (
-      newSeed ||
-      (oldSeed !== undefined && oldSeed.sourceSha256 === sourceSha256)
-    ) {
-      nextSeeds.set(message.id, {
-        id: message.id,
-        sourceSha256,
-        reason: "missing",
-      });
-      continue;
-    }
-    if (
-      oldCandidate !== undefined &&
-      oldCandidate.sourceSha256 === sourceSha256
-    ) {
-      nextSameTextCandidates.set(message.id, oldCandidate);
-    }
-    const plannedTarget = targetAfter.get(message.id);
-    if (
-      plannedTarget !== undefined &&
-      sameValue(plannedTarget, message.source)
-    ) {
-      nextSameTextCandidates.set(message.id, { id: message.id, sourceSha256 });
-    }
-  }
-
-  const baseline: SourceBaseline = {
-    schemaVersion: 1,
-    source: configuration.source,
-    translationScope: configuration.translationScope,
-    jarSha256: jarInput.sha256,
-    resources,
-    mappings,
-    knownOutOfScopeVisibleTexts: knownOutOfScopeVisibleTexts(
-      configuration.resources,
-      jarByPath,
-    ),
-    ...(releasedTranslationPaths.length === 0
-      ? {}
-      : { releasedTranslationPaths }),
-    ...(miniMessageTheme === undefined ? {} : { miniMessageTheme }),
-  };
-  const baselineText = serializeBaseline(baseline);
-  const baselineSha256 = sha256(baselineText);
-  const lockContents: Omit<SyncLock, "integritySha256"> = {
-    schemaVersion: 1,
-    sourceVersion: configuration.source.version,
-    translationHistory: configuration.source.translationHistory,
-    jarSha256: jarInput.sha256,
-    syncConfigurationSha256: syncConfigurationFingerprint(configuration),
-    sourceBaselineSha256: baselineSha256,
-    resourcesSha256: resourceSetFingerprint(resources),
-    translationSeeds: [...nextSeeds.values()].sort((left, right) =>
-      compareText(left.id, right.id),
-    ),
-    sameTextCandidates: [...nextSameTextCandidates.values()].sort(
-      (left, right) => compareText(left.id, right.id),
-    ),
-  };
-  const lock: SyncLock = {
-    ...lockContents,
-    integritySha256: syncLockIntegrity(lockContents),
-  };
-  const lockText = serializeLock(lock);
-  const baselinePath = join(
-    project,
-    stateDirectoryName,
-    baselineDirectoryName,
-    baselineFileName,
-  );
-  const lockPath = join(project, stateDirectoryName, lockFileName);
-  const inputSnapshots = new Map<string, SyncInputSnapshot>();
-  addSnapshot(inputSnapshots, { path: configFile, sha256: configInput.sha256 });
-  addSnapshot(inputSnapshots, { path: jarFile, sha256: jarInput.sha256 });
-  addSnapshot(inputSnapshots, {
-    path: baselinePath,
-    sha256: sha256(state.baselineText),
-  });
-  addSnapshot(inputSnapshots, {
-    path: lockPath,
-    sha256: sha256(state.lockText),
-  });
-  for (const snapshot of targetInput.snapshots) {
-    addSnapshot(inputSnapshots, {
-      path: snapshot.path,
-      ...(snapshot.sha256 === undefined ? {} : { sha256: snapshot.sha256 }),
-    });
-  }
-
-  const targetPlans: SyncTargetFilePlan[] = [];
-  const writes: SyncWrite[] = [];
-  for (const [path, target] of targets) {
-    if (!currentTargetPaths.has(path)) continue;
-    const content = target.document.toString({ lineWidth: 0 });
-    const changed = changedTargetPaths.has(path);
-    const contentSha256 = changed
-      ? sha256(content)
-      : (target.originalSha256 ?? sha256(content));
-    targetPlans.push({
-      path,
-      action: changed ? "write" : "unchanged",
-      ...(target.originalSha256 === undefined
-        ? {}
-        : { expectedSha256: target.originalSha256 }),
-      contentSha256,
-    });
-    if (changed) {
-      writes.push({
-        kind: "target",
-        path: resolveProjectFile(project, path),
-        content,
-        ...(target.originalSha256 === undefined
-          ? {}
-          : { expectedSha256: target.originalSha256 }),
-      });
-    }
-  }
-  writes.push(
-    {
-      kind: "baseline",
-      path: baselinePath,
-      content: baselineText,
-      expectedSha256: sha256(state.baselineText),
-    },
-    {
-      kind: "lock",
-      path: lockPath,
-      content: lockText,
-      expectedSha256: sha256(state.lockText),
-    },
-  );
-
-  const previousTargetPaths = new Set(
-    state.baseline.mappings.map(({ mapping }) => mapping.target),
-  );
-  const unmanagedTargets = [...previousTargetPaths]
-    .filter((path) => !currentTargetPaths.has(path))
-    .sort(compareText);
-  const pendingTranslations = currentMessages
-    .filter(
-      (message) =>
-        nextSeeds.has(message.id) &&
-        sameValue(targetAfter.get(message.id), message.source),
-    )
-    .map((message) => message.id)
-    .sort(compareText);
-  plannedMessages.sort((left, right) =>
-    compareText(
-      `${left.targetFile}:${canonicalJson(left.path)}:${left.action}:${left.id}`,
-      `${right.targetFile}:${canonicalJson(right.path)}:${right.action}:${right.id}`,
-    ),
-  );
-  targetPlans.sort((left, right) => compareText(left.path, right.path));
-  writes.sort((left, right) => compareText(left.path, right.path));
-  const plan: SyncPlan = {
-    sourceVersion: configuration.source.version,
-    jarSha256: jarInput.sha256,
-    resourceChanges,
-    messages: plannedMessages,
-    structures: structurePlan.changes,
-    targetFiles: targetPlans,
-    unmanagedTargets,
-    pendingTranslations,
-    inputSnapshots: [...inputSnapshots.values()].sort((left, right) =>
-      compareText(left.path, right.path),
-    ),
-    writes,
-  };
-  return { ready: true, plan };
-}
-
-export async function applySyncProject(
-  projectDirectory: string,
-  jarPath: string,
-  options: SyncApplyOptions = {},
-): Promise<SyncApplyResult> {
-  const project = await realpath(resolve(projectDirectory));
-  const transactionRelativePath = `${stateDirectoryName}/${transactionFileName}`;
-  await assertNoSymlinkPath(project, transactionRelativePath);
-  try {
-    await recoverInterruptedTransaction(project, transactionRelativePath);
-  } catch (error) {
-    throw new ProjectOperationError(
-      `发现未完成的维护事务且无法安全恢复：${error instanceof Error ? error.message : String(error)}`,
-      "transaction.recovery-failed",
-      { file: transactionRelativePath, path: [] },
-    );
-  }
-
-  const preview = await previewSyncProject(project, jarPath);
-  if (!preview.ready) return { applied: false, preview };
-
-  const writes: FileWrite[] = preview.plan.writes.map((write) => ({
-    path: write.path,
-    content: write.content,
-    expectedSha256: write.expectedSha256,
-  }));
-  const inputSnapshots: FileSnapshot[] = preview.plan.inputSnapshots.map(
-    (snapshot) => ({ path: snapshot.path, sha256: snapshot.sha256 }),
-  );
-  try {
-    await writeFilesAtomically(
-      project,
-      transactionRelativePath,
-      writes,
-      async () => {
-        await options.beforeApply?.();
-        await assertFileSnapshots(inputSnapshots);
-      },
-    );
-  } catch (error) {
-    if (error instanceof ConcurrentEditError) {
-      throw new ProjectOperationError(error.message, "sync.concurrent-edit", {
-        file: error.file,
-        path: [],
-      });
-    }
-    throw error;
-  }
-
-  return {
-    applied: true,
-    plan: preview.plan,
-    status: await inspectProject(project, "status"),
-  };
-}
-
 interface LoadedSavedProject {
   readonly project: string;
   readonly baseline: SourceBaseline;
@@ -2480,7 +1639,7 @@ async function loadSavedProject(
         "structure",
         "sync.configuration-changed",
         "error",
-        "影响原文解析或同步的维护声明已更改，尚未同步。请使用 `lands-l10n sync --project <项目目录> --jar <候选 JAR>` 正式同步；如需先预览，可额外加 `--dry-run`（只生成计划、不写入项目），确认后去掉该选项再执行。",
+        "影响原文解析或同步的维护声明已更改，尚未同步。请先更新离线来源，再使用 Lioni 原生 `update <配置入口>`；需要推进比较基线时显式加 `--record-baseline`。",
         { file: configurationFileName, path: ["translationScope"] },
         { syncConfigurationSha256: state.lock.syncConfigurationSha256 },
         {
@@ -2578,12 +1737,17 @@ async function evaluateSavedProject(
     enabledRulesRequireInput(loaded.configuration, "minimessage-parse", rules)
       ? {
           ...loaded.view,
-          miniMessage: await parseMiniMessages(
-            loaded.view.messages,
-            loaded.view.resources,
-            loaded.baseline.miniMessageTheme,
-            loaded.configuration.source.version,
-          ),
+          miniMessage: await parseMiniMessages({
+            messages: loaded.view.messages,
+            resources: loaded.view.resources,
+            theme: {
+              ...(loaded.baseline.miniMessageTheme === undefined
+                ? {}
+                : { theme: loaded.baseline.miniMessageTheme }),
+              issues: [],
+            },
+            sourceVersion: loaded.configuration.source.version,
+          }),
         }
       : loaded.view;
   // 翻译状态检查先形成结论；通用例外匹配结果随后参与状态派生和质量检查。
@@ -2714,12 +1878,28 @@ function requiredInputDependencyUnavailable(
   }
   if (current === undefined) return false;
 
+  // GUI lore 共享根文档，正文项按投影位置映射回各列表路径。
+  const documentMatchesPath = (
+    document: NonNullable<typeof miniMessage>["documents"][number],
+  ) => {
+    if (canonicalJson(document.path) === canonicalJson(dependency.path))
+      return true;
+    const item = document.listItems?.find(
+      ({ path }) => canonicalJson(path) === canonicalJson(dependency.path),
+    );
+    return (
+      item !== undefined &&
+      (document.parent === undefined ||
+        (item.position.start <= document.range.start &&
+          document.range.end <= item.position.end))
+    );
+  };
   const documentsForDependency = miniMessage.documents.filter(
     (document) =>
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === dependency.documentIndex &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      documentMatchesPath(document),
   );
   if (documentsForDependency.length > 0) {
     return documentsForDependency.some(
@@ -2733,7 +1913,7 @@ function requiredInputDependencyUnavailable(
       document.message.id === dependency.messageId &&
       document.origin === dependency.origin &&
       document.documentIndex === 0 &&
-      canonicalJson(document.path) === canonicalJson(dependency.path),
+      documentMatchesPath(document),
   );
   return (
     rootDocuments.length === 0 ||
