@@ -20,6 +20,7 @@ import { strToU8, zipSync } from "fflate";
 import { parseDocument } from "yaml";
 
 import { createLandsConfig } from "../lioni.config.ts";
+import { readLandsStructureProjection } from "../src/lioni/lands-facts.ts";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nativeCli = join(packageDirectory, "node_modules/.bin/lioni");
@@ -548,6 +549,94 @@ void test("原生 update 回填变化与缺失消息并保留未变中文及 YAM
   ).toJS() as { readonly messages: Record<string, unknown> };
   assert.equal(afterManualEdit.messages.leave, "人工校订");
   assert.deepEqual(await readFile(baselinePath), recordedBaseline);
+});
+
+void test("调整声明字段选择器不重置正文未变的中文", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-selector-metadata-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const jarPath = join(project, "Lands-selector-initial.jar");
+  await writeFile(jarPath, landsJar("messages:\n  a: Hello\n"));
+  await prepareSource(configPath, jarPath);
+  await rm(jarPath);
+
+  const targetPath = join(project, "Locale/zh-CN.yml");
+  const originalTarget = Buffer.from("messages:\n  a: 你好\n");
+  await writeFile(targetPath, originalTarget);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+
+  const manifestPath = join(project, ".l10n/config.yml");
+  const previousConfiguration = await readFile(manifestPath, "utf8");
+  const currentConfiguration = previousConfiguration.replace(
+    "        - path: [messages]\n",
+    "        - path: [messages, a]\n",
+  );
+  assert.notEqual(currentConfiguration, previousConfiguration);
+  await writeFile(manifestPath, currentConfiguration);
+
+  const output = runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  const envelope = JSON.parse(output) as {
+    readonly data: {
+      readonly status: string;
+      readonly baseline?: { readonly outcome: string };
+      readonly plan: {
+        readonly current: {
+          readonly source: {
+            readonly units: readonly {
+              readonly key: string;
+              readonly unit: {
+                readonly source: unknown;
+                readonly context: {
+                  readonly role: string;
+                  readonly sourceFile: string;
+                  readonly targetFile: string;
+                  readonly path: readonly string[];
+                  readonly category: string;
+                  readonly scene?: string;
+                  readonly format?: string;
+                  readonly fieldPath?: readonly string[];
+                };
+              };
+            }[];
+          };
+        };
+      };
+    };
+  };
+  assert.equal(envelope.data.status, "completed");
+  assert.equal(envelope.data.baseline?.outcome, "unchanged");
+  assert.deepEqual(await readFile(targetPath), originalTarget);
+  assert.deepEqual(await readFile(baselinePath), originalBaseline);
+
+  const sourceUnit = envelope.data.plan.current.source.units.find(
+    ({ key }) => key === 'Locale/en-US.yml:["messages","a"]',
+  );
+  assert.ok(sourceUnit);
+  assert.equal(sourceUnit.unit.source, "Hello");
+  assert.equal(sourceUnit.unit.context.role, "message");
+  assert.equal(sourceUnit.unit.context.sourceFile, "Locale/en-US.yml");
+  assert.equal(sourceUnit.unit.context.targetFile, "Locale/zh-CN.yml");
+  assert.deepEqual(sourceUnit.unit.context.path, ["messages", "a"]);
+  assert.equal(sourceUnit.unit.context.category, "chat-string");
+  assert.equal(Object.hasOwn(sourceUnit.unit.context, "fieldPath"), false);
+  const projection = await readLandsStructureProjection(
+    pathToFileURL(configPath),
+  );
+  assert.deepEqual(projection.mappings[0]?.fields, [
+    { path: ["messages", "a"], category: "chat-string" },
+  ]);
 });
 
 void test("无比较基线时保留已有中文并只填入缺失消息", async (t) => {

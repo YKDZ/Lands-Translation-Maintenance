@@ -47,7 +47,6 @@ const messageUnitSchema = z
         category: z.enum(translationFieldCategories),
         scene: z.enum(translationFieldScenes).optional(),
         format: z.enum(translationFormats).optional(),
-        fieldPath: z.array(z.string()),
         definitionsSource: z.string().optional(),
       })
       .strict(),
@@ -431,7 +430,6 @@ function fieldUnits(
         category: field.category,
         ...(field.scene === undefined ? {} : { scene: field.scene }),
         ...(format === undefined ? {} : { format }),
-        fieldPath: [...field.path],
         ...(mapping.definitionsSource === undefined
           ? {}
           : { definitionsSource: mapping.definitionsSource }),
