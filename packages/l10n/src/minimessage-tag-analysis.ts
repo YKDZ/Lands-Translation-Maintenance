@@ -4,13 +4,16 @@ import {
   type HtmlTagRange,
 } from "#/map-html";
 import type {
-  CheckRule,
-  JsonValue,
+  MiniMessageFinding,
+  MiniMessageIncompleteFact,
+  MiniMessageInputMessage,
+  MiniMessageParseProject,
+  MiniMessagePosition,
   MiniMessageTagNode,
+  MiniMessageThemeEntry,
   ParsedMiniMessageDocument,
-  ProjectView,
-  RuleFinding,
-} from "#/model";
+} from "#/mini-message-model";
+import type { JsonValue } from "#/model";
 import { canonicalJson, compareText } from "#/value";
 
 const namedColors = new Set([
@@ -165,9 +168,28 @@ interface ParsedMessageGroup {
 }
 
 interface TagSemanticContext {
-  readonly project: ProjectView;
+  readonly themes: readonly MiniMessageThemeEntry[];
   readonly nodesByPosition: ReadonlyMap<string, MiniMessageTagNode>;
   readonly landsContextByPosition: ReadonlyMap<string, readonly JsonValue[]>;
+}
+
+export interface MiniMessageTagMessageAnalysis {
+  readonly correspondence: readonly MiniMessageFinding[];
+  readonly nesting: readonly MiniMessageFinding[];
+  readonly controls: readonly MiniMessageFinding[];
+  readonly controlIssues: readonly MiniMessageIncompleteFact[];
+  readonly projectionIssues: readonly MiniMessageIncompleteFact[];
+  readonly controlContexts: JsonValue;
+  readonly themes: JsonValue;
+  readonly hasControls: boolean;
+}
+
+export interface MiniMessageTagAnalysis {
+  /** 用数组保留依赖数据的 JSON 可无损序列化形式。 */
+  readonly byMessage: readonly {
+    readonly sourceKey: string;
+    readonly analysis: MiniMessageTagMessageAnalysis;
+  }[];
 }
 
 function normalizeColor(value: string): string {
@@ -191,12 +213,12 @@ function normalizeResourceKey(value: string): string {
 }
 
 function themeEntry(
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   surface: ParsedMiniMessageDocument["surface"],
   token: string | undefined,
 ) {
   if (token === undefined) return undefined;
-  return [...(project.miniMessage?.themes ?? [])]
+  return [...themes]
     .reverse()
     .find(
       (theme) =>
@@ -257,7 +279,7 @@ function colorChangingParameters(
 
 function canonicalParameters(
   node: MiniMessageTagNode,
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   surface: ParsedMiniMessageDocument["surface"],
 ): readonly JsonValue[] {
   const rawName = node.name.toLowerCase();
@@ -288,7 +310,7 @@ function canonicalParameters(
 
   if (name === "t") {
     const token = parameters[0]?.toLowerCase();
-    const entry = themeEntry(project, surface, token);
+    const entry = themeEntry(themes, surface, token);
     if (entry?.style === undefined)
       return [{ token: token ?? "", state: "style-unavailable" }];
     return [
@@ -544,7 +566,7 @@ function headBoolean(value: string): string | undefined {
 
 function styleProperties(
   node: MiniMessageTagNode,
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   surface: ParsedMiniMessageDocument["surface"],
 ): ReadonlySet<string> {
   if (node.closing || node.selfClosing) return new Set();
@@ -569,7 +591,7 @@ function styleProperties(
   if (name === "insert") return new Set(["insertion"]);
   if (name === "t") {
     const token = node.parameters[0]?.toLowerCase();
-    const style = themeEntry(project, surface, token)?.style;
+    const style = themeEntry(themes, surface, token)?.style;
     if (style === undefined) return new Set();
     const properties = new Set<string>();
     if (style.color !== null) properties.add("color");
@@ -600,9 +622,15 @@ function nodePositionKey(position: MiniMessageTagNode["position"]): string {
   return `${position.start}:${position.end}`;
 }
 
+function isJsonRecord(
+  value: JsonValue,
+): value is { readonly [field: string]: JsonValue } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 interface LandsControlAnalysis {
   readonly contextByNodePosition: ReadonlyMap<string, readonly JsonValue[]>;
-  readonly findings: readonly RuleFinding[];
+  readonly findings: readonly MiniMessageFinding[];
 }
 
 interface TaggedDocument {
@@ -611,14 +639,10 @@ interface TaggedDocument {
 }
 
 function sourceValue(
-  project: ProjectView,
+  message: MiniMessageInputMessage,
   document: ParsedMiniMessageDocument,
 ): string | undefined {
-  const message = project.messages.find(
-    (candidate) => candidate.id === document.message.id,
-  );
-  const value =
-    document.origin === "source" ? message?.source : message?.target;
+  const value = document.origin === "source" ? message.source : message.target;
   if (typeof value === "string") return value;
   if (
     !Array.isArray(value) ||
@@ -705,7 +729,7 @@ function findControlNodes(
 }
 
 function addControlFinding(
-  findings: RuleFinding[],
+  findings: MiniMessageFinding[],
   document: ParsedMiniMessageDocument,
   name: string,
   occurrence: number,
@@ -713,20 +737,26 @@ function addControlFinding(
   expected: JsonValue,
   actual: JsonValue,
 ): void {
+  const evidence = isJsonRecord(actual) ? actual : undefined;
+  const rawPosition = evidence?.position;
+  const position: MiniMessagePosition | undefined =
+    typeof rawPosition === "number" && typeof evidence?.tag === "string"
+      ? { start: rawPosition, end: rawPosition + evidence.tag.length }
+      : rawPosition !== undefined &&
+          isJsonRecord(rawPosition) &&
+          typeof rawPosition.start === "number" &&
+          typeof rawPosition.end === "number"
+        ? { start: rawPosition.start, end: rawPosition.end }
+        : undefined;
   findings.push({
     code: "minimessage.lands-control-invalid",
-    identity: {
-      documentIndex: document.documentIndex,
-      tag: name,
-      occurrence,
-    },
-    fingerprint: { tag: name, expected, actual },
     message: document.message,
     origin: document.origin,
     location: { file: document.file, path: document.path },
+    ...(position === undefined ? {} : { position }),
     reason,
-    expected,
-    actual,
+    expected: { tag: name, occurrence, value: expected },
+    actual: { tag: name, occurrence, value: actual },
   });
 }
 
@@ -782,7 +812,7 @@ function conditionScopes(
   documents: readonly ParsedMiniMessageDocument[],
   contexts: Map<string, JsonValue[]>,
   consumed: Set<string>,
-  findings: RuleFinding[],
+  findings: MiniMessageFinding[],
   root: ParsedMiniMessageDocument,
 ): void {
   for (const name of ["verbose", "ingame", "java"]) {
@@ -857,7 +887,7 @@ function prefixControlScopes(
   documents: readonly ParsedMiniMessageDocument[],
   contexts: Map<string, JsonValue[]>,
   consumed: Set<string>,
-  findings: RuleFinding[],
+  findings: MiniMessageFinding[],
 ): void {
   if (!chatDocument(root)) return;
   const title = /^<title(?::(\d+):(\d+):(\d+))?>/iu.exec(input);
@@ -1053,7 +1083,7 @@ function actionField(
   documents: readonly ParsedMiniMessageDocument[],
   contexts: Map<string, JsonValue[]>,
   consumed: Set<string>,
-  findings: RuleFinding[],
+  findings: MiniMessageFinding[],
   input: string,
   bodyStart: number,
   body: string,
@@ -1117,7 +1147,7 @@ function guiLoreControlScopes(
   documents: readonly ParsedMiniMessageDocument[],
   contexts: Map<string, JsonValue[]>,
   consumed: Set<string>,
-  findings: RuleFinding[],
+  findings: MiniMessageFinding[],
 ): void {
   if (!guiLoreDocument(root)) return;
   const supportedVersion =
@@ -1293,17 +1323,18 @@ function guiLoreControlScopes(
 }
 
 function controlAnalysis(
-  project: ProjectView,
+  message: MiniMessageInputMessage,
+  sourceVersion: string,
   documents: readonly ParsedMiniMessageDocument[],
 ): LandsControlAnalysis {
   const contexts = new Map<string, JsonValue[]>();
   const consumed = new Set<string>();
-  const findings: RuleFinding[] = [];
+  const findings: MiniMessageFinding[] = [];
   const roots = documents.filter(
     (document) => document.documentIndex === 0 && document.status === "parsed",
   );
   for (const root of roots) {
-    const input = sourceValue(project, root) ?? root.input;
+    const input = sourceValue(message, root) ?? root.input;
     if (chatDocument(root)) {
       conditionScopes(input, documents, contexts, consumed, findings, root);
       prefixControlScopes(input, root, documents, contexts, consumed, findings);
@@ -1311,7 +1342,7 @@ function controlAnalysis(
     if (guiLoreDocument(root)) {
       guiLoreControlScopes(
         input,
-        project.sourceVersion,
+        sourceVersion,
         root,
         documents,
         contexts,
@@ -1358,7 +1389,7 @@ function controlAnalysis(
         ...(node.position.start < 0 ? {} : { position: node.position.start }),
         category: document.message.category,
         scene: document.message.scene ?? "",
-        sourceVersion: project.sourceVersion ?? "unknown",
+        sourceVersion: sourceVersion || "unknown",
       };
       addControlFinding(
         findings,
@@ -1376,46 +1407,14 @@ function controlAnalysis(
   return { contextByNodePosition: contexts, findings };
 }
 
-export function miniMessageTagCoverageUnavailable(
-  project: ProjectView,
-): readonly string[] {
-  const documents = project.miniMessage?.documents ?? [];
-  const controls = documents.flatMap((document) =>
-    document.nodes.flatMap((node) =>
-      node.kind === "tag" &&
-      (landsControls.has(node.name.toLowerCase()) ||
-        landsPreprocessors.has(node.name.toLowerCase()))
-        ? [{ name: node.name.toLowerCase() }]
-        : [],
-    ),
-  );
-  if (controls.length === 0) return [];
-
-  const unavailable: string[] = [];
-  if (project.sourceVersion !== "8.0.1" && project.sourceVersion !== "8.9.2") {
-    unavailable.push(
-      `Lands 控制语义只核实了 8.0.1 与 8.9.2；当前版本 ${project.sourceVersion ?? "未知"} 仍需核实`,
-    );
-  }
-  if (
-    project.sourceVersion === "8.0.1" &&
-    controls.some(({ name }) => name === "desc")
-  ) {
-    unavailable.push(
-      "Lands 8.0.1 GUI lore action 没有 desc 模板语义；相关内容只能报告限制",
-    );
-  }
-  return unavailable;
-}
-
 function signatureForContext(
   node: MiniMessageTagNode,
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   surface: ParsedMiniMessageDocument["surface"],
 ): JsonValue {
   return {
     name: canonicalTagName(node),
-    parameters: canonicalParameters(node, project, surface),
+    parameters: canonicalParameters(node, themes, surface),
     closing: node.closing,
     selfClosing: node.selfClosing,
   };
@@ -1438,11 +1437,7 @@ function tagContext(
         if (parent !== undefined && canonicalTagName(parent) === "hover") {
           context.push({
             kind: "interaction",
-            tag: signatureForContext(
-              parent,
-              semantic.project,
-              document.surface,
-            ),
+            tag: signatureForContext(parent, semantic.themes, document.surface),
           });
         }
       }
@@ -1456,14 +1451,14 @@ function tagContext(
     if (interactionTags.has(name)) {
       context.push({
         kind: "interaction",
-        tag: signatureForContext(parent, semantic.project, document.surface),
+        tag: signatureForContext(parent, semantic.themes, document.surface),
       });
     }
   }
 
   const ownProperties = styleProperties(
     node,
-    semantic.project,
+    semantic.themes,
     document.surface,
   );
   if (ownProperties.size > 0) {
@@ -1476,7 +1471,7 @@ function tagContext(
       const parentName = canonicalTagName(parent);
       const parentProperties = styleProperties(
         parent,
-        semantic.project,
+        semantic.themes,
         document.surface,
       );
       const shared = [...ownProperties].filter((property) =>
@@ -1486,7 +1481,7 @@ function tagContext(
       if (shared.length === 0) continue;
       context.push({
         kind: "style-order",
-        tag: signatureForContext(parent, semantic.project, document.surface),
+        tag: signatureForContext(parent, semantic.themes, document.surface),
         properties: [...new Set(shared)].sort(compareText),
       });
     }
@@ -1495,7 +1490,7 @@ function tagContext(
 }
 
 function tagOccurrences(
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   documents: readonly ParsedMiniMessageDocument[],
   landsContextByPosition: ReadonlyMap<string, readonly JsonValue[]> = new Map(),
 ): readonly TagOccurrence[] {
@@ -1553,7 +1548,7 @@ function tagOccurrences(
       }
     }
   }
-  const semantic = { project, nodesByPosition, landsContextByPosition };
+  const semantic = { themes, nodesByPosition, landsContextByPosition };
   for (const document of documents) {
     if (document.status !== "parsed") continue;
     const htmlTagRanges =
@@ -1565,7 +1560,7 @@ function tagOccurrences(
         if (node.kind !== "tag" || node.raw === "") continue;
         const signature: TagSignature = {
           name: canonicalTagName(node),
-          parameters: canonicalParameters(node, project, document.surface),
+          parameters: canonicalParameters(node, themes, document.surface),
           closing: node.closing,
           selfClosing: node.selfClosing,
           context: tagContext(
@@ -1632,11 +1627,11 @@ function contextArray(context: readonly JsonValue[]): JsonValue {
 }
 
 function themeDependency(
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   surface: ParsedMiniMessageDocument["surface"],
   token: string,
 ): JsonValue {
-  const entry = [...(project.miniMessage?.themes ?? [])]
+  const entry = [...themes]
     .reverse()
     .find(
       (theme) =>
@@ -1655,7 +1650,7 @@ function themeDependency(
 }
 
 function themeDependencies(
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   occurrences: readonly TagOccurrence[],
 ): JsonValue {
   return occurrences
@@ -1665,21 +1660,17 @@ function themeDependencies(
       return {
         side: occurrence.document.origin,
         surface: occurrence.document.surface,
-        definition: themeDependency(
-          project,
-          occurrence.document.surface,
-          token,
-        ),
+        definition: themeDependency(themes, occurrence.document.surface, token),
       };
     });
 }
 
 function mismatchFinding(
-  project: ProjectView,
+  themes: readonly MiniMessageThemeEntry[],
   source: OccurrenceGroup | undefined,
   target: OccurrenceGroup | undefined,
   documents: readonly ParsedMiniMessageDocument[],
-): RuleFinding {
+): MiniMessageFinding {
   const signature = (source ?? target)!.signature;
   const sourceCount = source?.occurrences.length ?? 0;
   const targetCount = target?.occurrences.length ?? 0;
@@ -1690,11 +1681,6 @@ function mismatchFinding(
     source?.occurrences[0]?.document ??
     documents.find((item) => item.origin === "source");
   const locationDocument = targetDocument ?? sourceDocument!;
-  const occurrence = Math.min(sourceCount, targetCount);
-  const affectedOccurrences = [
-    ...(source?.occurrences.slice(targetCount) ?? []),
-    ...(target?.occurrences.slice(sourceCount) ?? []),
-  ];
   const expected: JsonValue = {
     tag: signature.name,
     parameters: signature.parameters,
@@ -1719,33 +1705,18 @@ function mismatchFinding(
         ({ start: node.position.start, end: node.position.end }) as JsonValue,
     ),
   };
+  const locationOccurrence = target?.occurrences[0] ?? source?.occurrences[0];
   return {
     code: "minimessage.tag-mismatch",
-    identity: {
-      documentIndex:
-        (target?.occurrences[0] ?? source?.occurrences[0])?.document
-          .documentIndex ?? 0,
-      signature: {
-        tag: signature.name,
-        parameters: signature.parameters,
-        closing: signature.closing,
-        selfClosing: signature.selfClosing,
-        context: contextArray(signature.context),
-      },
-      occurrence,
-    },
-    fingerprint: {
-      tag: signature.name,
-      parameters: signature.parameters,
-      context: signature.context,
-      themes: themeDependencies(project, affectedOccurrences),
-    },
     message: locationDocument.message,
     origin: "target",
     location: {
       file: locationDocument.file,
       path: locationDocument.path,
     },
+    ...(locationOccurrence === undefined
+      ? {}
+      : { position: locationOccurrence.node.position }),
     reason: `译文中的 MiniMessage 标签 <${signature.name}> 出现次数或参数与原文不一致`,
     expected,
     actual,
@@ -1777,8 +1748,8 @@ function isMapHtmlNode(
 
 function nestingFindings(
   documents: readonly ParsedMiniMessageDocument[],
-): readonly RuleFinding[] {
-  const findings: RuleFinding[] = [];
+): readonly MiniMessageFinding[] {
+  const findings: MiniMessageFinding[] = [];
   for (const document of documents) {
     if (document.status !== "parsed") continue;
     const htmlTagRanges =
@@ -1799,7 +1770,7 @@ function nestingFindings(
         );
       }
     }
-    for (const [occurrence, node] of document.nodes.entries()) {
+    for (const node of document.nodes) {
       if (
         node.kind !== "tag" ||
         !node.closing ||
@@ -1839,18 +1810,10 @@ function nestingFindings(
           : localContext.at(-1)?.name;
       findings.push({
         code: "minimessage.tag-nesting-invalid",
-        identity: {
-          documentIndex: document.documentIndex,
-          tag: current,
-          occurrence,
-        },
-        fingerprint: {
-          closingTag: node.raw,
-          context: localContext.map((frame) => frame.name.toLowerCase()),
-        },
         message: document.message,
         origin: document.origin,
         location: { file: document.file, path: document.path },
+        position: node.position,
         reason: `MiniMessage 结束标签 </${current}> 与当前嵌套结构不匹配`,
         expected: {
           state: "matching open tag in active context",
@@ -1867,48 +1830,219 @@ function nestingFindings(
   return findings;
 }
 
-export const miniMessageTagsRule: CheckRule = {
-  id: "minimessage-tags",
-  defaultSeverity: "error",
-  requiredInputs: ["minimessage-parse"],
-  evaluate(project) {
-    const documents = project.miniMessage?.documents ?? [];
-    const findings: RuleFinding[] = [...nestingFindings(documents)];
-    for (const group of messageGroups(documents)) {
-      const sourceControls = controlAnalysis(project, group.source);
-      const targetControls = controlAnalysis(project, group.target);
-      findings.push(...sourceControls.findings, ...targetControls.findings);
-      const sourceOccurrences = tagOccurrences(
-        project,
-        group.source,
-        sourceControls.contextByNodePosition,
-      );
-      const targetOccurrences = tagOccurrences(
-        project,
-        group.target,
-        targetControls.contextByNodePosition,
-      );
-      const sourceGroups = groupOccurrences(sourceOccurrences);
-      const targetGroups = groupOccurrences(targetOccurrences);
-      const targetDocuments = group.target;
-      const allKeys = new Set([...sourceGroups.keys(), ...targetGroups.keys()]);
-      for (const key of [...allKeys].sort(compareText)) {
-        const source = sourceGroups.get(key);
-        const target = targetGroups.get(key);
-        if (
-          (source?.occurrences.length ?? 0) ===
-          (target?.occurrences.length ?? 0)
-        ) {
-          continue;
-        }
-        findings.push(
-          mismatchFinding(project, source, target, [
-            ...group.source,
-            ...targetDocuments,
-          ]),
+function controlContextBasis(
+  analysis: LandsControlAnalysis,
+  origin: "source" | "target",
+): readonly JsonValue[] {
+  return [...analysis.contextByNodePosition.entries()]
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([node, contexts]) => ({ origin, node, contexts }));
+}
+
+function hasControlTags(
+  documents: readonly ParsedMiniMessageDocument[],
+): boolean {
+  return documents.some((document) =>
+    document.nodes.some(
+      (node) =>
+        node.kind === "tag" &&
+        (landsControls.has(node.name.toLowerCase()) ||
+          landsPreprocessors.has(node.name.toLowerCase())),
+    ),
+  );
+}
+
+function tagProjectionIssues(
+  message: MiniMessageInputMessage,
+  documents: readonly ParsedMiniMessageDocument[],
+  projection: MiniMessageParseProject,
+): readonly MiniMessageIncompleteFact[] {
+  const issues = projection.incompleteFacts.filter(
+    (issue) => issue.message === undefined || issue.message.id === message.id,
+  );
+  for (const origin of ["source", "target"] as const) {
+    const root = documents.find(
+      (document) => document.origin === origin && document.parent === undefined,
+    );
+    if (root === undefined) {
+      if (origin === "target" && message.targetStatus !== "present") continue;
+      issues.push({
+        code: "minimessage.tag-projection-missing",
+        message,
+        origin,
+        reason: `官方 MiniMessage 投影没有返回 ${origin === "source" ? "原文" : "译文"}根文档`,
+      });
+      continue;
+    }
+    if (root.status !== "parsed") {
+      issues.push({
+        code: "minimessage.tag-projection-incomplete",
+        message,
+        origin,
+        location: { file: root.file, path: root.path },
+        reason: `MiniMessage ${origin === "source" ? "原文" : "译文"}标签投影不完整：${root.status}`,
+      });
+    }
+  }
+  return issues;
+}
+
+function controlIssues(
+  message: MiniMessageInputMessage,
+  documents: readonly ParsedMiniMessageDocument[],
+  sourceVersion: string,
+): readonly MiniMessageIncompleteFact[] {
+  const controls = documents.flatMap((document) =>
+    document.nodes.flatMap((node) =>
+      node.kind === "tag" &&
+      (landsControls.has(node.name.toLowerCase()) ||
+        landsPreprocessors.has(node.name.toLowerCase()))
+        ? [{ document, name: node.name.toLowerCase() }]
+        : [],
+    ),
+  );
+  if (controls.length === 0) return [];
+
+  const issues: MiniMessageIncompleteFact[] = [];
+  if (sourceVersion !== "8.0.1" && sourceVersion !== "8.9.2") {
+    for (const document of new Map(
+      controls.map(({ document }) => [document.origin, document]),
+    ).values()) {
+      issues.push({
+        code: "minimessage.lands-controls-version-unverified",
+        message,
+        origin: document.origin,
+        location: { file: document.file, path: document.path },
+        reason: `Lands 控制语义只核实了 8.0.1 与 8.9.2；当前版本 ${sourceVersion || "未知"} 仍需核实`,
+      });
+    }
+  }
+  if (
+    sourceVersion === "8.0.1" &&
+    controls.some(({ name }) => name === "desc")
+  ) {
+    for (const document of new Map(
+      controls
+        .filter(({ name }) => name === "desc")
+        .map(({ document }) => [document.origin, document]),
+    ).values()) {
+      issues.push({
+        code: "minimessage.lands-desc-version-unverified",
+        message,
+        origin: document.origin,
+        location: { file: document.file, path: document.path },
+        reason:
+          "Lands 8.0.1 GUI lore action 没有 desc 模板语义；相关内容只能报告限制",
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * 依赖加载时一次计算各检查共享的 Lands 控制上下文和标签投影。
+ * 检查器只读取结果，不依赖彼此的执行顺序或修改共享状态。
+ */
+export function analyzeMiniMessageTagQuality(
+  messages: readonly MiniMessageInputMessage[],
+  projection: MiniMessageParseProject,
+): MiniMessageTagAnalysis {
+  const byMessage: {
+    readonly sourceKey: string;
+    readonly analysis: MiniMessageTagMessageAnalysis;
+  }[] = [];
+  for (const message of messages) {
+    const documents = projection.documents.filter(
+      (document) => document.message.id === message.id,
+    );
+    const sourceDocuments = documents.filter(
+      (document) => document.origin === "source",
+    );
+    const targetDocuments = documents.filter(
+      (document) => document.origin === "target",
+    );
+    const sourceControls = controlAnalysis(
+      message,
+      projection.sourceVersion,
+      sourceDocuments,
+    );
+    const targetControls = controlAnalysis(
+      message,
+      projection.sourceVersion,
+      targetDocuments,
+    );
+    const sourceOccurrences = tagOccurrences(
+      projection.themes,
+      sourceDocuments,
+      sourceControls.contextByNodePosition,
+    );
+    const targetOccurrences = tagOccurrences(
+      projection.themes,
+      targetDocuments,
+      targetControls.contextByNodePosition,
+    );
+    const correspondence: MiniMessageFinding[] = [];
+    if (
+      message.targetStatus === "present" &&
+      sourceDocuments.length > 0 &&
+      targetDocuments.length > 0
+    ) {
+      for (const group of messageGroups([
+        ...sourceDocuments,
+        ...targetDocuments,
+      ])) {
+        const sourceGroups = groupOccurrences(
+          sourceOccurrences.filter((item) =>
+            group.source.includes(item.document),
+          ),
         );
+        const targetGroups = groupOccurrences(
+          targetOccurrences.filter((item) =>
+            group.target.includes(item.document),
+          ),
+        );
+        const keys = new Set([...sourceGroups.keys(), ...targetGroups.keys()]);
+        for (const key of [...keys].sort(compareText)) {
+          const source = sourceGroups.get(key);
+          const target = targetGroups.get(key);
+          if (
+            (source?.occurrences.length ?? 0) ===
+            (target?.occurrences.length ?? 0)
+          ) {
+            continue;
+          }
+          correspondence.push(
+            mismatchFinding(projection.themes, source, target, [
+              ...group.source,
+              ...group.target,
+            ]),
+          );
+        }
       }
     }
-    return findings;
-  },
-};
+    byMessage.push({
+      sourceKey: message.id,
+      analysis: {
+        correspondence,
+        nesting: nestingFindings(documents),
+        controls: [...sourceControls.findings, ...targetControls.findings],
+        controlIssues: controlIssues(
+          message,
+          documents,
+          projection.sourceVersion,
+        ),
+        projectionIssues: tagProjectionIssues(message, documents, projection),
+        controlContexts: [
+          ...controlContextBasis(sourceControls, "source"),
+          ...controlContextBasis(targetControls, "target"),
+        ],
+        themes: themeDependencies(projection.themes, [
+          ...sourceOccurrences,
+          ...targetOccurrences,
+        ]),
+        hasControls: hasControlTags(documents),
+      },
+    });
+  }
+  return { byMessage };
+}

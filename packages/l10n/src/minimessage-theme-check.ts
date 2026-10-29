@@ -11,6 +11,7 @@ import { usesMiniMessage } from "#/minimessage";
 import {
   dependenciesOf,
   findingForQuality,
+  hasAvailableMiniMessageTranslation,
   hasMiniMessageInput,
   issueForQuality,
   messageForCandidate,
@@ -27,6 +28,13 @@ function primaryThemeSourceKey(
 ): string | undefined {
   return dependenciesOf(input.dependencies)
     .messages.filter(usesMiniMessage)
+    .filter((message) =>
+      hasAvailableMiniMessageTranslation(
+        input,
+        message.id,
+        input.candidate.language,
+      ),
+    )
     .map(({ id }) => id)
     .sort()[0];
 }

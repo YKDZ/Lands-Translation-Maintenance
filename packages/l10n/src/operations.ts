@@ -17,7 +17,6 @@ import { readJarResources } from "#/jar";
 import { collectMessages } from "#/messages";
 import type { MiniMessageThemeSnapshot } from "#/mini-message-model";
 import { parseMiniMessages } from "#/minimessage";
-import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
 import { captureMiniMessageTheme } from "#/minimessage-theme";
 import type {
   CheckCoverage,
@@ -1256,16 +1255,10 @@ function translatableTextCoverageUnavailable(
   return [];
 }
 
-function coverageUnavailable(
-  view: ProjectView,
-  configuration: ConsumerConfiguration,
-): readonly string[] {
+function coverageUnavailable(view: ProjectView): readonly string[] {
   const unavailable: string[] = [];
   unavailable.push(...(view.miniMessage?.unavailableCapabilities ?? []));
   unavailable.push(...translatableTextCoverageUnavailable(view));
-  if (configuration.rules?.["minimessage-tags"]?.enabled !== false) {
-    unavailable.push(...miniMessageTagCoverageUnavailable(view));
-  }
   return unavailable;
 }
 
@@ -1276,7 +1269,7 @@ function evaluateProject(
 ) {
   return evaluateRules(view, registeredRules, {
     configuration: configuration.rules,
-    unavailableCapabilities: coverageUnavailable(view, configuration),
+    unavailableCapabilities: coverageUnavailable(view),
   });
 }
 
@@ -1958,9 +1951,7 @@ function requiredRuleInputUnavailable(
             project.view.miniMessage.documents.some(
               (document) =>
                 document.message.id === messageId &&
-                (document.status === "parser-failed" ||
-                  (ruleId === "minimessage-tags" &&
-                    document.status === "syntax-invalid")),
+                document.status === "parser-failed",
             )
           );
       }

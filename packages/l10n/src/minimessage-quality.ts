@@ -25,6 +25,10 @@ import type {
   MiniMessageThemeInput,
 } from "#/mini-message-model";
 import { parseMiniMessages, usesMiniMessage } from "#/minimessage";
+import {
+  analyzeMiniMessageTagQuality,
+  type MiniMessageTagAnalysis,
+} from "#/minimessage-tag-analysis";
 import type { JsonValue, ResourceInventoryEntry } from "#/model";
 import {
   pairTranslatableTextDocuments,
@@ -58,6 +62,7 @@ export interface MiniMessageQualityDependencies {
   readonly themeInput: MiniMessageThemeInput;
   readonly projection: MiniMessageParseProject;
   readonly pairing: TranslatableTextPairing;
+  readonly tags: MiniMessageTagAnalysis;
   readonly landsProjection?: LandsStructureProjection;
   readonly readIssues: readonly MiniMessageIncompleteFact[];
 }
@@ -66,6 +71,15 @@ export const miniMessageQualityConfigurationSchema = z.object({});
 
 export function dependenciesOf(value: unknown): MiniMessageQualityDependencies {
   return value as MiniMessageQualityDependencies;
+}
+
+export function tagAnalysisForMessage(
+  dependencies: MiniMessageQualityDependencies,
+  sourceKey: string,
+): MiniMessageTagAnalysis["byMessage"][number]["analysis"] | undefined {
+  return dependencies.tags.byMessage.find(
+    (entry) => entry.sourceKey === sourceKey,
+  )?.analysis;
 }
 
 function objectForFinding(
@@ -200,7 +214,34 @@ export function hasMiniMessageInput(
   dependencies: MiniMessageQualityDependencies,
 ): boolean {
   const message = messageForCandidate(dependencies, input.candidate.sourceKey);
-  return message !== undefined && usesMiniMessage(message);
+  if (message === undefined || !usesMiniMessage(message)) return false;
+  return hasAvailableMiniMessageTranslation(
+    input,
+    input.candidate.sourceKey,
+    input.candidate.language,
+  );
+}
+
+/** 仅为已关联到唯一可用译文的候选启用正文检查。 */
+export function hasAvailableMiniMessageTranslation(
+  input: MiniMessageCheckInput,
+  sourceKey: string,
+  language: string,
+): boolean {
+  const association = input.facts.associations.find(
+    (candidate) =>
+      candidate.sourceKey === sourceKey && candidate.language === language,
+  );
+  if (
+    association?.status !== "matched" ||
+    association.translationIndexes.length !== 1
+  ) {
+    return false;
+  }
+  const translation = input.facts.translations.records.find(
+    ({ index }) => index === association.translationIndexes[0],
+  );
+  return translation?.bodyAvailability === "available";
 }
 
 export async function projectMiniMessageQualityInputs(
@@ -218,6 +259,7 @@ export async function projectMiniMessageQualityInputs(
     themeInput: input.theme,
     projection,
     pairing: pairTranslatableTextDocuments(projection),
+    tags: analyzeMiniMessageTagQuality(input.messages, projection),
     ...(options.landsProjection === undefined
       ? {}
       : { landsProjection: options.landsProjection }),
@@ -331,7 +373,8 @@ export function miniMessageFactsInput(
       association,
     ]),
   );
-  const messages = facts.source.units.map(({ key, unit }) => {
+  const messages = facts.source.units.flatMap(({ key, unit }) => {
+    if (unit.context.role !== "message") return [];
     const association = associations.get(key);
     const targetRecord =
       association?.status === "matched" &&
@@ -342,27 +385,29 @@ export function miniMessageFactsInput(
       targetRecord?.bodyAvailability === "available"
         ? targetRecord.content
         : undefined;
-    return {
-      id: key,
-      sourceFile: unit.context.sourceFile,
-      targetFile: unit.context.targetFile,
-      path: unit.context.path,
-      category: unit.context.category,
-      ...(unit.context.scene === undefined
-        ? {}
-        : { scene: unit.context.scene }),
-      ...(unit.context.format === undefined
-        ? {}
-        : { format: unit.context.format }),
-      source: unit.source,
-      ...(target === undefined ? {} : { target }),
-      targetStatus:
-        association?.status === "matched" && target !== undefined
-          ? "present"
-          : association?.status === "missing"
-            ? "missing"
-            : "blocked",
-    } satisfies MiniMessageInputMessage;
+    return [
+      {
+        id: key,
+        sourceFile: unit.context.sourceFile,
+        targetFile: unit.context.targetFile,
+        path: unit.context.path,
+        category: unit.context.category,
+        ...(unit.context.scene === undefined
+          ? {}
+          : { scene: unit.context.scene }),
+        ...(unit.context.format === undefined
+          ? {}
+          : { format: unit.context.format }),
+        source: unit.source,
+        ...(target === undefined ? {} : { target }),
+        targetStatus:
+          association?.status === "matched" && target !== undefined
+            ? "present"
+            : association?.status === "missing"
+              ? "missing"
+              : "blocked",
+      } satisfies MiniMessageInputMessage,
+    ];
   });
   return { messages, resources };
 }

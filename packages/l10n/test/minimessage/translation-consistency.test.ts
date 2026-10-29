@@ -667,13 +667,6 @@ void describe("跨消息翻译一致性", () => {
       false,
       removed.stderr || removed.stdout,
     );
-    assert.ok(
-      removedDiagnostics.some(
-        (diagnostic) => diagnostic.code === "minimessage.tag-mismatch",
-      ),
-      removed.stderr || removed.stdout,
-    );
-
     await writeEntries(targetEntries);
     const restored = runCli(
       "check",
@@ -852,16 +845,6 @@ void describe("跨消息翻译一致性", () => {
         (diagnostic) => diagnostic.code === "exception.unable-to-evaluate",
       ),
       false,
-      checked.stderr || checked.stdout,
-    );
-    assert.ok(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.code === "minimessage.tag-mismatch" &&
-          (
-            diagnostic.message as { readonly path?: readonly string[] }
-          )?.path?.at(-1) === nonPrimary,
-      ),
       checked.stderr || checked.stdout,
     );
   });
@@ -1535,7 +1518,7 @@ void describe("跨消息翻译一致性", () => {
     const configuration = await readFile(configPath, "utf8");
     await writeFile(
       configPath,
-      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-tags:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
+      `${configuration}\nrules:\n  legacy-variable:\n    enabled: false\n  map-html:\n    enabled: false\n  map-html-source-limits:\n    enabled: false\n  minimessage-variables:\n    enabled: false\n  translation-consistency:\n    enabled: false\n`,
     );
     const disabledCheck = runCliWithoutJava(
       "check",
