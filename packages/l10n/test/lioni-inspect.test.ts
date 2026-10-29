@@ -137,7 +137,6 @@ interface InspectedFacts {
           readonly category?: string;
           readonly scene?: string;
           readonly format?: string;
-          readonly fieldPath?: readonly string[];
         };
       };
       readonly bodyAvailability: string;
@@ -382,7 +381,6 @@ void test("原生 inspect 离线读取 Lands 消息、结构及稳定身份", as
         readonly category: string;
         readonly scene?: string;
         readonly format?: string;
-        readonly fieldPath: readonly string[];
       };
     }
   ).context;
@@ -391,13 +389,11 @@ void test("原生 inspect 离线读取 Lands 消息、结构及稳定身份", as
       category: guiContext.category,
       scene: guiContext.scene,
       format: guiContext.format,
-      fieldPath: guiContext.fieldPath,
     },
     {
       category: "gui-string",
       scene: "gui-item-name",
       format: "legacy-color-minimessage",
-      fieldPath: ["gui", "*", "items", "*", "name"],
     },
   );
 
