@@ -20,10 +20,11 @@ export interface MiniMessageTextRun {
   readonly contextKey: string;
 }
 
-export function miniMessageTextRuns(
+/** 复用正文 runs 的稳定规则，为独立变量和正文片段提供所属上下文。 */
+export function miniMessageTextContextKeyResolver(
   project: MiniMessageParseProject,
   document: TranslatableTextDocument,
-): readonly MiniMessageTextRun[] {
+): (context: readonly MiniMessageContextFrame[]) => string {
   const elementFrames = new Map<
     string,
     { readonly frame: MiniMessageContextFrame; parentKey?: string }
@@ -114,6 +115,14 @@ export function miniMessageTextRuns(
     return canonicalJson(frames);
   };
 
+  return contextKey;
+}
+
+export function miniMessageTextRuns(
+  project: MiniMessageParseProject,
+  document: TranslatableTextDocument,
+): readonly MiniMessageTextRun[] {
+  const contextKey = miniMessageTextContextKeyResolver(project, document);
   const runs: MiniMessageTextRun[] = [];
   let text = "";
   let parts: MiniMessageTextPart[] = [];
