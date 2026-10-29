@@ -202,7 +202,11 @@ async function createLoreProject(directory: string): Promise<void> {
   );
 }
 
-function landsJarWithLore(lore: string | readonly string[]): Uint8Array {
+function landsJarWithLore(
+  lore: string | readonly string[],
+  material = "DIAMOND",
+  slot = 4,
+): Uint8Array {
   const loreValue = JSON.stringify(lore);
   return zipSync({
     "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
@@ -216,8 +220,8 @@ function landsJarWithLore(lore: string | readonly string[]): Uint8Array {
         "  main:",
         "    items:",
         "      confirm:",
-        "        material: DIAMOND",
-        "        slot: 4",
+        `        material: ${material}`,
+        `        slot: ${slot}`,
         '        lore: "定义专用结构值"',
         "",
       ].join("\n"),
@@ -371,7 +375,7 @@ void test("无比较基线时保留已有中文并只填入缺失消息", async 
   await assert.rejects(readFile(join(project, ".lioni/lioni.baseline.json")));
 });
 
-void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更新整体字段", async (t) => {
+void test("GUI lore 严格更新整体字段，但结构映射仍待处理", async (t) => {
   const project = await mkdtemp(join(tmpdir(), "lioni-update-lore-type-"));
   t.after(async () => rm(project, { force: true, recursive: true }));
   await createLoreProject(project);
@@ -387,13 +391,45 @@ void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更
   await writeFile(changedJar, landsJarWithLore(["Same line"]));
   await prepareSource(configPath, changedJar);
   await rm(changedJar);
-  runLioni([
-    "update",
-    configPath,
-    "--record-baseline",
-    "--output-format",
-    "structured",
-  ]);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  const updateResult = spawnSync(
+    process.execPath,
+    [
+      nativeCli,
+      "update",
+      configPath,
+      "--record-baseline",
+      "--output-format",
+      "structured",
+    ],
+    { cwd: tmpdir(), encoding: "utf8" },
+  );
+  assert.equal(
+    updateResult.status,
+    1,
+    updateResult.stderr || updateResult.stdout,
+  );
+  const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
+    readonly data: {
+      readonly status: string;
+      readonly plan: {
+        readonly items: readonly {
+          readonly action: string;
+          readonly after?: { readonly content: unknown };
+        }[];
+      };
+      readonly baseline?: { readonly outcome: string };
+    };
+  };
+  assert.equal(envelope.data.status, "failed");
+  const fieldUpdate = envelope.data.plan.items.find(
+    ({ action }) => action === "write",
+  );
+  assert.ok(fieldUpdate);
+  assert.deepEqual(fieldUpdate.after?.content, ["Same line"]);
+  assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
+  assert.deepEqual(await readFile(baselinePath), originalBaseline);
 
   const target = parseDocument(
     await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
@@ -409,6 +445,94 @@ void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更
   };
   assert.deepEqual(target.gui.main.items.confirm.lore, ["Same line"]);
   assert.equal(target.custom, "保留用户配置");
+});
+
+void test("GUI 定义结构变化尚未支持时不把消息全保留当作完整更新", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-structure-pending-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLoreProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(initialJar, landsJarWithLore("Same line"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  const changedJar = join(project, "Lands-structure-changed.jar");
+  await writeFile(changedJar, landsJarWithLore("Same line", "EMERALD", 8));
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+
+  const updateResult = spawnSync(
+    process.execPath,
+    [
+      nativeCli,
+      "update",
+      configPath,
+      "--record-baseline",
+      "--output-format",
+      "structured",
+    ],
+    { cwd: tmpdir(), encoding: "utf8" },
+  );
+
+  assert.equal(
+    updateResult.status,
+    1,
+    updateResult.stderr || updateResult.stdout,
+  );
+  const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
+    readonly kind: string;
+    readonly variant: string;
+    readonly data: {
+      readonly status: string;
+      readonly plan: {
+        readonly items: readonly {
+          readonly action: string;
+          readonly sourceKey?: string;
+          readonly request?: unknown;
+          readonly language: string;
+          readonly changes: { readonly translations: readonly unknown[] };
+          readonly reason: string;
+        }[];
+      };
+      readonly baseline?: { readonly outcome: string };
+    };
+  };
+  assert.equal(envelope.kind, "failure");
+  assert.equal(envelope.variant, "applyFailed");
+  assert.equal(envelope.data.status, "failed");
+  const pendingStructure = envelope.data.plan.items.find(
+    ({ action }) => action === "review",
+  );
+  assert.ok(pendingStructure);
+  assert.equal(pendingStructure.sourceKey, undefined);
+  assert.equal(pendingStructure.request, undefined);
+  assert.deepEqual(pendingStructure.changes.translations, []);
+  assert.match(pendingStructure.reason, /结构映射/u);
+  assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
+  assert.deepEqual(await readFile(baselinePath), originalBaseline);
+  const target = parseDocument(
+    await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
+  ).toJS() as {
+    readonly gui: {
+      readonly main: {
+        readonly items: {
+          readonly confirm: {
+            readonly material: unknown;
+            readonly slot: unknown;
+          };
+        };
+      };
+    };
+  };
+  assert.equal(target.gui.main.items.confirm.material, "DIAMOND");
+  assert.equal(target.gui.main.items.confirm.slot, 4);
 });
 
 void test("writeBatch 部分失败后逐项真实回读且不推进比较基线", async (t) => {
