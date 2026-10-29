@@ -17,6 +17,8 @@ minimumReleaseAgeStrict: true
 
 minimumReleaseAgeExclude:
   - "@ykdz/template"
+  # 仅豁免本轮固定版本，后续版本仍遵循发布时间门槛。
+  - "@lioni/lioni@0.2.0"
 
 allowBuilds:
   esbuild: true
