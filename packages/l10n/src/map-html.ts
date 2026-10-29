@@ -854,16 +854,12 @@ function parseHtml(document: ParsedMiniMessageDocument): ParsedHtml {
 function finding(
   document: ParsedMiniMessageDocument,
   code: string,
-  identity: JsonValue,
   expected: JsonValue,
   actual: JsonValue,
   reason: string,
-  sourceVersion: string,
 ): MiniMessageFinding {
   return {
     code,
-    identity,
-    fingerprint: { format: "map-html-v1", sourceVersion },
     message: document.message,
     origin: document.origin,
     location: { file: document.file, path: document.path },
@@ -909,32 +905,28 @@ export function analyzeMapHtml(
     [source, sourceHtml],
     [target, targetHtml],
   ] as const) {
-    for (const [index, error] of parsed.parserErrors.entries()) {
+    for (const error of parsed.parserErrors) {
       findings.push(
         finding(
           originDocument,
           "map-html.structure-invalid",
-          { kind: "html-parser-error", index },
           { state: "valid HTML fragment" },
           {
             parserError: error.code,
             position: positionJson(error.position),
           },
           "地图模板 HTML 结构无法被 HTML5 解析器完整接受",
-          sourceVersion,
         ),
       );
     }
-    for (const [index, issue] of parsed.structuralIssues.entries()) {
+    for (const issue of parsed.structuralIssues) {
       findings.push(
         finding(
           originDocument,
           "map-html.structure-invalid",
-          { kind: issue.code, index },
           { state: "complete HTML element" },
           { tag: issue.actual, position: positionJson(issue.position) },
           "地图模板 HTML 元素结构不完整",
-          sourceVersion,
         ),
       );
     }
@@ -947,11 +939,9 @@ export function analyzeMapHtml(
       finding(
         target,
         "map-html.structure-mismatch",
-        { kind: "element-tree" },
         sourceStructure,
         targetStructure,
         "地图 HTML 元素、嵌套位置或属性集合与原文不一致",
-        sourceVersion,
       ),
     );
   }
@@ -986,7 +976,6 @@ export function analyzeMapHtml(
           finding(
             target,
             "map-html.behavior-attribute-mismatch",
-            { elementPath: sourceElement.path, attribute: name },
             {
               tag: sourceElement.name,
               attribute: name,
@@ -1006,7 +995,6 @@ export function analyzeMapHtml(
                 : { position: positionJson(targetAttribute.position) }),
             },
             `地图 HTML 属性 ${name} 的存在状态与原文不一致`,
-            sourceVersion,
           ),
         );
         continue;
@@ -1020,7 +1008,6 @@ export function analyzeMapHtml(
         finding(
           target,
           "map-html.behavior-attribute-mismatch",
-          { elementPath: sourceElement.path, attribute: name },
           {
             tag: sourceElement.name,
             attribute: name,
@@ -1046,7 +1033,6 @@ export function analyzeMapHtml(
               : { position: positionJson(targetAttribute.position) }),
           },
           `地图 HTML 行为属性 ${name} 与原文不一致`,
-          sourceVersion,
         ),
       );
     }
@@ -1064,7 +1050,6 @@ export function analyzeMapHtml(
       finding(
         source,
         "map-html.source-attribute-variable-literal",
-        { kind: "land-color-attribute" },
         {
           behavior: "HTML attribute MiniMessage variables are expanded",
         },
@@ -1081,7 +1066,6 @@ export function analyzeMapHtml(
         !isKnownMapVariable("land_color", sourceVersion)
           ? "原文在 HTML style 属性中使用 <v:land_color>；8.0.1 未提供此值，且属性内变量不会展开"
           : "原文在 HTML style 属性中使用 <v:land_color>；即使 8.9.2 提供此值，属性内变量仍不会展开",
-        sourceVersion,
       ),
     );
   }

@@ -180,9 +180,6 @@ export interface MiniMessageThemeEntry {
 
 export interface MiniMessageFinding {
   readonly code: string;
-  /** 旧只读调用仍消费这些载荷；原生质量适配不据此构造身份或指纹。 */
-  readonly identity?: JsonValue;
-  readonly fingerprint?: JsonValue;
   readonly message?: MessageIdentity;
   readonly origin: MiniMessageOrigin;
   readonly location: DiagnosticLocation;
