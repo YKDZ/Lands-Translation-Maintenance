@@ -266,8 +266,7 @@ export async function readState(
     return {
       ok: false,
       code: "transaction.prepared",
-      message:
-        "发现尚未提交的维护事务；status/check 不会恢复，请重新执行 init 或 sync",
+      message: "发现尚未提交的维护事务；status/check 不会恢复，请重新执行 init",
     };
   }
 
