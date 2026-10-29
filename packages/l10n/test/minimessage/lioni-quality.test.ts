@@ -698,6 +698,104 @@ void test("两侧为空的 MiniMessage 字符串列表不触发正文检查", as
   }
 });
 
+void test("普通非空原文列表的空译文只产生漏译警告", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    { chatList: { source: ["first", "second"], target: [] } },
+  );
+  const run = runLioni(["qa", project.configPath]);
+  const report = qualityReport(run).report;
+  const sourceKey = 'Locale/en-US_messages.yml:["messages","entries"]';
+  const omissions = checkResult(report, "translation-omissions");
+  const emptyText = omissions.diagnostics.filter(
+    ({ object }) =>
+      object.key === sourceKey && object.code === "translation.empty-text",
+  );
+
+  assert.equal(run.status, 0, JSON.stringify(report.checks, null, 2));
+  assert.equal(report.status, "complete");
+  assert.equal(omissions.status, "complete");
+  assert.deepEqual(omissions.issues, []);
+  assert.equal(emptyText.length, 2, JSON.stringify(omissions, null, 2));
+  assert.ok(
+    emptyText.every(
+      ({ severity, handling }) =>
+        severity === "warning" && handling.status === "active",
+    ),
+    JSON.stringify(emptyText, null, 2),
+  );
+  assert.deepEqual(
+    emptyText.map(({ location }) => location.range.path),
+    [
+      ["messages", "entries", 0],
+      ["messages", "entries", 1],
+    ],
+  );
+  assert.deepEqual(
+    report.candidates.find(({ sourceKey: key }) => key === sourceKey)?.content,
+    [],
+  );
+  assert.equal(
+    report.factCoverage.associations.find(
+      ({ sourceKey: key }) => key === sourceKey,
+    )?.status,
+    "matched",
+  );
+});
+
+void test("空列表译文仍检查被删除的 MiniMessage 标签与变量", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      chatList: {
+        source: ["<red><v:player></red>"],
+        target: [],
+      },
+    },
+  );
+  const run = runLioni(["qa", project.configPath]);
+  const report = qualityReport(run).report;
+  const sourceKey = 'Locale/en-US_messages.yml:["messages","entries"]';
+  const tags = checkResult(report, "minimessage-tag-correspondence");
+  const variables = checkResult(report, "minimessage-variable-correspondence");
+
+  assert.equal(run.status, 1, JSON.stringify(report.checks, null, 2));
+  assert.equal(report.status, "complete");
+  assert.equal(tags.status, "complete");
+  const missingTag = tags.diagnostics.find(
+    ({ object }) =>
+      object.key === sourceKey && object.code === "minimessage.tag-mismatch",
+  );
+  assert.ok(missingTag, JSON.stringify(tags, null, 2));
+  assert.equal(missingTag.severity, "error");
+  assert.equal(missingTag.handling.status, "active");
+  assert.equal(variables.status, "complete");
+  const missingVariable = variables.diagnostics.find(
+    ({ object }) =>
+      object.key === sourceKey &&
+      object.code === "minimessage.variable-missing",
+  );
+  assert.ok(missingVariable, JSON.stringify(variables, null, 2));
+  assert.equal(missingVariable.severity, "error");
+  assert.equal(missingVariable.handling.status, "active");
+  assert.ok(
+    report.checks.every(({ status }) => status !== "incomplete"),
+    JSON.stringify(
+      report.checks
+        .filter(({ status }) => status === "incomplete")
+        .map(({ checkId, issues }) => ({ checkId, issues })),
+      null,
+      2,
+    ),
+  );
+});
+
 void test("空列表特例不覆盖不可用译文或非空原文", () => {
   const unavailable = {
     id: "messages.entries",

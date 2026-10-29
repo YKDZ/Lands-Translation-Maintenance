@@ -681,6 +681,32 @@ function messagesToParseInputs(
             const itemPath = [...message.path, itemIndex];
             appendInput(message, origin, surface, file, itemPath, item);
           }
+          if (
+            origin === "target" &&
+            message.targetStatus === "present" &&
+            (message.category === "chat-string-list" ||
+              message.category === "configuration-string-list") &&
+            Array.isArray(message.source) &&
+            message.source.every(
+              (item): item is string => typeof item === "string",
+            )
+          ) {
+            // 缺失的目标列表项是已读取的空译文；补空投影条目，不改原始目标数组。
+            for (
+              let itemIndex = value.length;
+              itemIndex < message.source.length;
+              itemIndex += 1
+            ) {
+              appendInput(
+                message,
+                "target",
+                surface,
+                file,
+                [...message.path, itemIndex],
+                "",
+              );
+            }
+          }
         }
       }
     }
