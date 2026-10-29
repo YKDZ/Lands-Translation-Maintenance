@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import { readJarResources } from "#/jar";
+import type { JsonValue } from "#/json-value";
 import { landsProjectPaths } from "#/lioni/project-paths";
-import type { JsonValue } from "#/model";
 import { sha256 } from "#/value";
 import { parseYaml } from "#/yaml-data";
 

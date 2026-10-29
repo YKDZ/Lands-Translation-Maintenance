@@ -5,11 +5,7 @@ import { join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  createFormatProject,
-  createGuiProject,
-  writeLioniProjectDeclaration,
-} from "../cli-fixtures.ts";
+import { createFormatProject, createGuiProject } from "../lioni-fixtures.ts";
 
 const packageDirectory = resolve(
   fileURLToPath(new URL("../..", import.meta.url)),
@@ -68,7 +64,6 @@ async function prepareNativeProject(
   t: TestContext,
   project: { readonly directory: string; readonly jarFile: string },
 ) {
-  await writeLioniProjectDeclaration(project.directory);
   const configPath = join(project.directory, ".lioni/lioni.config.ts");
   await mkdir(join(project.directory, ".lioni"), { recursive: true });
   await writeFile(

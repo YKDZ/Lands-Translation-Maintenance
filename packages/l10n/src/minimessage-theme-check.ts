@@ -1,5 +1,6 @@
 import { defineQualityCheck } from "@lioni/lioni";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsJson,
   LandsTranslation,
@@ -12,6 +13,7 @@ import {
   dependenciesOf,
   findingForQuality,
   hasAvailableMiniMessageTranslation,
+  hasMiniMessageDocuments,
   hasMiniMessageInput,
   issueForQuality,
   messageForCandidate,
@@ -21,13 +23,13 @@ import {
   type MiniMessageCheckInput,
   type MiniMessageQualityObject,
 } from "#/minimessage-quality";
-import type { JsonValue } from "#/model";
 
 function choosePrimaryThemeSourceKey(
   input: MiniMessageCheckInput,
 ): string | undefined {
   return dependenciesOf(input.dependencies)
     .messages.filter(usesMiniMessage)
+    .filter(hasMiniMessageDocuments)
     .filter((message) =>
       hasAvailableMiniMessageTranslation(
         input,

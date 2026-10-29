@@ -1,4 +1,7 @@
-import type { AdaptedMiniMessageInput, MiniMessagePosition } from "#/model";
+import type {
+  AdaptedMiniMessageInput,
+  MiniMessagePosition,
+} from "#/mini-message-model";
 
 export interface LegacyFormatMarker {
   readonly kind: "color" | "decoration" | "reset";

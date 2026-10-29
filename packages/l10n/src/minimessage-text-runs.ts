@@ -1,10 +1,10 @@
+import type { JsonValue } from "#/json-value";
 import type {
   MiniMessageContextFrame,
   MiniMessageParseProject,
   MiniMessagePosition,
   TranslatableTextDocument,
 } from "#/mini-message-model";
-import type { JsonValue } from "#/model";
 import { translatableTextOwnerIdentity } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 

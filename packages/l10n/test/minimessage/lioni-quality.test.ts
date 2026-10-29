@@ -18,7 +18,11 @@ import { readFacts } from "@lioni/lioni";
 import { strToU8, zipSync } from "fflate";
 
 import { createLandsConfig } from "../../lioni.config.ts";
-import { miniMessageFactsInput } from "../../src/minimessage-quality.ts";
+import {
+  hasMiniMessageDocuments,
+  miniMessageFactsInput,
+} from "../../src/minimessage-quality.ts";
+import { createProject, prepareLioniProject } from "../lioni-fixtures.ts";
 
 const packageDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -119,6 +123,10 @@ interface QualityProjectOptions {
   readonly targetCustomField?: boolean;
   readonly nestedStructure?: boolean;
   readonly chat?: { readonly source: string; readonly target: string };
+  readonly chatList?: {
+    readonly source: readonly string[];
+    readonly target: readonly string[];
+  };
   readonly extraChatMessages?: readonly {
     readonly key: string;
     readonly source: string;
@@ -136,6 +144,7 @@ function landsJar(
   structureMaterial = "EMERALD",
   extraChatMessages: QualityProjectOptions["extraChatMessages"] = [],
   nestedStructure = false,
+  chatList: QualityProjectOptions["chatList"],
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
@@ -174,14 +183,19 @@ function landsJar(
     "plugin.yml": strToU8(`name: Lands\nversion: ${sourceVersion}\n`),
     "Locale/theme.yml": strToU8(theme),
   };
-  if (chat !== undefined) {
+  if (chat !== undefined || chatList !== undefined) {
     files["Locale/en-US_messages.yml"] = strToU8(
       [
         "messages:",
-        `  greeting: ${JSON.stringify(chat.source)}`,
+        ...(chat === undefined
+          ? []
+          : [`  greeting: ${JSON.stringify(chat.source)}`]),
         ...(extraChatMessages ?? []).map(
           ({ key, source }) => `  ${key}: ${JSON.stringify(source)}`,
         ),
+        ...(chatList === undefined
+          ? []
+          : [`  entries: ${JSON.stringify(chatList.source)}`]),
         "",
       ].join("\n"),
     );
@@ -211,7 +225,7 @@ async function createQualityProject(
     "    purpose: configuration",
     "  - path: Locale/theme.yml",
     "    purpose: configuration",
-    ...(options.chat === undefined
+    ...(options.chat === undefined && options.chatList === undefined
       ? []
       : ["  - path: Locale/en-US_messages.yml", "    purpose: chat-language"]),
   ];
@@ -226,18 +240,26 @@ async function createQualityProject(
     "        - path: [gui, main, items, confirm, lore]",
     "          category: gui-lore",
     "          scene: gui-item-lore",
-    ...(options.chat === undefined
+    ...(options.chat === undefined && options.chatList === undefined
       ? []
       : [
           "    - source: Locale/en-US_messages.yml",
           "      target: Locale/zh-CN_messages.yml",
           "      fields:",
-          ...["greeting", ...(options.mappedExtraChatKeys ?? [])].flatMap(
-            (key) => [
-              `        - path: [messages, ${key}]`,
-              "          category: chat-string",
-            ],
-          ),
+          ...(options.chat === undefined
+            ? []
+            : ["greeting", ...(options.mappedExtraChatKeys ?? [])].flatMap(
+                (key) => [
+                  `        - path: [messages, ${key}]`,
+                  "          category: chat-string",
+                ],
+              )),
+          ...(options.chatList === undefined
+            ? []
+            : [
+                "        - path: [messages, entries]",
+                "          category: chat-string-list",
+              ]),
         ]),
   ];
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
@@ -331,15 +353,20 @@ async function createQualityProject(
       "",
     ].join("\n"),
   );
-  if (options.chat !== undefined) {
+  if (options.chat !== undefined || options.chatList !== undefined) {
     await writeFile(
       join(directory, "Locale/zh-CN_messages.yml"),
       [
         "messages:",
-        `  greeting: ${JSON.stringify(options.chat.target)}`,
+        ...(options.chat === undefined
+          ? []
+          : [`  greeting: ${JSON.stringify(options.chat.target)}`]),
         ...(options.extraChatMessages ?? []).map(
           ({ key, target }) => `  ${key}: ${JSON.stringify(target)}`,
         ),
+        ...(options.chatList === undefined
+          ? []
+          : [`  entries: ${JSON.stringify(options.chatList.target)}`]),
         "",
       ].join("\n"),
     );
@@ -370,6 +397,7 @@ async function createQualityProject(
       options.structureMaterial,
       options.extraChatMessages,
       options.nestedStructure,
+      options.chatList,
     ),
   );
   const prepared = spawnSync(
@@ -613,6 +641,126 @@ void test("原生漏译 QA 按正文、列表项和 hover 位置报告同文与�
       .diagnostics,
     [],
   );
+});
+
+void test("两侧为空的 MiniMessage 字符串列表不触发正文检查", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red>",
+    "<red>确认</red>",
+    { chatList: { source: [], target: [] } },
+  );
+  const run = runLioni(["qa", project.configPath]);
+  const report = qualityReport(run).report;
+  const sourceKey = 'Locale/en-US_messages.yml:["messages","entries"]';
+  const checkIds = [
+    "minimessage-tag-correspondence",
+    "minimessage-nesting",
+    "minimessage-lands-controls",
+    "terminology",
+    "translation-punctuation",
+    "translation-honorific",
+    "minimessage-variable-correspondence",
+    "minimessage-click-behavior",
+    "minimessage-interaction-distribution",
+  ];
+
+  assert.equal(
+    run.status,
+    0,
+    JSON.stringify(
+      report.checks.map(({ checkId, status, issues }) => ({
+        checkId,
+        status,
+        issues: issues.map(({ code, object }) => ({
+          code,
+          key: object?.key,
+        })),
+      })),
+      null,
+      2,
+    ),
+  );
+  for (const checkId of checkIds) {
+    const check = checkResult(report, checkId);
+    assert.equal(
+      check.executions.find((execution) => execution.sourceKey === sourceKey)
+        ?.status,
+      "not-applicable",
+      `${checkId} 应跳过空字符串列表`,
+    );
+    assert.equal(
+      check.issues.some((issue) => issue.object?.key === sourceKey),
+      false,
+      `${checkId} 不应为无正文列表报告投影缺口`,
+    );
+  }
+});
+
+void test("空列表特例不覆盖不可用译文或非空原文", () => {
+  const unavailable = {
+    id: "messages.entries",
+    sourceFile: "Locale/en-US.yml",
+    targetFile: "Locale/zh-CN.yml",
+    path: ["messages", "entries"],
+    category: "chat-string-list" as const,
+    source: [],
+    target: [],
+    targetStatus: "blocked" as const,
+  };
+  const missing = { ...unavailable, targetStatus: "missing" as const };
+  const nonemptySource = {
+    ...unavailable,
+    source: ["原文条目"],
+    target: [],
+    targetStatus: "present" as const,
+  };
+  const bothEmpty = {
+    ...unavailable,
+    target: [],
+    targetStatus: "present" as const,
+  };
+
+  assert.equal(hasMiniMessageDocuments(unavailable), true);
+  assert.equal(hasMiniMessageDocuments(missing), true);
+  assert.equal(hasMiniMessageDocuments(nonemptySource), true);
+  assert.equal(hasMiniMessageDocuments(bothEmpty), false);
+});
+
+void test("空 MiniMessage 字符串列表不占用全局主题诊断归属", async (t) => {
+  const project = await createProject(t, {
+    sourceGreeting: "Welcome",
+    sourceEntries: [],
+    targetEntries: [],
+    theme: "theme: [\n",
+  });
+  const configPath = await prepareLioniProject(project);
+  const report = qualityReport(runLioni(["qa", configPath])).report;
+  const theme = checkResult(report, "minimessage-theme");
+  const emptyListKey = 'lang/en.yml:["list","entries"]';
+  const messageKey = 'lang/en.yml:["messages","commands","registered"]';
+  const malformedTheme = theme.diagnostics.find(
+    ({ object }) => object.code === "yaml-invalid",
+  );
+
+  assert.equal(
+    theme.executions.find(({ sourceKey }) => sourceKey === emptyListKey)
+      ?.status,
+    "not-applicable",
+  );
+  assert.equal(
+    theme.executions.find(({ sourceKey }) => sourceKey === messageKey)?.status,
+    "complete",
+  );
+  assert.ok(malformedTheme, JSON.stringify(theme, null, 2));
+  assert.equal(
+    theme.executions.find(
+      ({ executionId }) => executionId === malformedTheme.executionId,
+    )?.sourceKey,
+    messageKey,
+  );
+  assert.equal(malformedTheme.location.range.file, "Locale/theme.yml");
 });
 
 void test("hover 同文与空译文沿用原生警告且不使 QA 单独失败", async (t) => {

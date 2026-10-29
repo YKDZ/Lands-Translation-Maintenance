@@ -220,9 +220,6 @@ importers:
       '@lioni/lioni':
         specifier: 0.2.0
         version: 0.2.0
-      '@ykdz/cli-contract':
-        specifier: 0.3.0
-        version: 0.3.0
       fflate:
         specifier: 0.8.3
         version: 0.8.3

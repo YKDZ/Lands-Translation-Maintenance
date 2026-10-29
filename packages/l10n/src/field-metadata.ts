@@ -2,7 +2,7 @@ import type {
   TranslationFieldCategory,
   TranslationFieldScene,
   TranslationFormat,
-} from "#/model";
+} from "#/lioni/lands-model";
 
 const sceneCategories: Readonly<
   Record<TranslationFieldScene, TranslationFieldCategory>

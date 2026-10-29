@@ -8,8 +8,8 @@ import type {
 } from "@lioni/lioni";
 import { z } from "zod";
 
+import type { JsonValue } from "#/json-value";
 import type { LandsProjectPaths } from "#/lioni/project-paths";
-import type { JsonValue } from "#/model";
 import { isYamlDocumentRootMap, parseYaml, setDocumentPath } from "#/yaml-data";
 
 interface LandsTarget {

@@ -8,6 +8,7 @@ import {
   type MessageFamilySubject,
 } from "@lioni/lioni";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsJson,
   LandsTranslation,
@@ -35,7 +36,6 @@ import {
   miniMessageTextRuns,
   textRunReference,
 } from "#/minimessage-text-runs";
-import type { JsonValue } from "#/model";
 import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 

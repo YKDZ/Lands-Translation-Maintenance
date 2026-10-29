@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -13,67 +12,14 @@ import {
   createProject,
   createFormatProject,
   createGuiProject,
-  runCli,
-  writeLioniProjectDeclaration,
-} from "../cli-fixtures.ts";
-
-const packageDirectory = resolve(new URL("../..", import.meta.url).pathname);
-const sourcePreparer = join(
-  packageDirectory,
-  "scripts/prepare-lioni-source.ts",
-);
-
-function initialize(project: { directory: string; jarFile: string }) {
-  const initialized = runCli(
-    "init",
-    "--project",
-    project.directory,
-    "--jar",
-    project.jarFile,
-    "--output-format",
-    "structured",
-  );
-  assert.equal(initialized.status, 0, initialized.stderr);
-}
+  prepareLioniProject,
+} from "../lioni-fixtures.ts";
 
 async function inspectFormatProjection(project: {
   readonly directory: string;
   readonly jarFile: string;
 }) {
-  await writeLioniProjectDeclaration(project.directory);
-  const maintenanceDirectory = join(project.directory, ".lioni");
-  const configPath = join(maintenanceDirectory, "lioni.config.ts");
-  await mkdir(maintenanceDirectory, { recursive: true });
-  await writeFile(
-    configPath,
-    [
-      'import { createLandsConfig } from "@lands-l10n/l10n/lioni.config";',
-      "",
-      "export default createLandsConfig(import.meta.url);",
-      "",
-    ].join("\n"),
-  );
-  const scopedPackageDirectory = join(
-    project.directory,
-    "node_modules/@lands-l10n",
-  );
-  await mkdir(scopedPackageDirectory, { recursive: true });
-  await symlink(packageDirectory, join(scopedPackageDirectory, "l10n"), "dir");
-
-  const prepared = spawnSync(
-    process.execPath,
-    [
-      "--conditions=source",
-      sourcePreparer,
-      "--jar",
-      project.jarFile,
-      "--config",
-      configPath,
-    ],
-    { cwd: project.directory, encoding: "utf8" },
-  );
-  assert.equal(prepared.status, 0, prepared.stderr);
-
+  const configPath = await prepareLioniProject(project);
   const entryUrl = pathToFileURL(configPath);
   const facts = await readFacts(createLandsConfig(entryUrl));
   return loadMiniMessageQualityDependencies(entryUrl, facts);
@@ -88,7 +34,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
       targetMapDescription: input,
       sourceVersion: "8.9.2",
     });
-    initialize(project);
     const view = await inspectFormatProjection(project);
     const document = view.projection.translatableText.find(
       (entry) =>
@@ -131,7 +76,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
       lore: [input],
       sourceVersion: "8.9.2",
     });
-    initialize(project);
     const view = await inspectFormatProjection(project);
     const document = view.projection.translatableText.find(
       (entry) =>
@@ -203,7 +147,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
       mapDescription: input,
       targetMapDescription: input,
     });
-    initialize(project);
     const view = await inspectFormatProjection(project);
     const document = view.projection.translatableText.find(
       (entry) =>
@@ -244,7 +187,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
     const source =
       "<hover:show_text:'<future:nested>n</future>'>X</hover> <future:body>b</future>";
     const project = await createProject(t, { sourceGreeting: source });
-    initialize(project);
     const targetPath = join(project.directory, "lang/zh.yml");
     const target = await readFile(targetPath, "utf8");
     await writeFile(
@@ -295,7 +237,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
     const target =
       "<click:run_command:/say hello><hover:show_text:'译文'>丙</hover></click>";
     const project = await createProject(t, { sourceGreeting: source });
-    initialize(project);
     const targetPath = join(project.directory, "lang/zh.yml");
     const targetYaml = await readFile(targetPath, "utf8");
     await writeFile(
@@ -342,7 +283,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
 
     for (const source of cases) {
       const project = await createProject(t, { sourceGreeting: source });
-      initialize(project);
       const targetPath = join(project.directory, "lang/zh.yml");
       const target = await readFile(targetPath, "utf8");
       await writeFile(
@@ -815,10 +755,9 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
       lore: ["说明"],
       sourceVersion: "8.0.1",
     });
-    initialize(supported);
     const supportedTarget = join(supported.directory, "Locale/zh-CN_gui.yml");
     const target = await readFile(supportedTarget, "utf8");
-    const modified = target.replace("name: 工具", 'name: "§a工具"');
+    const modified = target.replace('name: "工具"', 'name: "§a工具"');
     assert.notEqual(modified, target);
     await writeFile(supportedTarget, modified);
 
@@ -842,7 +781,6 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
       lore: ["&c说明"],
       sourceVersion: "8.9.3",
     });
-    initialize(unknownVersion);
     const unknownProjection = await inspectFormatProjection(unknownVersion);
     assert.ok(
       unknownProjection.projection.formatFindings.some(

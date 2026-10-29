@@ -5,6 +5,7 @@ import {
   type SemanticEditCandidate,
 } from "@lioni/lioni";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsJson,
   LandsTranslation,
@@ -31,7 +32,6 @@ import {
   positionsForTextRun,
   type MiniMessageTextRun,
 } from "#/minimessage-text-runs";
-import type { JsonValue } from "#/model";
 import { hasExplicitEmptyTranslation } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 

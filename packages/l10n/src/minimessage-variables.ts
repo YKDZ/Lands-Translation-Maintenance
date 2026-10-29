@@ -1,6 +1,6 @@
+import type { JsonValue } from "#/json-value";
 import { isMapHtmlAttributeTag } from "#/map-html";
 import type {
-  JsonValue,
   MiniMessageContextFrame,
   MiniMessageIncompleteFact,
   MiniMessageParseProject,
@@ -11,7 +11,7 @@ import type {
   VariableContextPart,
   VariableCountDifference,
   VariableOccurrence,
-} from "#/model";
+} from "#/mini-message-model";
 import { canonicalJson } from "#/value";
 import { compareVariableOccurrences } from "#/variable-comparison";
 

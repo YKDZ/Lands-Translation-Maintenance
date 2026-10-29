@@ -1,5 +1,5 @@
+import type { ResourceInventoryEntry } from "#/lioni/lands-model";
 import type { MiniMessageThemeSnapshot } from "#/mini-message-model";
-import type { ResourceInventoryEntry } from "#/model";
 
 export interface CapturedMiniMessageTheme {
   readonly theme?: MiniMessageThemeSnapshot;

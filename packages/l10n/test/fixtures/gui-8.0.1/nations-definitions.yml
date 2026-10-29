@@ -1,7 +1,0 @@
-gui:
-  nation:
-    items:
-      default:
-        role:
-          material: INHERIT
-          slots: 30

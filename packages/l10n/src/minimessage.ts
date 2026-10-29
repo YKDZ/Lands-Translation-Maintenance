@@ -4,7 +4,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { JsonValue } from "#/json-value";
 import { adaptLegacyMiniMessageInput } from "#/legacy-format";
+import type { ResourceInventoryEntry as LandsResourceInventoryEntry } from "#/lioni/lands-model";
 import {
   analyzeMapHtml,
   isMapHtmlAttributeTag,
@@ -34,10 +36,6 @@ import type {
   TranslatableTextSegment,
 } from "#/mini-message-model";
 import { translationFallbackSegment } from "#/minimessage-text";
-import type {
-  JsonValue,
-  ResourceInventoryEntry as LandsResourceInventoryEntry,
-} from "#/model";
 import { parseYaml } from "#/yaml-data";
 
 interface ThemeDefinition {
@@ -1106,8 +1104,6 @@ function findingForMessage(
   reason: string,
   expected: JsonValue,
   actual: JsonValue,
-  identity?: JsonValue,
-  fingerprint?: JsonValue,
 ): MiniMessageFinding {
   const sourceLocation = { file: input.file, path: input.path };
   const positioned = inputLocation(
@@ -1117,8 +1113,6 @@ function findingForMessage(
   );
   return {
     code,
-    ...(identity === undefined ? {} : { identity }),
-    ...(fingerprint === undefined ? {} : { fingerprint }),
     message: input.message,
     origin: input.origin,
     location: positioned.location,
@@ -1163,7 +1157,6 @@ function appendParserFindings(
   java: JavaParseResult,
   findings: MiniMessageFinding[],
   unavailable: Set<string>,
-  themeDefinitions: readonly ThemeDefinition[],
   incompleteFacts: MiniMessageIncompleteFact[],
 ): void {
   if (java.unavailable !== undefined) {
@@ -1209,8 +1202,6 @@ function appendParserFindings(
     }
   }
   const seenOccurrences = new Set<string>();
-  const occurrenceIndices = new Map<string, number>();
-
   for (const input of inputs) {
     const result = java.messages.get(input.index);
     if (result === undefined) {
@@ -1253,7 +1244,6 @@ function appendParserFindings(
             input: input.input,
             parserMessage: result.error ?? "未知解析错误",
           },
-          { kind: "syntax-invalid" },
         ),
       );
     }
@@ -1265,9 +1255,6 @@ function appendParserFindings(
     const occurrence = `${unresolved.messageIndex}\0${unresolved.documentIndex}\0${unresolved.position}\0${unresolved.name}\0${unresolved.detail}`;
     if (seenOccurrences.has(occurrence)) continue;
     seenOccurrences.add(occurrence);
-    const occurrenceKey = `${unresolved.messageIndex}\0${unresolved.documentIndex}`;
-    const occurrenceIndex = occurrenceIndices.get(occurrenceKey) ?? 0;
-    occurrenceIndices.set(occurrenceKey, occurrenceIndex + 1);
     if (unresolved.position < 0) {
       const reason = "存在 MiniMessage 解析诊断无法可靠映射回原文位置";
       unavailable.add("存在 MiniMessage 解析诊断无法可靠映射回原文位置");
@@ -1338,26 +1325,6 @@ function appendParserFindings(
             ...(token === undefined ? {} : { token }),
             ...actualTag,
           },
-          {
-            documentIndex: unresolved.documentIndex,
-            occurrence: occurrenceIndex,
-          },
-          {
-            themeToken: token ?? "",
-            definitions: themeDefinitions
-              .filter(
-                (definition) =>
-                  definition.surface === input.surface &&
-                  definition.name.toLowerCase() === token,
-              )
-              .map((definition) => ({
-                file: definition.file,
-                path: definition.path,
-                surface: definition.surface,
-                name: definition.name,
-                source: definition.source,
-              })),
-          },
         ),
       );
       continue;
@@ -1370,10 +1337,6 @@ function appendParserFindings(
           `官方解析器未能解析标签 <${name}>：${unresolved.detail || "标签参数或形式无法识别"}`,
           { state: "recognized MiniMessage tag" },
           { tagName: name, ...actualTag },
-          {
-            documentIndex: unresolved.documentIndex,
-            occurrence: occurrenceIndex,
-          },
         ),
       );
       continue;
@@ -1386,10 +1349,6 @@ function appendParserFindings(
         { state: "recognized tag or supported extension" },
         {
           ...actualTag,
-        },
-        {
-          documentIndex: unresolved.documentIndex,
-          occurrence: occurrenceIndex,
         },
       ),
     );
@@ -1787,8 +1746,6 @@ function appendMapVariableFindings(
           "地图模板的来源版本未受支持；动态变量供值无法完整核对",
           { supportedVersions: ["8.0.1", "8.9.2"] },
           { sourceVersion },
-          { kind: "source-version" },
-          { sourceVersion, supportedVersions: ["8.0.1", "8.9.2"] },
         ),
       );
     }
@@ -1801,7 +1758,6 @@ function appendMapVariableFindings(
   const inputByDocument = new Map(
     mapInputs.map((input) => [`${input.message.id}\0${input.origin}`, input]),
   );
-  const occurrences = new Map<string, number>();
   for (const document of documents) {
     if (
       document.message.format !== "map-html-minimessage" ||
@@ -1825,9 +1781,6 @@ function appendMapVariableFindings(
       }
       const variable = node.parameters[0];
       if (isKnownMapVariable(variable, sourceVersion)) continue;
-      const key = `${input.index}\0${document.documentIndex}\0${variable}`;
-      const occurrenceIndex = occurrences.get(key) ?? 0;
-      occurrences.set(key, occurrenceIndex + 1);
       const context: JsonValue = node.context.map(
         (frame) =>
           [
@@ -1850,8 +1803,6 @@ function appendMapVariableFindings(
             documentIndex: document.documentIndex,
             context,
           },
-          { documentIndex: document.documentIndex, variable, occurrenceIndex },
-          { sourceVersion, supportedVariables: "Lands map resolver" },
         ),
       );
     }
@@ -1870,7 +1821,6 @@ export async function parseMiniMessages(
   const mapFindings: MiniMessageFinding[] = [];
   const unavailable = new Set<string>();
   const incompleteFacts: MiniMessageIncompleteFact[] = [...themeInput.issues];
-  const legacyIssueOccurrences = new Map<string, number>();
   for (const input of inputs) {
     if (input.legacyAdapterUnsupported) {
       unavailable.add(
@@ -1883,15 +1833,10 @@ export async function parseMiniMessages(
           `无法按未知 Lands 版本 ${sourceVersion} 确认旧颜色码转换行为`,
           { supportedVersions: ["8.0.1", "8.9.2"] },
           { sourceVersion, format: input.message.format ?? "unknown" },
-          { format: input.message.format ?? "unknown", occurrence: 0 },
-          { sourceVersion },
         ),
       );
     }
     for (const issue of input.legacyIssues) {
-      const key = `${input.index}\0${issue.code}`;
-      const occurrence = legacyIssueOccurrences.get(key) ?? 0;
-      legacyIssueOccurrences.set(key, occurrence + 1);
       findings.push(
         findingForMessage(
           input,
@@ -1911,8 +1856,6 @@ export async function parseMiniMessages(
               end: issue.position.end,
             },
           },
-          { format: input.message.format ?? "legacy-color", occurrence },
-          { sourceVersion },
         ),
       );
     }
@@ -1952,7 +1895,6 @@ export async function parseMiniMessages(
     java,
     findings,
     unavailable,
-    theme.definitions,
     incompleteFacts,
   );
   const inputsByIndex = new Map(inputs.map((input) => [input.index, input]));

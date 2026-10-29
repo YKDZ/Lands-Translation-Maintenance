@@ -16,6 +16,7 @@ import {
   type TermRange,
 } from "@lioni/lioni";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsJson,
   LandsTranslation,
@@ -42,7 +43,6 @@ import {
   textRunReference,
   type MiniMessageTextRun,
 } from "#/minimessage-text-runs";
-import type { JsonValue } from "#/model";
 import { canonicalJson } from "#/value";
 
 const sourceLanguage = "en-US";

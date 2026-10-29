@@ -5,6 +5,18 @@ import type { SourceRead, TranslationRead, SourceUnitFact } from "@lioni/lioni";
 import { z } from "zod";
 
 import { formatForScene } from "#/field-metadata";
+import type { JsonValue } from "#/json-value";
+import { formatForMessagePath } from "#/lioni/lands-format";
+import type {
+  ResourcePurpose,
+  ResourceInventoryEntry,
+  TranslationField,
+} from "#/lioni/lands-model";
+import {
+  translationFieldCategories,
+  translationFieldScenes,
+  translationFormats,
+} from "#/lioni/lands-model";
 import { createLandsWritebackAdapter } from "#/lioni/lands-writeback";
 import {
   parseLandsProjectConfiguration,
@@ -18,19 +30,7 @@ import {
   readLandsSourceSnapshot,
   type LandsSourceSnapshot,
 } from "#/lioni/source-input";
-import { formatForMessagePath } from "#/messages";
 import { captureMiniMessageTheme } from "#/minimessage-theme";
-import type {
-  JsonValue,
-  ResourcePurpose,
-  ResourceInventoryEntry,
-  TranslationField,
-} from "#/model";
-import {
-  translationFieldCategories,
-  translationFieldScenes,
-  translationFormats,
-} from "#/model";
 import { canonicalJson, compareText } from "#/value";
 import { parseYaml } from "#/yaml-data";
 

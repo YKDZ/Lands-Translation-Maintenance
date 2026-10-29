@@ -1,10 +1,8 @@
 {
   "name": "@lands-l10n/l10n",
   "private": true,
-  "bin": {
-    "lands-l10n": "./dist/cli.js"
-  },
   "files": [
+    "lioni.config.ts",
     "dist/**",
     "target/minimessage/**"
   ],
@@ -17,11 +15,6 @@
     }
   },
   "exports": {
-    ".": {
-      "source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
     "./lioni.config": {
       "source": "./lioni.config.ts",
       "types": "./lioni.config.ts",
@@ -29,7 +22,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json --pretty false && chmod +x dist/cli.js",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
     "build:minimessage": "node --conditions=source scripts/build-minimessage.ts",
     "source:prepare": "node --conditions=source scripts/prepare-lioni-source.ts",
     "format:check": "oxfmt --list-different .",
@@ -42,7 +35,6 @@
   },
   "dependencies": {
     "@lioni/lioni": "0.2.0",
-    "@ykdz/cli-contract": "0.3.0",
     "fflate": "0.8.3",
     "parse5": "8.0.1",
     "yaml": "2.9.1",

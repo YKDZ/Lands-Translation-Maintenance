@@ -1,5 +1,6 @@
 import { defineQualityCheck, type QualityFinding } from "@lioni/lioni";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsJson,
   LandsTranslation,
@@ -15,7 +16,6 @@ import {
   type MiniMessageCheckInput,
   type MiniMessageQualityObject,
 } from "#/minimessage-quality";
-import type { JsonValue } from "#/model";
 import { canonicalJson } from "#/value";
 
 function isRecord(
