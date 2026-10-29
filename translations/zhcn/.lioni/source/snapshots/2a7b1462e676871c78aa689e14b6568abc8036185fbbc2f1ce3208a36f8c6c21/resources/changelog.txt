@@ -1,0 +1,2 @@
++ Fixed: /lands edit without a land name selects the land you are standing in again.
++ Fixed: Random teleport and other teleports could fail with an error on Folia servers.

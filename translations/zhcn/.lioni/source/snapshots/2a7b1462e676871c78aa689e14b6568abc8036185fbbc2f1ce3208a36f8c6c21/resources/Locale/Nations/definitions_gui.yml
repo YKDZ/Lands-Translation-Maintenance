@@ -1,0 +1,88 @@
+gui:
+  nation:
+    items:
+      default:
+        war:
+          material: IRON_SWORD
+          slots: 12
+        no-war:
+          material: WOODEN_SWORD
+          slots: 12
+        inbox:
+          material: skin:6bf3fcdccffd963e4334818108e1e9ae3a80566d0d3d2d4ab3051a2cd811348c
+          slots: 13
+        stats:
+          material: skin:d01afe973c5482fdc71e6aa10698833c79c437f21308ea9a1a095746ec274a0f
+          slots: 16
+        role:
+          material: INHERIT
+          slots: 30
+        lands:
+          material: skin:8449b9318e33158e64a46ab0de121c3d40000e3332c1574932b3c849d8fa0dc2
+          slots: 11
+        relations:
+          material: LIME_BANNER
+          slots: 14
+        level:
+          material: EXPERIENCE_BOTTLE
+          slots: 15
+        spawn:
+          material: ENDER_PEARL
+          slots: 9
+        taxes:
+          material: GOLD_INGOT
+          slots: 29
+        effects:
+          material: POTION
+          slots: 31
+        various:
+          material: BEACON
+          slots: 32
+  nation_various:
+    items:
+      default:
+        object_name:
+          slots: 20
+        object_tag:
+          slots: 23
+        object_icon:
+          slots: 26
+  list_nation_effects:
+    items:
+      default:
+        entry_object:
+          material: POTION
+        entry_object_locked:
+          material: POTION
+        entry_object_active:
+          material: POTION
+          enchanted: true
+  list_nation_lands:
+    items:
+      default:
+        add:
+          material: skin:ffec3d25ae0d147c342c45370e0e43300a4e48a5b43f9bb858babff756144dac
+          slots: 39
+        members_online:
+          material: CLOCK
+          slots: 41
+        remove:
+          material: skin:548d7d1e03e1af145b0125ab841285672b421265da2ab915015f9058438ba2d8
+          slots: 43
+        entry_object:
+          material: INHERIT
+          bedrock:
+            detail: true
+  list_player_nations:
+    items:
+      default:
+        entry_nation:
+          material: INHERIT
+          bedrock:
+            detail: true
+        entry_nation_edit:
+          material: skin:eef425b4db7d62b200e89c013e421a9e110bfb27f2d8b9f5884d10104d00f4f4
+        entry_nation_own:
+          material: INHERIT
+          bedrock:
+            detail: true

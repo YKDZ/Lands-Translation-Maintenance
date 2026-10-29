@@ -186,7 +186,6 @@ async function createQualityProject(
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
   t.after(() => rm(directory, { force: true, recursive: true }));
   await Promise.all([
-    mkdir(join(directory, ".l10n"), { recursive: true }),
     mkdir(join(directory, ".lioni"), { recursive: true }),
     mkdir(join(directory, ".lioni/terms"), { recursive: true }),
     mkdir(join(directory, "Locale"), { recursive: true }),
@@ -231,12 +230,9 @@ async function createQualityProject(
     ),
   ]);
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      `  version: "${sourceVersion}"`,
-      '  translationHistory: "fixture-history"',
+      "format: lands-l10n-project/v1",
       "resources:",
       ...resources,
       "translationScope:",

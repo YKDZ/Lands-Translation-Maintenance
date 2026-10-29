@@ -337,17 +337,14 @@ async function createProject(
   const sourceCancelName = input.sourceCancelName ?? "Cancel";
   const targetCancelName = input.targetCancelName ?? "取消";
   await Promise.all([
-    mkdir(join(directory, ".l10n"), { recursive: true }),
+    mkdir(join(directory, ".lioni"), { recursive: true }),
     mkdir(join(directory, ".lioni/terms"), { recursive: true }),
     mkdir(join(directory, "Locale"), { recursive: true }),
   ]);
   await writeFile(
-    join(directory, ".l10n/config.yml"),
+    join(directory, ".lioni/project.yml"),
     [
-      "schemaVersion: 1",
-      "source:",
-      '  version: "8.9.2"',
-      '  translationHistory: "terminology-fixture"',
+      "format: lands-l10n-project/v1",
       "resources:",
       "  - path: plugin.yml",
       "    purpose: metadata",

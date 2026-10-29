@@ -1,0 +1,67 @@
+# Random teleport (/lands rtp)
+#
+# Players are sent to a random safe spot between min-distance and max-distance around the world spawn
+# (/setworldspawn). Spots always stay inside the world border, keep a distance to claims and protected
+# regions (e.g. WorldGuard), and are never in oceans, rivers, lava or other unsafe places.
+# Overworld, nether and end worlds are supported.
+
+# Enable or disable the random teleport command.
+enabled: true
+
+# World players are sent to, if they use /lands rtp in a world that isn't listed under "worlds".
+# Leave empty to refuse random teleportation in unlisted worlds instead.
+fallback-world: 'world'
+
+# If enabled, players need the permission lands.command.rtp.<world> for each world.
+per-world-permission: false
+
+# Cooldown between two random teleports.
+# Bypass permission: lands.bypass.cooldown.wild
+cooldown: 10m
+
+# Teleportation costs. Can be changed per world.
+cost: 0.0
+
+# Minimum distance in blocks between the destination and the nearest claim. Can be changed per world.
+# Note: Players can see claims that are inside their view distance (default: 10 chunks = 160 blocks).
+claim-distance: 160
+
+# Biomes players are never teleported into, in addition to oceans, rivers and caves.
+# Example: 'minecraft:basalt_deltas'. Can be changed per world.
+biome-blacklist: [ ]
+
+spread:
+  # Number of safe spots that are compared for each random teleport. The spot furthest away from
+  # claims and from recent random teleport destinations is used, so players don't end up next to each other.
+  candidates: 4
+  # How long a destination is remembered for spreading players.
+  remember: 10m
+
+search:
+  # Maximum random spots that are checked before giving up. These checks don't load chunks.
+  max-attempts: 200
+  # Maximum chunks that are loaded per random teleport to find a safe spot.
+  max-chunk-loads: 8
+  # Load chunks to check their biome. Only needed for custom world generators or downloaded maps whose
+  # biomes can't be read without loading the chunk. Costs performance. Always enabled on Folia.
+  load-chunks-for-biomes: false
+
+end:
+  # Only allow random teleportation in end worlds after the Ender Dragon was killed there once.
+  require-dragon-killed: true
+
+# Worlds where /lands rtp is enabled.
+# Use '*' as world name to enable all worlds that aren't listed by name.
+# Each world can override: cost, claim-distance and biome-blacklist.
+worlds:
+  world:
+    min-distance: 500
+    max-distance: 5000
+  world_nether:
+    # Nether coordinates are 1:8 of the overworld.
+    min-distance: 100
+    max-distance: 1000
+  world_the_end:
+    # The outer end islands start around 1000 blocks from the center. Lower values are raised to 1100.
+    min-distance: 1100
+    max-distance: 5000

@@ -6,7 +6,7 @@ export interface LandsProjectPaths {
   readonly projectDirectory: string;
   readonly maintenanceDirectory: string;
   readonly sourceDirectory: string;
-  readonly legacyManifestFile: string;
+  readonly projectConfigurationFile: string;
   readonly exceptionFile: string;
   readonly termbaseDirectory: string;
 }
@@ -27,7 +27,7 @@ export function landsProjectPaths(entryUrl: string | URL): LandsProjectPaths {
     projectDirectory,
     maintenanceDirectory,
     sourceDirectory: join(maintenanceDirectory, "source"),
-    legacyManifestFile: join(projectDirectory, ".l10n/config.yml"),
+    projectConfigurationFile: join(maintenanceDirectory, "project.yml"),
     exceptionFile: join(maintenanceDirectory, "lioni.exceptions.yaml"),
     termbaseDirectory: join(maintenanceDirectory, "terms"),
   };

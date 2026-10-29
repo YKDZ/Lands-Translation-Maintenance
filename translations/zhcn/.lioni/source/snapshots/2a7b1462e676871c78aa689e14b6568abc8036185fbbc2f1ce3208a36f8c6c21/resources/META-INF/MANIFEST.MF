@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+Class-Path: lands-api-8.9.2-plain.jar pluginframework-2.1.158-SNAPSHOT-p
+ lain.jar pluginstats-bukkit-0.1.7-SNAPSHOT.jar pluginframework-api-2.1.
+ 158-plain.jar applicationframework-1.0.97-SNAPSHOT-plain.jar applicatio
+ nframework-api-1.0.97.jar
+
