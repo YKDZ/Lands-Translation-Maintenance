@@ -15,13 +15,10 @@ import {
 } from "#/exceptions";
 import { readJarResources } from "#/jar";
 import { collectMessages, fieldSelectorMatchesPath } from "#/messages";
+import type { MiniMessageThemeSnapshot } from "#/mini-message-model";
 import { parseMiniMessages } from "#/minimessage";
 import { miniMessageTagCoverageUnavailable } from "#/minimessage-tags";
-import {
-  captureMiniMessageTheme,
-  validateMiniMessageThemeYaml,
-  type MiniMessageThemeSnapshot,
-} from "#/minimessage-theme";
+import { captureMiniMessageTheme } from "#/minimessage-theme";
 import type {
   CheckCoverage,
   CheckRule,
@@ -276,46 +273,11 @@ function requireConfiguration(source: string) {
   return result.value;
 }
 
-function requireMiniMessageTheme(
+function miniMessageThemeForBaseline(
   resources: readonly ResourceInventoryEntry[],
   resourceBytes: ReadonlyMap<string, Uint8Array>,
 ): MiniMessageThemeSnapshot | undefined {
-  const captured = captureMiniMessageTheme(resources, resourceBytes);
-  if (captured.ambiguousFiles.length > 0) {
-    throw new ProjectOperationError(
-      `主题资源不唯一：${captured.ambiguousFiles.join("、")}`,
-      "minimessage.theme-ambiguous",
-      { file: captured.ambiguousFiles[0]!, path: [] },
-    );
-  }
-  if (captured.unavailableFiles.length > 0) {
-    throw new ProjectOperationError(
-      `无法读取主题资源：${captured.unavailableFiles.join("、")}`,
-      "minimessage.theme-unavailable",
-      { file: captured.unavailableFiles[0]!, path: [] },
-    );
-  }
-  if (captured.theme === undefined) return undefined;
-
-  const issues = validateMiniMessageThemeYaml(captured.theme);
-  if (issues.length === 0) return captured.theme;
-  const details = issues
-    .map(
-      (issue) =>
-        `${issue.file}${issue.path.length === 0 ? "" : `:${issue.path.join(".")}`}：${issue.reason}`,
-    )
-    .join("；");
-  const firstIssue = issues[0]!;
-  throw new ProjectOperationError(
-    `主题 YAML 无法安全读取：${details}`,
-    firstIssue.code,
-    {
-      file: firstIssue.file,
-      path: firstIssue.path,
-      ...(firstIssue.line === undefined ? {} : { line: firstIssue.line }),
-      ...(firstIssue.column === undefined ? {} : { column: firstIssue.column }),
-    },
-  );
+  return captureMiniMessageTheme(resources, resourceBytes).theme;
 }
 
 function readYaml(bytes: Uint8Array, file: string) {
@@ -1403,7 +1365,7 @@ export async function initializeProject(
   const jarByPath = new Map(
     jar.resources.map((resource) => [resource.path, resource.bytes]),
   );
-  const miniMessageTheme = requireMiniMessageTheme(
+  const miniMessageTheme = miniMessageThemeForBaseline(
     configuration.resources,
     jarByPath,
   );
@@ -1763,7 +1725,7 @@ export async function previewSyncProject(
   const jarByPath = new Map(
     jar.resources.map((resource) => [resource.path, resource.bytes]),
   );
-  const miniMessageTheme = requireMiniMessageTheme(
+  const miniMessageTheme = miniMessageThemeForBaseline(
     configuration.resources,
     jarByPath,
   );
@@ -2578,12 +2540,17 @@ async function evaluateSavedProject(
     enabledRulesRequireInput(loaded.configuration, "minimessage-parse", rules)
       ? {
           ...loaded.view,
-          miniMessage: await parseMiniMessages(
-            loaded.view.messages,
-            loaded.view.resources,
-            loaded.baseline.miniMessageTheme,
-            loaded.configuration.source.version,
-          ),
+          miniMessage: await parseMiniMessages({
+            messages: loaded.view.messages,
+            resources: loaded.view.resources,
+            theme: {
+              ...(loaded.baseline.miniMessageTheme === undefined
+                ? {}
+                : { theme: loaded.baseline.miniMessageTheme }),
+              issues: [],
+            },
+            sourceVersion: loaded.configuration.source.version,
+          }),
         }
       : loaded.view;
   // 翻译状态检查先形成结论；通用例外匹配结果随后参与状态派生和质量检查。

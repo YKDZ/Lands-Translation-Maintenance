@@ -72,9 +72,12 @@ const unavailableTranslationSchema = z
   })
   .strict();
 
-type LandsUnit = z.infer<typeof unitSchema>;
-type LandsTranslation = z.infer<typeof translationSchema>;
-type UnavailableTranslation = z.infer<typeof unavailableTranslationSchema>;
+export type LandsUnit = z.infer<typeof unitSchema>;
+export type LandsTranslation = z.infer<typeof translationSchema>;
+export type UnavailableTranslation = z.infer<
+  typeof unavailableTranslationSchema
+>;
+export type LandsJson = LioniJson;
 
 interface FieldEntry {
   readonly path: readonly string[];

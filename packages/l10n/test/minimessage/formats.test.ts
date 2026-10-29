@@ -1,18 +1,26 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 
-import {
-  inspectProject,
-  type CheckRule,
-  type ProjectView,
-} from "@lands-l10n/l10n";
+import { readFacts } from "@lioni/lioni";
 
+import { createLandsConfig } from "../../lioni.config.ts";
+import { loadMiniMessageQualityDependencies } from "../../src/minimessage-quality.ts";
 import {
   createFormatProject,
   createGuiProject,
   readReport,
   runCli,
 } from "../cli-fixtures.ts";
+
+const packageDirectory = resolve(new URL("../..", import.meta.url).pathname);
+const sourcePreparer = join(
+  packageDirectory,
+  "scripts/prepare-lioni-source.ts",
+);
 
 function diagnostics(report: Record<string, unknown>) {
   return report.diagnostics as readonly Record<string, unknown>[];
@@ -52,22 +60,46 @@ function initialize(project: { directory: string; jarFile: string }) {
   assert.equal(initialized.status, 0, initialized.stderr);
 }
 
-async function inspectTranslatableView(projectDirectory: string) {
-  let observed: ProjectView | undefined;
-  const observer: CheckRule = {
-    id: "test-translatable-text-view",
-    defaultSeverity: "info",
-    requiredInputs: ["minimessage-parse"],
-    evaluate(project) {
-      observed = project;
-      return [];
-    },
-  };
-  const report = await inspectProject(projectDirectory, "check", [observer]);
-  assert.equal(report.operation, "check");
-  assert.deepEqual(report.coverage?.enabledRuleIds, [observer.id]);
-  assert.ok(observed?.miniMessage);
-  return observed;
+async function inspectFormatProjection(project: {
+  readonly directory: string;
+  readonly jarFile: string;
+}) {
+  const maintenanceDirectory = join(project.directory, ".lioni");
+  const configPath = join(maintenanceDirectory, "lioni.config.ts");
+  await mkdir(maintenanceDirectory, { recursive: true });
+  await writeFile(
+    configPath,
+    [
+      'import { createLandsConfig } from "@lands-l10n/l10n/lioni.config";',
+      "",
+      "export default createLandsConfig(import.meta.url);",
+      "",
+    ].join("\n"),
+  );
+  const scopedPackageDirectory = join(
+    project.directory,
+    "node_modules/@lands-l10n",
+  );
+  await mkdir(scopedPackageDirectory, { recursive: true });
+  await symlink(packageDirectory, join(scopedPackageDirectory, "l10n"), "dir");
+
+  const prepared = spawnSync(
+    process.execPath,
+    [
+      "--conditions=source",
+      sourcePreparer,
+      "--jar",
+      project.jarFile,
+      "--config",
+      configPath,
+    ],
+    { cwd: project.directory, encoding: "utf8" },
+  );
+  assert.equal(prepared.status, 0, prepared.stderr);
+
+  const entryUrl = pathToFileURL(configPath);
+  const facts = await readFacts(createLandsConfig(entryUrl));
+  return loadMiniMessageQualityDependencies(entryUrl, facts);
 }
 
 void describe("地图 HTML 与旧格式正式检查", () => {
@@ -80,8 +112,8 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       sourceVersion: "8.9.2",
     });
     initialize(project);
-    const view = await inspectTranslatableView(project.directory);
-    const document = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const document = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.segments.some((segment) => segment.kind === "command"),
@@ -123,8 +155,8 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       sourceVersion: "8.9.2",
     });
     initialize(project);
-    const view = await inspectTranslatableView(project.directory);
-    const document = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const document = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.documentIndex === 0 &&
@@ -152,7 +184,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       ),
       false,
     );
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.message.id === document.message.id &&
@@ -165,7 +197,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
           segment.value === "<v:owner> <red>fallback</red>",
       ),
     );
-    const argumentDocument = view.miniMessage?.translatableText.find(
+    const argumentDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.message.id === document?.message.id &&
@@ -195,8 +227,8 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetMapDescription: input,
     });
     initialize(project);
-    const view = await inspectTranslatableView(project.directory);
-    const document = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const document = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.documentIndex === 0 &&
@@ -218,7 +250,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       ),
       false,
     );
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.path.join(".").includes("dynmap.land.description") &&
@@ -285,7 +317,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
         targetRootNationsCapitalSpawn: targetRootCapitalSpawn,
       });
       const { checked, report } = initAndCheck(project);
-      const view = await inspectTranslatableView(project.directory);
+      const view = await inspectFormatProjection(project);
       const findings = diagnostics(report);
       const nationsMapFindings = findings.filter((finding) => {
         const message = finding.message as
@@ -319,12 +351,12 @@ void describe("地图 HTML 与旧格式正式检查", () => {
             ])
         );
       });
-      const rootNationMessage = view.messages.find(
+      const rootNationMessage = [...view.messages.values()].find(
         (message) =>
           message.sourceFile === "Locale/Nations/en-US.yml" &&
           message.path.join(".") === "integration.dynmap.nation.description",
       );
-      const rootCapitalMessage = view.messages.find(
+      const rootCapitalMessage = [...view.messages.values()].find(
         (message) =>
           message.sourceFile === "Locale/Nations/en-US.yml" &&
           message.path.join(".") === "integration.dynmap.capital.spawn",
@@ -455,7 +487,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetMapDescription: target,
     });
     const { checked, report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
+    const view = await inspectFormatProjection(project);
     const finding = diagnostics(report).find(
       (entry) => entry.code === "map-html.behavior-attribute-mismatch",
     );
@@ -465,11 +497,11 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     const expected = finding?.expected as
       | { readonly position?: { readonly start: number; readonly end: number } }
       | undefined;
-    const sourceDocument = view.miniMessage?.translatableText.find(
+    const sourceDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" && entry.path.at(-1) === "description",
     );
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" && entry.path.at(-1) === "description",
     );
@@ -545,12 +577,12 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetMapDescription: target,
     });
     const { report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
-    const sourceDocument = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const sourceDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" && entry.path.at(-1) === "description",
     );
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" && entry.path.at(-1) === "description",
     );
@@ -633,8 +665,8 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetUnrelatedText: input,
     });
     const { report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
-    const document = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const document = view.projection.translatableText.find(
       (entry) => entry.origin === "source" && entry.path.at(-1) === "text",
     );
 
@@ -684,14 +716,14 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetMapDescription: target,
     });
     const { checked, report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
+    const view = await inspectFormatProjection(project);
     const finding = diagnostics(report).find(
       (entry) => entry.code === "map-html.behavior-attribute-mismatch",
     );
     const actual = finding?.actual as
       | { readonly position?: { readonly start: number; readonly end: number } }
       | undefined;
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.path.join(".").includes("dynmap.land.description") &&
@@ -735,8 +767,8 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetMapDescription: target,
     });
     const { checked, report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.path.join(".").includes("dynmap.land.description") &&
@@ -798,7 +830,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetMapDescription: target,
     });
     const { checked, report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
+    const view = await inspectFormatProjection(project);
     const finding = diagnostics(report).find(
       (entry) => entry.code === "map-html.behavior-attribute-mismatch",
     );
@@ -808,13 +840,13 @@ void describe("地图 HTML 与旧格式正式检查", () => {
     const expected = finding?.expected as
       | { readonly position?: { readonly start: number; readonly end: number } }
       | undefined;
-    const sourceDocument = view.miniMessage?.translatableText.find(
+    const sourceDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.path.join(".").includes("dynmap.land.description") &&
         entry.documentIndex === 0,
     );
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.path.join(".").includes("dynmap.land.description") &&
@@ -989,7 +1021,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetLegacyTitle: "属于<key:'某人'>",
     });
     const { checked, report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
+    const view = await inspectFormatProjection(project);
     const finding = diagnostics(report).find(
       (entry) => entry.code === "legacy-variable.missing",
     );
@@ -1001,7 +1033,7 @@ void describe("地图 HTML 与旧格式正式检查", () => {
           }[];
         }
       | undefined;
-    const sourceDocument = view.miniMessage?.translatableText.find(
+    const sourceDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.path.join(".").includes("land.title.land.normal"),
@@ -1028,13 +1060,13 @@ void describe("地图 HTML 与旧格式正式检查", () => {
       targetLegacyTitle: target,
     });
     const { checked, report } = initAndCheck(project);
-    const view = await inspectTranslatableView(project.directory);
-    const sourceDocument = view.miniMessage?.translatableText.find(
+    const view = await inspectFormatProjection(project);
+    const sourceDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "source" &&
         entry.path.join(".").includes("land.title.land.normal"),
     );
-    const targetDocument = view.miniMessage?.translatableText.find(
+    const targetDocument = view.projection.translatableText.find(
       (entry) =>
         entry.origin === "target" &&
         entry.path.join(".").includes("land.title.land.normal"),
