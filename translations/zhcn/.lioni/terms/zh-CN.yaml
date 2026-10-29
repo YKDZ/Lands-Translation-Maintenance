@@ -1,0 +1,174 @@
+concepts:
+  nation:
+    expressions:
+      - id: zh-CN-联邦
+        text: 联邦
+        usage: allowed
+  capital:
+    expressions:
+      - id: zh-CN-首都
+        text: 首都
+        usage: allowed
+  land:
+    expressions:
+      - id: zh-CN-城镇
+        text: 城镇
+        usage: allowed
+  area:
+    expressions:
+      - id: zh-CN-子区域
+        text: 子区域
+        usage: allowed
+  camp:
+    expressions:
+      - id: zh-CN-露营地
+        text: 露营地
+        usage: allowed
+  wilderness:
+    expressions:
+      - id: zh-CN-荒野
+        text: 荒野
+        usage: allowed
+  role:
+    expressions:
+      - id: zh-CN-职位
+        text: 职位
+        usage: allowed
+  owner:
+    expressions:
+      - id: zh-CN-所有者
+        text: 所有者
+        usage: allowed
+  tenant:
+    expressions:
+      - id: zh-CN-住户
+        text: 住户
+        usage: allowed
+  trust:
+    expressions:
+      - id: zh-CN-邀请
+        text: 邀请
+        usage: allowed
+      - id: zh-CN-加入
+        text: 加入
+        usage: allowed
+  trusted-player:
+    expressions:
+      - id: zh-CN-成员
+        text: 成员
+        usage: allowed
+  untrust:
+    expressions:
+      - id: zh-CN-移出
+        text: 移出
+        usage: allowed
+  claim-verb:
+    expressions:
+      - id: zh-CN-占领
+        text: 占领
+        usage: allowed
+  claim-noun:
+    expressions:
+      - id: zh-CN-领土
+        text: 领土
+        usage: allowed
+  unclaim:
+    expressions:
+      - id: zh-CN-取消占领
+        text: 取消占领
+        usage: allowed
+  natural-settings:
+    expressions:
+      - id: zh-CN-环境设置
+        text: 环境设置
+        usage: allowed
+  role-settings:
+    expressions:
+      - id: zh-CN-职位设置
+        text: 职位设置
+        usage: allowed
+  mainblock:
+    expressions:
+      - id: zh-CN-城镇核心
+        text: 城镇核心
+        usage: allowed
+  bank:
+    expressions:
+      - id: zh-CN-金库
+        text: 金库
+        usage: allowed
+  storage:
+    expressions:
+      - id: zh-CN-仓库
+        text: 仓库
+        usage: allowed
+  upkeep:
+    expressions:
+      - id: zh-CN-维护费
+        text: 维护费
+        usage: allowed
+  taxes:
+    expressions:
+      - id: zh-CN-税费
+        text: 税费
+        usage: allowed
+  relation:
+    expressions:
+      - id: zh-CN-外交关系
+        text: 外交关系
+        usage: allowed
+  ally:
+    expressions:
+      - id: zh-CN-盟友
+        text: 盟友
+        usage: allowed
+  enemy:
+    expressions:
+      - id: zh-CN-政敌
+        text: 政敌
+        usage: allowed
+  neutral:
+    expressions:
+      - id: zh-CN-中立
+        text: 中立
+        usage: allowed
+  war:
+    expressions:
+      - id: zh-CN-战争
+        text: 战争
+        usage: allowed
+  capture-block-or-flag:
+    expressions:
+      - id: zh-CN-战旗
+        text: 战旗
+        usage: allowed
+  attacker:
+    expressions:
+      - id: zh-CN-攻方
+        text: 攻方
+        usage: allowed
+  defender:
+    expressions:
+      - id: zh-CN-守方
+        text: 守方
+        usage: allowed
+  tribute:
+    expressions:
+      - id: zh-CN-赔偿金
+        text: 赔偿金
+        usage: allowed
+  shield:
+    expressions:
+      - id: zh-CN-战争护盾
+        text: 战争护盾
+        usage: allowed
+  declare-noun:
+    expressions:
+      - id: zh-CN-宣战书
+        text: 宣战书
+        usage: allowed
+  declare-verb:
+    expressions:
+      - id: zh-CN-宣战
+        text: 宣战
+        usage: allowed
