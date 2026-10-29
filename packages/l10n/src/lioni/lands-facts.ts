@@ -29,7 +29,7 @@ import {
   translationFieldScenes,
   translationFormats,
 } from "#/model";
-import { canonicalJson, compareText, sha256 } from "#/value";
+import { canonicalJson, compareText } from "#/value";
 import { parseYaml } from "#/yaml-data";
 
 const lioniJsonSchema = z.json();
@@ -579,6 +579,23 @@ function sourceRange(path: string) {
   };
 }
 
+// 只把 Lands 的来源语言与 GUI definitions 命名视为潜在维护范围，普通新增文件仍可提示后推进。
+function unregisteredResourceIssue(
+  path: string,
+  sourceLanguage: string,
+): string | undefined {
+  const name = path.split("/").at(-1);
+  if (
+    name === `${sourceLanguage}.yml` ||
+    name === `${sourceLanguage}_gui.yml` ||
+    name === `${sourceLanguage}_dialogs.yml` ||
+    name === "definitions_gui.yml"
+  ) {
+    return `发现未登记的来源语言或 GUI 结构资源 ${path}；请明确更新资源与翻译范围清单。`;
+  }
+  return undefined;
+}
+
 function targetRange(sourceFile: string, targetFile: string) {
   return {
     kind: "lands-target-resource",
@@ -641,19 +658,29 @@ async function readSource(
       });
       continue;
     }
+    const unregisteredIssue =
+      registeredPurpose === undefined
+        ? unregisteredResourceIssue(
+            path,
+            configuration.translationScope.sourceLanguage,
+          )
+        : undefined;
     const range =
       registeredPurpose === undefined
-        ? {
-            kind: "lands-unregistered-resource",
-            path,
-            sha256: sha256(bytes),
-          }
+        ? { kind: "lands-unregistered-resource", path }
         : sourceRange(path);
 
     const mappings = mappingsBySource.get(path) ?? [];
     const structureMappings = structuresBySource.get(path) ?? [];
     if (mappings.length === 0 && structureMappings.length === 0) {
-      scopes.push({ range, enumeration: "complete", records: [] });
+      scopes.push({
+        range,
+        enumeration: unregisteredIssue === undefined ? "complete" : "partial",
+        records: [],
+        ...(unregisteredIssue === undefined
+          ? {}
+          : { error: unregisteredIssue }),
+      });
       continue;
     }
 

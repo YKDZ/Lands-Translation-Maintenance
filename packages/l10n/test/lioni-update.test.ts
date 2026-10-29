@@ -148,11 +148,26 @@ function landsJar(messages: string, version = "8.9.2"): Uint8Array {
   });
 }
 
-function landsJarWithUnregisteredResource(messages: string): Uint8Array {
+function landsJarWithUnregisteredResource(
+  messages: string,
+  notice = "title: New optional notice\n",
+): Uint8Array {
   return zipSync({
     "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
     "Locale/en-US.yml": strToU8(messages),
-    "docs/NOTICE.yml": strToU8("title: New optional notice\n"),
+    "docs/NOTICE.yml": strToU8(notice),
+  });
+}
+
+function landsJarWithUnregisteredFile(
+  messages: string,
+  resourcePath: string,
+  resource: string,
+): Uint8Array {
+  return zipSync({
+    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "Locale/en-US.yml": strToU8(messages),
+    [resourcePath]: strToU8(resource),
   });
 }
 
@@ -660,9 +675,171 @@ void test("新增范围外普通资源只提示、不扩大翻译范围并可推
   ]);
   assert.match(output, /docs\/NOTICE\.yml/u);
   assert.match(output, /不自动加入翻译维护范围/u);
+  const envelope = JSON.parse(output) as {
+    readonly data: {
+      readonly plan: {
+        readonly current: {
+          readonly source: {
+            readonly read: {
+              readonly scopes: readonly {
+                readonly range: {
+                  readonly kind: string;
+                  readonly path: string;
+                };
+                readonly enumeration: string;
+              }[];
+            };
+          };
+        };
+      };
+    };
+  };
+  const noticeScope = envelope.data.plan.current.source.read.scopes.find(
+    ({ range }) => range.path === "docs/NOTICE.yml",
+  );
+  assert.ok(noticeScope);
+  assert.deepEqual(noticeScope.range, {
+    kind: "lands-unregistered-resource",
+    path: "docs/NOTICE.yml",
+  });
+  assert.equal(noticeScope.enumeration, "complete");
   assert.deepEqual(await readFile(targetPath), originalTarget);
   assert.notDeepEqual(await readFile(baselinePath), originalBaseline);
   await assert.rejects(readFile(join(project, "docs/NOTICE-zh.yml")));
+
+  const recordedBaseline = await readFile(baselinePath);
+  const repeatedJar = join(
+    project,
+    "Lands-with-changed-unregistered-resource.jar",
+  );
+  await writeFile(
+    repeatedJar,
+    landsJarWithUnregisteredResource(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
+      "title: Updated optional notice\n",
+    ),
+  );
+  await prepareSource(configPath, repeatedJar);
+  await rm(repeatedJar);
+  const repeatedOutput = runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+  assert.doesNotMatch(
+    repeatedOutput,
+    /发现未登记的普通资源 docs\/NOTICE\.yml/u,
+  );
+  assert.deepEqual(await readFile(baselinePath), recordedBaseline);
+  assert.deepEqual(await readFile(targetPath), originalTarget);
+});
+
+void test("未登记的新增源语言文件要求明确纳入范围且不推进基线", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-new-language-resource-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createProject(project);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial.jar");
+  await writeFile(
+    initialJar,
+    landsJar("messages:\n  greet: Hello\n  leave: Goodbye\n"),
+  );
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const targetPath = join(project, "Locale/zh-CN.yml");
+  const originalTarget = await readFile(targetPath);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  for (const [resourcePath, resource] of [
+    [
+      "Locale/NewModule/en-US.yml",
+      "messages:\n  greeting: Hello from the new module\n",
+    ],
+    [
+      "Locale/NewModule/definitions_gui.yml",
+      "gui:\n  confirm:\n    material: STONE\n",
+    ],
+  ] as const) {
+    const changedJar = join(
+      project,
+      `Lands-with-${resourcePath.split("/").at(-1)}`,
+    );
+    await writeFile(
+      changedJar,
+      landsJarWithUnregisteredFile(
+        "messages:\n  greet: Hello\n  leave: Goodbye\n",
+        resourcePath,
+        resource,
+      ),
+    );
+    await prepareSource(configPath, changedJar);
+    await rm(changedJar);
+
+    const updateResult = spawnSync(
+      process.execPath,
+      [
+        nativeCli,
+        "update",
+        configPath,
+        "--record-baseline",
+        "--output-format",
+        "structured",
+      ],
+      { cwd: tmpdir(), encoding: "utf8" },
+    );
+    assert.equal(
+      updateResult.status,
+      1,
+      updateResult.stderr || updateResult.stdout,
+    );
+    const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
+      readonly data: {
+        readonly status: string;
+        readonly baseline?: { readonly outcome: string };
+        readonly plan?: {
+          readonly current: {
+            readonly source: {
+              readonly read: {
+                readonly scopes: readonly {
+                  readonly range: {
+                    readonly kind: string;
+                    readonly path: string;
+                  };
+                  readonly enumeration: string;
+                  readonly error?: string;
+                }[];
+              };
+            };
+          };
+        };
+      };
+    };
+    assert.equal(envelope.data.status, "failed");
+    assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
+    const scope = envelope.data.plan?.current.source.read.scopes.find(
+      ({ range }) => range.path === resourcePath,
+    );
+    assert.ok(scope);
+    assert.deepEqual(scope.range, {
+      kind: "lands-unregistered-resource",
+      path: resourcePath,
+    });
+    assert.equal(scope.enumeration, "partial");
+    assert.match(scope.error ?? "", /来源语言或 GUI 结构资源/u);
+    assert.deepEqual(await readFile(baselinePath), originalBaseline);
+    assert.deepEqual(await readFile(targetPath), originalTarget);
+    await assert.rejects(readFile(join(project, "Locale/NewModule/zh-CN.yml")));
+    await assert.rejects(
+      readFile(join(project, "Locale/NewModule/zh-CN_gui.yml")),
+    );
+  }
 });
 
 void test("整份退出翻译范围的目标文件留给维护者且未读取时不推进基线", async (t) => {

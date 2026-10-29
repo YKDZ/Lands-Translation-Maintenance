@@ -588,9 +588,10 @@ export async function landsUpdatePolicy(
       canonicalJson(range as LandsJson),
     ),
   );
-  for (const { range } of input.current.source.read.scopes) {
+  for (const { enumeration, range } of input.current.source.read.scopes) {
     const candidate = range as LandsJson;
     if (
+      enumeration !== "complete" ||
       !isRecord(candidate) ||
       candidate.kind !== "lands-unregistered-resource" ||
       typeof candidate.path !== "string" ||
