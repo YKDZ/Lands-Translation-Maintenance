@@ -5,10 +5,7 @@ import { join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  createFormatProject,
-  createGuiProject,
-} from "../cli-fixtures.ts";
+import { createFormatProject, createGuiProject } from "../lioni-fixtures.ts";
 
 const packageDirectory = resolve(
   fileURLToPath(new URL("../..", import.meta.url)),

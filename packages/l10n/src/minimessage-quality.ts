@@ -9,6 +9,7 @@ import {
 } from "@lioni/lioni";
 import { z } from "zod";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsStructureProjection,
   LandsJson,
@@ -17,6 +18,7 @@ import type {
   UnavailableTranslation,
 } from "#/lioni/lands-facts";
 import { readLandsStructureProjection } from "#/lioni/lands-facts";
+import type { ResourceInventoryEntry } from "#/lioni/lands-model";
 import type {
   MiniMessageIncompleteFact,
   MiniMessageInputMessage,
@@ -37,8 +39,6 @@ import {
   type MiniMessageBehaviorChecks,
   type MiniMessageBehaviorFinding,
 } from "#/minimessage-variables";
-import type { JsonValue } from "#/json-value";
-import type { ResourceInventoryEntry } from "#/lioni/lands-model";
 import {
   pairTranslatableTextDocuments,
   type TranslatableTextPairing,

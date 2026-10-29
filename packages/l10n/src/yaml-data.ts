@@ -75,25 +75,6 @@ export function parseYaml(source: string, file: string): ParsedYamlResult {
   }
 }
 
-export function valueAtPath(
-  value: JsonValue | undefined,
-  path: readonly string[],
-): JsonValue | undefined {
-  let current: unknown = value;
-  for (const segment of path) {
-    if (
-      typeof current !== "object" ||
-      current === null ||
-      Array.isArray(current) ||
-      !Object.hasOwn(current, segment)
-    ) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return current as JsonValue | undefined;
-}
-
 export function setDocumentPath(
   document: Document,
   path: readonly string[],

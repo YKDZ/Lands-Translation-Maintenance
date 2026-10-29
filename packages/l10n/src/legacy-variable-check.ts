@@ -1,5 +1,6 @@
 import { defineQualityCheck } from "@lioni/lioni";
 
+import type { JsonValue } from "#/json-value";
 import type {
   LandsJson,
   LandsTranslation,
@@ -10,6 +11,10 @@ import type {
   MiniMessageFinding,
   MiniMessageIncompleteFact,
   TranslatableTextDocument,
+} from "#/mini-message-model";
+import type {
+  VariableContextPart,
+  VariableOccurrence,
 } from "#/mini-message-model";
 import {
   dependenciesOf,
@@ -23,11 +28,6 @@ import {
   type MiniMessageCheckInput,
   type MiniMessageQualityObject,
 } from "#/minimessage-quality";
-import type {
-  JsonValue,
-  VariableContextPart,
-  VariableOccurrence,
-} from "#/model";
 import { compareVariableOccurrences } from "#/variable-comparison";
 
 const legacyTitleVariables = ["level", "nation", "owner", "player"] as const;

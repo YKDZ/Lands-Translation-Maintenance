@@ -4,7 +4,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { JsonValue } from "#/json-value";
 import { adaptLegacyMiniMessageInput } from "#/legacy-format";
+import type { ResourceInventoryEntry as LandsResourceInventoryEntry } from "#/lioni/lands-model";
 import {
   analyzeMapHtml,
   isMapHtmlAttributeTag,
@@ -34,10 +36,6 @@ import type {
   TranslatableTextSegment,
 } from "#/mini-message-model";
 import { translationFallbackSegment } from "#/minimessage-text";
-import type {
-  ResourceInventoryEntry as LandsResourceInventoryEntry,
-} from "#/lioni/lands-model";
-import type { JsonValue } from "#/json-value";
 import { parseYaml } from "#/yaml-data";
 
 interface ThemeDefinition {

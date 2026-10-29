@@ -1,10 +1,10 @@
+import type { JsonValue } from "#/json-value";
 import type {
   MiniMessageContextFrame,
   MiniMessageIncompleteFact,
   MiniMessageParseProject,
   TranslatableTextDocument,
 } from "#/mini-message-model";
-import type { JsonValue } from "#/model";
 import { canonicalJson } from "#/value";
 
 export interface TranslatableTextPairing {

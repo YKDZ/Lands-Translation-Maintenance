@@ -6,6 +6,7 @@ import {
   translationFieldCategories,
   translationFieldScenes,
 } from "#/lioni/lands-model";
+import { canonicalJson } from "#/value";
 
 const safePathSchema = z
   .string()
@@ -475,7 +476,10 @@ export function validateConfiguration(
   return issues;
 }
 
-function pathsMayOverlap(left: readonly string[], right: readonly string[]): boolean {
+function pathsMayOverlap(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
   const length = Math.min(left.length, right.length);
   for (let index = 0; index < length; index += 1) {
     const leftPart = left[index]!;

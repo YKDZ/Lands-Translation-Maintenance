@@ -9,7 +9,12 @@ export function formatForMessagePath(
   path: readonly string[],
   category: TranslationFieldCategory,
   purpose: ResourcePurpose | undefined,
-): Extract<TranslationFormat, "legacy-variable-minimessage" | "map-html-minimessage"> | undefined {
+):
+  | Extract<
+      TranslationFormat,
+      "legacy-variable-minimessage" | "map-html-minimessage"
+    >
+  | undefined {
   if (category !== "chat-string" || purpose !== "chat-language") {
     return undefined;
   }

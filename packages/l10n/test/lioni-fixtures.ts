@@ -1,11 +1,5 @@
-import {
-  mkdir,
-  mkdtemp,
-  rm,
-  writeFile,
-  symlink,
-} from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { TestContext } from "node:test";
@@ -15,7 +9,10 @@ import { strToU8, zipSync } from "fflate";
 import { stringify } from "yaml";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const sourcePreparer = join(packageDirectory, "scripts/prepare-lioni-source.ts");
+const sourcePreparer = join(
+  packageDirectory,
+  "scripts/prepare-lioni-source.ts",
+);
 
 export async function prepareLioniProject(project: {
   readonly directory: string;
@@ -504,17 +501,43 @@ export async function createGuiProject(
     }),
     "utf8",
   );
+  await mkdir(join(directory, "Locale"), { recursive: true });
+  await writeFile(
+    join(directory, "Locale/zh-CN_gui.yml"),
+    [
+      "physical:",
+      "  selection:",
+      `    name: ${JSON.stringify(options.name)}`,
+      "    lore:",
+      ...options.lore.map((line) => `      - ${JSON.stringify(line)}`),
+      "",
+    ].join("\n"),
+  );
+  if (options.dialogItemName !== undefined) {
+    await writeFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      [
+        "dialogs:",
+        "  confirmation:",
+        "    bodies:",
+        "      icon:",
+        "        item:",
+        `          name: ${JSON.stringify(options.dialogItemName)}`,
+        "",
+      ].join("\n"),
+    );
+  }
+  if (options.categoryName !== undefined) {
+    await writeFile(
+      join(directory, "Locale/zh-CN_categories.yml"),
+      [
+        "land:",
+        "  categories:",
+        "    peaceful:",
+        `      name: ${JSON.stringify(options.categoryName)}`,
+        "",
+      ].join("\n"),
+    );
+  }
   return { directory, jarFile };
-}
-
-export function readEnvelope(stdout: string) {
-  return JSON.parse(stdout) as {
-    readonly kind?: unknown;
-    readonly variant?: unknown;
-    readonly data?: Record<string, unknown>;
-  };
-}
-
-export function readReport(output: string) {
-  return readEnvelope(output).data?.report as Record<string, unknown>;
 }

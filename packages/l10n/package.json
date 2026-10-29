@@ -2,6 +2,7 @@
   "name": "@lands-l10n/l10n",
   "private": true,
   "files": [
+    "lioni.config.ts",
     "dist/**",
     "target/minimessage/**"
   ],
@@ -21,7 +22,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json --pretty false && chmod +x dist/cli.js",
+    "build": "tsc -p tsconfig.build.json --pretty false",
     "build:minimessage": "node --conditions=source scripts/build-minimessage.ts",
     "source:prepare": "node --conditions=source scripts/prepare-lioni-source.ts",
     "format:check": "oxfmt --list-different .",

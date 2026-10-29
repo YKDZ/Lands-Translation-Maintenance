@@ -1,5 +1,5 @@
-import { isMapHtmlAttributeTag } from "#/map-html";
 import type { JsonValue } from "#/json-value";
+import { isMapHtmlAttributeTag } from "#/map-html";
 import type {
   MiniMessageContextFrame,
   MiniMessageIncompleteFact,

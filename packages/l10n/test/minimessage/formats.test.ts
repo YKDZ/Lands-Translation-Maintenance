@@ -13,7 +13,7 @@ import {
   createFormatProject,
   createGuiProject,
   prepareLioniProject,
-} from "../cli-fixtures.ts";
+} from "../lioni-fixtures.ts";
 
 async function inspectFormatProjection(project: {
   readonly directory: string;
@@ -757,7 +757,7 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
     });
     const supportedTarget = join(supported.directory, "Locale/zh-CN_gui.yml");
     const target = await readFile(supportedTarget, "utf8");
-    const modified = target.replace("name: 工具", 'name: "§a工具"');
+    const modified = target.replace('name: "工具"', 'name: "§a工具"');
     assert.notEqual(modified, target);
     await writeFile(supportedTarget, modified);
 
