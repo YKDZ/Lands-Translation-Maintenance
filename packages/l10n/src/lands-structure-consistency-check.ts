@@ -24,6 +24,20 @@ function isRecord(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function matchesManagedStructure(
+  expected: JsonValue,
+  actual: JsonValue,
+): boolean {
+  if (!isRecord(expected))
+    return canonicalJson(expected) === canonicalJson(actual);
+  if (!isRecord(actual)) return false;
+  return Object.entries(expected).every(
+    ([key, value]) =>
+      Object.hasOwn(actual, key) &&
+      matchesManagedStructure(value, actual[key]!),
+  );
+}
+
 function structureBasis(input: MiniMessageCheckInput): JsonValue {
   const dependencies = dependenciesOf(input.dependencies);
   const source = input.sourceUnit?.unit;
@@ -246,14 +260,8 @@ export const landsStructureConsistencyCheck = defineQualityCheck<
         ],
       );
     }
-    const openStructure =
-      isRecord(entry.expected) &&
-      Object.keys(entry.expected).length === 0 &&
-      isRecord(entry.actual.value);
-    if (
-      openStructure ||
-      canonicalJson(entry.expected) === canonicalJson(entry.actual.value)
-    ) {
+    // 结构更新保留目标自定义键；QA 只比较来源明确管理的键和值。
+    if (matchesManagedStructure(entry.expected, entry.actual.value)) {
       return outcome("complete", [], []);
     }
     return outcome(
