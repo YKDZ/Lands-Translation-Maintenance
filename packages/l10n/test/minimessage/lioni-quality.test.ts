@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
@@ -72,9 +79,21 @@ interface NativeEnvelope {
   readonly report?: QualityReport;
 }
 
-function landsJar(theme: string, sourceName: string): Uint8Array {
-  return zipSync({
-    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+interface QualityProjectOptions {
+  readonly sourceLore?: readonly string[];
+  readonly targetLore?: readonly string[];
+  readonly sourceVersion?: string;
+  readonly chat?: { readonly source: string; readonly target: string };
+}
+
+function landsJar(
+  theme: string,
+  sourceName: string,
+  sourceLore: readonly string[],
+  sourceVersion: string,
+  chat: QualityProjectOptions["chat"],
+): Uint8Array {
+  const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
       [
         "gui:",
@@ -82,7 +101,7 @@ function landsJar(theme: string, sourceName: string): Uint8Array {
         "    items:",
         "      confirm:",
         `        name: ${JSON.stringify(sourceName)}`,
-        '        lore: ["<red>First line", "Second line</red>"]',
+        `        lore: ${JSON.stringify(sourceLore)}`,
         "",
       ].join("\n"),
     ),
@@ -95,20 +114,69 @@ function landsJar(theme: string, sourceName: string): Uint8Array {
         "        material: EMERALD",
         "        slot: 1",
         '        name: "<red>Confirm</red>"',
-        '        lore: ["<red>First line", "Second line</red>"]',
+        `        lore: ${JSON.stringify(sourceLore)}`,
         "        action: confirm",
         "",
       ].join("\n"),
     ),
+    "plugin.yml": strToU8(`name: Lands\nversion: ${sourceVersion}\n`),
     "Locale/theme.yml": strToU8(theme),
-  });
+  };
+  if (chat !== undefined) {
+    files["Locale/en-US_messages.yml"] = strToU8(
+      `messages:\n  greeting: ${JSON.stringify(chat.source)}\n`,
+    );
+  }
+  return zipSync(files);
 }
 
 async function createQualityProject(
   t: TestContext,
   theme = 'theme:\n  tokens:\n    known: "<red>"\n',
   sourceName = "<red>Confirm</red>",
+  targetName = "<red>确认</red>",
+  options: QualityProjectOptions = {},
 ): Promise<{ readonly directory: string; readonly configPath: string }> {
+  const sourceVersion = options.sourceVersion ?? "8.9.2";
+  const sourceLore = options.sourceLore ?? [
+    "<red>First line",
+    "Second line</red>",
+  ];
+  const targetLore = options.targetLore ?? ["<red>第一行", "第二行</red>"];
+  const resources = [
+    "  - path: plugin.yml",
+    "    purpose: metadata",
+    "  - path: Locale/en-US_gui.yml",
+    "    purpose: gui-language",
+    "  - path: Locale/definitions_gui.yml",
+    "    purpose: configuration",
+    "  - path: Locale/theme.yml",
+    "    purpose: configuration",
+    ...(options.chat === undefined
+      ? []
+      : ["  - path: Locale/en-US_messages.yml", "    purpose: chat-language"]),
+  ];
+  const mappings = [
+    "    - source: Locale/en-US_gui.yml",
+    "      target: Locale/zh-CN_gui.yml",
+    "      definitionsSource: Locale/definitions_gui.yml",
+    "      fields:",
+    "        - path: [gui, main, items, confirm, name]",
+    "          category: gui-string",
+    "          scene: gui-general",
+    "        - path: [gui, main, items, confirm, lore]",
+    "          category: gui-lore",
+    "          scene: gui-item-lore",
+    ...(options.chat === undefined
+      ? []
+      : [
+          "    - source: Locale/en-US_messages.yml",
+          "      target: Locale/zh-CN_messages.yml",
+          "      fields:",
+          "        - path: [messages, greeting]",
+          "          category: chat-string",
+        ]),
+  ];
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
   t.after(() => rm(directory, { force: true, recursive: true }));
   await Promise.all([
@@ -121,31 +189,15 @@ async function createQualityProject(
     [
       "schemaVersion: 1",
       "source:",
-      '  version: "8.9.2"',
+      `  version: "${sourceVersion}"`,
       '  translationHistory: "fixture-history"',
       "resources:",
-      "  - path: plugin.yml",
-      "    purpose: metadata",
-      "  - path: Locale/en-US_gui.yml",
-      "    purpose: gui-language",
-      "  - path: Locale/definitions_gui.yml",
-      "    purpose: configuration",
-      "  - path: Locale/theme.yml",
-      "    purpose: configuration",
+      ...resources,
       "translationScope:",
       '  sourceLanguage: "en-US"',
       '  targetLanguage: "zh-CN"',
       "  mappings:",
-      "    - source: Locale/en-US_gui.yml",
-      "      target: Locale/zh-CN_gui.yml",
-      "      definitionsSource: Locale/definitions_gui.yml",
-      "      fields:",
-      "        - path: [gui, main, items, confirm, name]",
-      "          category: gui-string",
-      "          scene: gui-general",
-      "        - path: [gui, main, items, confirm, lore]",
-      "          category: gui-lore",
-      "          scene: gui-item-lore",
+      ...mappings,
       "",
     ].join("\n"),
   );
@@ -156,11 +208,17 @@ async function createQualityProject(
       "  main:",
       "    items:",
       "      confirm:",
-      '        name: "<red>确认</red>"',
-      '        lore: ["<red>第一行", "第二行</red>"]',
+      `        name: ${JSON.stringify(targetName)}`,
+      `        lore: ${JSON.stringify(targetLore)}`,
       "",
     ].join("\n"),
   );
+  if (options.chat !== undefined) {
+    await writeFile(
+      join(directory, "Locale/zh-CN_messages.yml"),
+      `messages:\n  greeting: ${JSON.stringify(options.chat.target)}\n`,
+    );
+  }
   const configPath = join(directory, ".lioni/lioni.config.ts");
   await writeFile(
     configPath,
@@ -176,7 +234,10 @@ async function createQualityProject(
   await symlink(packageDirectory, join(scopedPackageDirectory, "l10n"), "dir");
 
   const jarPath = join(directory, "Lands.jar");
-  await writeFile(jarPath, landsJar(theme, sourceName));
+  await writeFile(
+    jarPath,
+    landsJar(theme, sourceName, sourceLore, sourceVersion, options.chat),
+  );
   const prepared = spawnSync(
     process.execPath,
     [
@@ -386,6 +447,64 @@ void test("主题 YAML 不可读与 Java 不可用都保留为原生不完整结
   assert.equal(yamlFindings.length, 1, JSON.stringify(theme, null, 2));
   assert.equal(yamlFindings[0]?.location.range.file, "Locale/theme.yml");
 
+  const reportPath = join(project.directory, "qa-report.json");
+  await writeFile(reportPath, JSON.stringify(malformedTheme.envelope));
+  const themeExecution = theme.executions.find(
+    ({ executionId }) => executionId === yamlFindings[0]?.executionId,
+  );
+  assert.ok(themeExecution);
+  const acceptedTheme = runLioni([
+    "exceptions",
+    "upsert",
+    project.configPath,
+    reportPath,
+    "--check-id",
+    "minimessage-theme",
+    "--execution-id",
+    String(themeExecution.executionId),
+    "--id",
+    "malformed-theme",
+    "--reason",
+    "测试主题格式的原生例外接受路径",
+  ]);
+  assert.equal(
+    acceptedTheme.status,
+    0,
+    acceptedTheme.stderr || acceptedTheme.stdout,
+  );
+  const acceptedReport = qualityReport(runLioni(["qa", project.configPath]));
+  assert.equal(
+    checkResult(acceptedReport.report, "minimessage-theme").diagnostics.find(
+      ({ object }) => object.code === "yaml-invalid",
+    )?.handling.status,
+    "excepted",
+  );
+
+  const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+  const target = await readFile(targetPath, "utf8");
+  await writeFile(
+    targetPath,
+    target
+      .split("\n")
+      .filter((line) => !line.includes("lore:"))
+      .join("\n"),
+  );
+  const missingEarlierCandidate = qualityReport(
+    runLioni(["qa", project.configPath]),
+  );
+  const remainingTheme = checkResult(
+    missingEarlierCandidate.report,
+    "minimessage-theme",
+  );
+  assert.equal(remainingTheme.status, "complete");
+  assert.equal(
+    remainingTheme.diagnostics.find(
+      ({ object }) => object.code === "yaml-invalid",
+    )?.handling.status,
+    "active",
+    JSON.stringify(remainingTheme.diagnostics, null, 2),
+  );
+
   const noJava = qualityReport(
     runLioni(["qa", project.configPath], { JAVA_COMMAND: "/missing/java" }),
   );
@@ -469,6 +588,404 @@ void test("未识别的扩展标签有原生诊断并保留不完整限制", asy
     JSON.stringify(syntax.issues, null, 2),
   );
   assert.equal(syntax.status, "incomplete");
+});
+
+void test("标签对应、嵌套与 Lands 控制各自形成原生检查结论", async (t) => {
+  const aliases = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red>",
+    "<c:#f55>确认</c>",
+  );
+  const aliasReport = qualityReport(runLioni(["qa", aliases.configPath]));
+  assert.equal(
+    checkResult(aliasReport.report, "minimessage-tag-correspondence").status,
+    "complete",
+  );
+  assert.equal(
+    checkResult(aliasReport.report, "minimessage-nesting").status,
+    "complete",
+  );
+  assert.equal(
+    checkResult(aliasReport.report, "minimessage-lands-controls").status,
+    "complete",
+  );
+
+  const changed = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red>",
+    "<blue>确认</blue>",
+  );
+  const changedRun = runLioni(["qa", changed.configPath]);
+  assert.notEqual(changedRun.status, 0, changedRun.stdout || changedRun.stderr);
+  const changedReport = qualityReport(changedRun);
+  const correspondence = checkResult(
+    changedReport.report,
+    "minimessage-tag-correspondence",
+  );
+  assert.ok(
+    correspondence.diagnostics.some(
+      ({ object, location }) =>
+        object.code === "minimessage.tag-mismatch" &&
+        object.origin === "target" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "name"]),
+    ),
+    JSON.stringify(correspondence, null, 2),
+  );
+
+  const mismatchedClose = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red>",
+    "<red>确认</blue>",
+  );
+  const nestingRun = runLioni(["qa", mismatchedClose.configPath]);
+  assert.notEqual(nestingRun.status, 0, nestingRun.stdout || nestingRun.stderr);
+  const nestingReport = qualityReport(nestingRun);
+  const nesting = checkResult(nestingReport.report, "minimessage-nesting");
+  assert.ok(
+    nesting.diagnostics.some(
+      ({ object, location }) =>
+        object.code === "minimessage.tag-nesting-invalid" &&
+        object.origin === "target" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "name"]),
+    ),
+    JSON.stringify(nesting, null, 2),
+  );
+
+  const misplacedControl = await createQualityProject(
+    t,
+    undefined,
+    "<noprefix><red>Confirm</red>",
+    "<noprefix><red>确认</red>",
+  );
+  const controlRun = runLioni(["qa", misplacedControl.configPath]);
+  assert.notEqual(controlRun.status, 0, controlRun.stdout || controlRun.stderr);
+  const controlReport = qualityReport(controlRun);
+  const controls = checkResult(
+    controlReport.report,
+    "minimessage-lands-controls",
+  );
+  assert.ok(
+    controls.diagnostics.some(
+      ({ object, location }) =>
+        object.code === "minimessage.lands-control-invalid" &&
+        object.origin === "source" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "name"]),
+    ),
+    JSON.stringify(controls, null, 2),
+  );
+});
+
+void test("样式别名与整体换序通过，孤立来源标签和译文省略分别报告", async (t) => {
+  const reordered = await createQualityProject(
+    t,
+    undefined,
+    "<red><bold>Confirm</bold></red>",
+    "<b><c:#f55>确认</c></b>",
+  );
+  const reorderedReport = qualityReport(runLioni(["qa", reordered.configPath]));
+  assert.equal(
+    checkResult(reorderedReport.report, "minimessage-tag-correspondence")
+      .status,
+    "complete",
+  );
+
+  const orphan = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red></t>",
+    "<red>确认</red>",
+  );
+  const orphanRun = runLioni(["qa", orphan.configPath]);
+  assert.notEqual(orphanRun.status, 0, orphanRun.stdout || orphanRun.stderr);
+  const orphanReport = qualityReport(orphanRun);
+  const nesting = checkResult(orphanReport.report, "minimessage-nesting");
+  assert.ok(
+    nesting.diagnostics.some(
+      ({ object, location }) =>
+        object.code === "minimessage.tag-nesting-invalid" &&
+        object.origin === "source" &&
+        location.range.file === "Locale/en-US_gui.yml" &&
+        JSON.stringify(location.range.path) ===
+          JSON.stringify(["gui", "main", "items", "confirm", "name"]),
+    ),
+    JSON.stringify(nesting, null, 2),
+  );
+  const correspondence = checkResult(
+    orphanReport.report,
+    "minimessage-tag-correspondence",
+  );
+  assert.ok(
+    correspondence.diagnostics.some(
+      ({ object, location }) =>
+        object.code === "minimessage.tag-mismatch" &&
+        object.origin === "target" &&
+        location.range.file === "Locale/zh-CN_gui.yml",
+    ),
+    JSON.stringify(correspondence, null, 2),
+  );
+
+  const sourceNestingFinding = nesting.diagnostics.find(
+    ({ object }) =>
+      object.code === "minimessage.tag-nesting-invalid" &&
+      object.origin === "source",
+  );
+  assert.ok(sourceNestingFinding);
+  const reportPath = join(orphan.directory, "qa-report.json");
+  await writeFile(reportPath, JSON.stringify(orphanReport.envelope));
+  const acceptedNesting = runLioni([
+    "exceptions",
+    "upsert",
+    orphan.configPath,
+    reportPath,
+    "--check-id",
+    "minimessage-nesting",
+    "--execution-id",
+    String(sourceNestingFinding.executionId),
+    "--id",
+    "source-orphan-close",
+    "--reason",
+    "该上游来源保留历史孤立关闭标签",
+  ]);
+  assert.equal(
+    acceptedNesting.status,
+    0,
+    acceptedNesting.stderr || acceptedNesting.stdout,
+  );
+  const acceptedReport = qualityReport(runLioni(["qa", orphan.configPath]));
+  assert.equal(
+    checkResult(acceptedReport.report, "minimessage-nesting").diagnostics.find(
+      ({ object }) =>
+        object.code === "minimessage.tag-nesting-invalid" &&
+        object.origin === "source",
+    )?.handling.status,
+    "excepted",
+  );
+  assert.equal(
+    checkResult(
+      acceptedReport.report,
+      "minimessage-tag-correspondence",
+    ).diagnostics.find(
+      ({ object }) => object.code === "minimessage.tag-mismatch",
+    )?.handling.status,
+    "active",
+  );
+});
+
+void test("聊天前缀与条件块按 Lands 上下文接受并阻止跨条件移动", async (t) => {
+  const source =
+    "<verbose><red>Hello</red></verbose> <ingame><blue>Player</blue></ingame>";
+  const reordered = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      chat: {
+        source,
+        target:
+          "<ingame><c:#55f>玩家</c></ingame> <verbose><c:#f55>你好</c></verbose>",
+      },
+    },
+  );
+  const reorderedReport = qualityReport(runLioni(["qa", reordered.configPath]));
+  assert.equal(
+    checkResult(reorderedReport.report, "minimessage-tag-correspondence")
+      .status,
+    "complete",
+  );
+  assert.equal(
+    checkResult(reorderedReport.report, "minimessage-lands-controls").status,
+    "complete",
+  );
+
+  const moved = await createQualityProject(t, undefined, undefined, undefined, {
+    chat: {
+      source,
+      target:
+        "<verbose><blue>你好</blue></verbose> <ingame><red>玩家</red></ingame>",
+    },
+  });
+  const movedRun = runLioni(["qa", moved.configPath]);
+  assert.notEqual(movedRun.status, 0, movedRun.stdout || movedRun.stderr);
+  const movedReport = qualityReport(movedRun);
+  const correspondence = checkResult(
+    movedReport.report,
+    "minimessage-tag-correspondence",
+  );
+  assert.ok(
+    correspondence.diagnostics.some(
+      ({ object }) => object.code === "minimessage.tag-mismatch",
+    ),
+    JSON.stringify(correspondence, null, 2),
+  );
+
+  const prefixed = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      chat: {
+        source:
+          "<title:5:40:2><red>Title</red><subtitle><blue>Sub</blue><actionbar><bold>Act</bold>",
+        target:
+          "<title><c:#f55>标题</c><subtitle><c:#55f>副标题</c><actionbar><b>操作栏</b>",
+      },
+    },
+  );
+  const prefixReport = qualityReport(runLioni(["qa", prefixed.configPath]));
+  assert.equal(
+    checkResult(prefixReport.report, "minimessage-lands-controls").status,
+    "complete",
+  );
+
+  const misplaced = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      chat: {
+        source: "<noprefix><red>Welcome</red>",
+        target: "<red><noprefix>欢迎</red>",
+      },
+    },
+  );
+  const misplacedRun = runLioni(["qa", misplaced.configPath]);
+  assert.notEqual(
+    misplacedRun.status,
+    0,
+    misplacedRun.stdout || misplacedRun.stderr,
+  );
+  const misplacedReport = qualityReport(misplacedRun);
+  const controls = checkResult(
+    misplacedReport.report,
+    "minimessage-lands-controls",
+  );
+  assert.ok(
+    controls.diagnostics.some(
+      ({ object }) => object.code === "minimessage.lands-control-invalid",
+    ),
+    JSON.stringify(controls, null, 2),
+  );
+});
+
+void test("GUI lore 保留 action、label、desc、indent、空行与重复行上下文", async (t) => {
+  const sourceLore = [
+    "<action:claim><label><red>Claim</red></label><desc><gray>Details</gray></desc></action>",
+    "<indent>Next",
+    "",
+    "Same",
+    "Same",
+  ];
+  const targetLore = [
+    "<action:claim><label><c:#f55>占领</c></label><desc><gray>详情</gray></desc></action>",
+    "<indent>下一项",
+    "",
+    "相同",
+    "相同",
+  ];
+  const preserved = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    { sourceLore, targetLore },
+  );
+  const preservedReport = qualityReport(runLioni(["qa", preserved.configPath]));
+  assert.equal(
+    checkResult(preservedReport.report, "minimessage-tag-correspondence")
+      .status,
+    "complete",
+  );
+  assert.equal(
+    checkResult(preservedReport.report, "minimessage-lands-controls").status,
+    "complete",
+  );
+
+  const moved = await createQualityProject(t, undefined, undefined, undefined, {
+    sourceLore: [
+      "<action:claim><label><red>Claim</red></label></action>",
+      "<action:bank><label><bold>Bank</bold></label></action>",
+    ],
+    targetLore: [
+      "<action:claim><label><b>银行</b></label></action>",
+      "<action:bank><label><c:#f55>占领</c></label></action>",
+    ],
+  });
+  const movedRun = runLioni(["qa", moved.configPath]);
+  assert.notEqual(movedRun.status, 0, movedRun.stdout || movedRun.stderr);
+  const movedReport = qualityReport(movedRun);
+  const correspondence = checkResult(
+    movedReport.report,
+    "minimessage-tag-correspondence",
+  );
+  assert.ok(
+    correspondence.diagnostics.some(
+      ({ object }) => object.code === "minimessage.tag-mismatch",
+    ),
+    JSON.stringify(correspondence, null, 2),
+  );
+  assert.equal(
+    checkResult(movedReport.report, "minimessage-lands-controls").status,
+    "complete",
+  );
+
+  const oldVersionDesc = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "8.0.1",
+      sourceLore: ["<action:claim><desc>Details</desc></action>"],
+      targetLore: ["<action:claim><desc>详情</desc></action>"],
+    },
+  );
+  const oldVersionReport = qualityReport(
+    runLioni(["qa", oldVersionDesc.configPath]),
+  );
+  const oldVersionControls = checkResult(
+    oldVersionReport.report,
+    "minimessage-lands-controls",
+  );
+  assert.ok(
+    oldVersionControls.issues.some(
+      ({ code }) => code === "minimessage.lands-desc-version-unverified",
+    ),
+    JSON.stringify(oldVersionControls, null, 2),
+  );
+
+  const unknownVersionAction = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.0.0",
+      sourceLore: ["<action:claim><label>Claim</label></action>"],
+      targetLore: ["<action:claim><label>占领</label></action>"],
+    },
+  );
+  const unknownVersionReport = qualityReport(
+    runLioni(["qa", unknownVersionAction.configPath]),
+  );
+  const unknownVersionControls = checkResult(
+    unknownVersionReport.report,
+    "minimessage-lands-controls",
+  );
+  assert.ok(
+    unknownVersionControls.issues.some(
+      ({ code }) => code === "minimessage.lands-controls-version-unverified",
+    ),
+    JSON.stringify(unknownVersionControls, null, 2),
+  );
 });
 
 void test("官方 MiniMessage 别名与颜色写法通过原生语法检查", async (t) => {
