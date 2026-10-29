@@ -1,0 +1,389 @@
+format: lioni.qa-exceptions/v1
+exceptions:
+  [
+    {
+      id: ticket11-same-source-owner-list-area-players,
+      reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox
+        messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_players","items","default","child_failure_owner","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:c83538d31241aea01019556aed7220792632e61bef3f294e16c5f3480f02a5e5,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:ada8e1c37ce6906c5aa874f8064a05e92baf77577b7b14d34a56de2354ecdd58,
+        },
+    },
+    {
+      id: ticket11-same-source-owner-list-inbox,
+      reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox
+        messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_inbox","items","default","child_failure_owner","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:4012f391033ced9c4a00eb05f8db4a4818cbfedfbc2ec2e07d36020b6ec8a6f3,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:eb5a4a7a73e4c6d1cfc34bdc386294735e453015ba4ffa7ec41333de21d9be0f,
+        },
+    },
+    {
+      id: ticket11-same-source-owner-land-role,
+      reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox
+        messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。,
+      checkId: message-family-same-source,
+      sourceKey: 'roles.yml:["land","roles","owner","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:69ecef52942426f5ac0d4cb6384ba2da748705f50f3e6c19efd3187a9cdce4f6,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:0edb570ae39d2aeffaa7a26a5e17b252de7dbb3e769f5c706201a7f39b4574a4,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-list-role-settings,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_role_settings","items","default","child_failure_access","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:86af46b644373dfb3ed6399accd60f0747bee7e0b08f5d98e698ccd9022c1ae9,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:dc48d05727c48070596a8ad4b441d6051550b19f3560e8363cbd4d9c5efe075f,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-common-noaccess,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["common","items","default","child_failure_noaccess","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:ff619b21bb63e9f4df9039b3b34c1fa792c59c8f2224ac73d209ab5cde7f884e,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:6751ad43da143eaf758c722442a97185dbfdbaaebdbad2f3227ad67ca5ec1da3,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-common-noaccess-owner,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["common","items","default","child_failure_noaccess_owner","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:5435c007d869f2c3b3cdc89e317efe409b6f4ab8f61177a1926e56fbeb3d8f26,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:c0fddeb0cc0a0da77f5ff7832988920c46d5a8d38bcd692fcca8d07e90606ac5,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-area,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","area","items","default","child_failure_access","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:69dee549875a4fe1f59f853032281945138d07763f1861d206de5d6d04cc4da1,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:c4ba1d13a2c00b6ef7e1db7ba6449d435d4f12c8712ff2c3ad8a95f514f6aa70,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-list-area-invites,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_invites","items","default","child_failure_access","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:b596e4ca0913e747b05598837dcb708e55a39d4280169f41f97007a55e754ebe,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:8ba6a75984d60f0da57cc504562fc10f14956959faf63477b21785226c600444,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-wars-war,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/Wars/en-US_gui.yml:["gui","war","items","default","child_failure_permission","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:60d39a47c3189f0d86b9a0890e7654685934bea109ed36648eb9be8c2036b20c,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:96f778cbd78b5b42161cd050708fe4f67bef4f2dcbfa41919b98bca38ee7da64,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-list-area-roles,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_roles","items","default","child_failure_access","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:6f3f478d67a9b34ecc8876068734e34702415f6bc2ff770c6c589917172fd7b1,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:647058923686a73bb90289604861211b8097ee17941ea67bd289fc7b7798376e,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-list-area-settings,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","child_failure_access","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:a198a636e8df0c0cce003935698751d70a3347ebfd17d952168924f7a5bcf22a,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:fb25d1fd869604316488c1c6e608fa564b744a721367918ad1b39836fdd9c110,
+        },
+    },
+    {
+      id: ticket11-same-source-not-allowed-list-land-areas,
+      reason: “职位权限不足”的三个条目 lore 均明确 role
+        permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_access","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:23ce5dbcf2e064921e788e58ed2f7cf604104b75b14abf98db182b9815d094b4,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:d6656da8879105ea2c61f2318fc7c7386e070acf97ade01b45d5dcf913f7a947,
+        },
+    },
+    {
+      id: ticket11-same-source-rented-gui-area,
+      reason:
+        出租牌列出剩余租期，显示“已出租”；两个 GUI 错误条目的 lore 明确同时限制 rented or
+        sold，显示“已出租或出售”保留了该按钮实际适用范围。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","area","items","default","child_failure_rented","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:54f63cf12cb231563592e8b481b0defaaf1d5c1441cbf481c7e12ea7610c11cf,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:9da89d9e008f50af12cf9f7ded42c143d3645ee60ee599f1fb56a0dc0b370a1e,
+        },
+    },
+    {
+      id: ticket11-same-source-rented-gui-list-land-areas,
+      reason:
+        出租牌列出剩余租期，显示“已出租”；两个 GUI 错误条目的 lore 明确同时限制 rented or
+        sold，显示“已出租或出售”保留了该按钮实际适用范围。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_rented","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:e70d34b8e6e2bac3d03e2b019814cd8c2a006097d4dd672535da4660cf5ff53e,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:865d3d759bb7f4ce6202ded8aa29e33915416915e8f77e30dea1f01f8457e33a,
+        },
+    },
+    {
+      id: ticket11-same-source-nation-role,
+      reason:
+        levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation
+        实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。,
+      checkId: message-family-same-source,
+      sourceKey: 'roles.yml:["land","roles","nation","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:9ae2c2c423a6fe4b9e686d93de145ce7e8d28230e4077dd7c6f8b4ac3bcc3d8d,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:8dcd44fd666aa84cbc8b05743cee41a3426bc1a4f4e18d8258fbea32dfa3cbee,
+        },
+    },
+    {
+      id: ticket11-same-source-nation-level-2-title,
+      reason:
+        levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation
+        实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。,
+      checkId: message-family-same-source,
+      sourceKey: 'levels.yml:["nation","levels","2","title"]',
+      language: zh-CN,
+      inputFingerprint: sha256:c2bdf1126f2019f084b9ff4b70306ffb00103323fb091423c05984b94bbc8e91,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:ceef61b6ad978e61e607534e0a10d3e07f2a30752274e4bd506866dd38590b4f,
+        },
+    },
+    {
+      id: ticket11-same-source-members-player-management,
+      reason:
+        排行榜 sorting.members 指按成员数量排序，显示“成员数”；player-management 的 Members
+        项负责管理成员，显示“成员”。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","player-management","items","default","members","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:be25606071254c1c15db3817b182596410adf699223d069aca1e9d40ff8482a8,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:6662c477cce22c70c3e92ecbb6e31c0b3ebcc278baac8be58ea7084be20152da,
+        },
+    },
+    {
+      id: ticket11-same-source-members-top-sorting,
+      reason:
+        排行榜 sorting.members 指按成员数量排序，显示“成员数”；player-management 的 Members
+        项负责管理成员，显示“成员”。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["general","top","sorting","members"]',
+      language: zh-CN,
+      inputFingerprint: sha256:65a2b369cb8ac818c87ec90c2538066d1f59b35f5ade5d4d54bd479b0aaabdc2,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:bf2a8d4b8e728dbf8a8f33e06e946b11e535a487791275ffb99714718e177c0c,
+        },
+    },
+    {
+      id: ticket11-same-source-land-mainblock,
+      reason: levels.land.levels.5.title
+        是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","mainblock","items","default","land","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:ca17980305f6a922fd6193da70256f50d81707f4adcfbc6c82abe7c7331393c1,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:2a61c6a49e2a213ee8c9c8a9db28f9d243ded19a669042840d9b9ee55f1176e9,
+        },
+    },
+    {
+      id: ticket11-same-source-land-level-5-title,
+      reason: levels.land.levels.5.title
+        是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
+      checkId: message-family-same-source,
+      sourceKey: 'levels.yml:["land","levels","5","title"]',
+      language: zh-CN,
+      inputFingerprint: sha256:b6237f894041bc11ea45a4265c0219cd7eadfa5753137980de02ee0fb75568cb,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:ef171340704daedd0e4deaaaa894a173907bba06f7e17d69e5a4d20d327197f5,
+        },
+    },
+    {
+      id: ticket11-same-source-land-nations-role,
+      reason: levels.land.levels.5.title
+        是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
+      checkId: message-family-same-source,
+      sourceKey: 'Locale/Nations/en-US_gui.yml:["general","nation","role","land"]',
+      language: zh-CN,
+      inputFingerprint: sha256:46dbe6883e1828b8ff305d31fbf8ddad8b21f59ac896ec6941ed331b19cdca8b,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
+          inputFingerprint: sha256:e8e0cccc077b25b97b8f258c9080bb14bc00efdb0e54852e06c9e6e71512b7a4,
+        },
+    },
+    {
+      id: ticket11-terminology-land-level-5-title,
+      reason: levels.land.levels.5.title
+        是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
+      checkId: terminology,
+      sourceKey: 'levels.yml:["land","levels","5","title"]',
+      language: zh-CN,
+      inputFingerprint: sha256:b0ad125a4fd7a00adad1fe4104b65a69b8e1cc6b8d0ac765166d60afff4161da,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:85c35dda3b026c0e652db7e68df9f732c0d7c21708ed767789650682f3f0f2dd,
+        },
+    },
+    {
+      id: ticket11-terminology-nation-level-2-title,
+      reason:
+        levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation
+        实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。,
+      checkId: terminology,
+      sourceKey: 'levels.yml:["nation","levels","2","title"]',
+      language: zh-CN,
+      inputFingerprint: sha256:a27e78a5341e5f3a9ded50cc2dcbf8a64510b8d8fbbe89c20acd783b54ce5dd3,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:4d6b50472dcedb74c612d1fcec46a3ae40cc93ea95cc17b49097f11c7743cca0,
+        },
+    },
+    {
+      id: ticket11-minimessage-tag-mismatch-migration-confirm,
+      reason:
+        target 仅删除 hover 起首会显示为字面文字的孤立 </t>，保持主题、命令和变量。source 仍原样保存，因此
+        hover-text context 少一个 closing t；只接受这一具体
+        tag-mismatch，其他标签、变量和语法检查继续生效。,
+      checkId: minimessage-tag-correspondence,
+      sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
+      language: zh-CN,
+      inputFingerprint: sha256:bf8b1c7557162b80fb56dd46804b513c83b180bdf56509ffa473a0b499b27c76,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:1,
+          configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
+          inputFingerprint: sha256:9940d7858195e8d664de246a180534a224fa35a6e9f7969ec56190f723b219d7,
+        },
+    },
+    {
+      id: ticket11-minimessage-nesting-invalid-migration-confirm,
+      reason:
+        固定 8.9.2 原文 hover 起首含无匹配打开的 </t>，官方宽容解析会留下可见字面串。保留真实来源基线及摘要，仅就此上游具体
+        nesting 诊断请求决定；不将来源错误自动视为通过。,
+      checkId: minimessage-nesting,
+      sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
+      language: zh-CN,
+      inputFingerprint: sha256:5da6b6b805b7cd89cacf398620da63e320be9bcbd2d8bdf01a35c8cfc05ba6dc,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:1,
+          configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
+          inputFingerprint: sha256:676253beb3db2d6205e67c2b0f2ec7365091a7048129fcbc238b8128ff19d13e,
+        },
+    },
+  ]
