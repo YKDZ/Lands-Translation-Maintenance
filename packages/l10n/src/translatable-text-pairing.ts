@@ -41,6 +41,92 @@ function documentsFor(
   );
 }
 
+type IdenticalFieldHoverOwner =
+  | { readonly state: "identified"; readonly identity: JsonValue }
+  | { readonly state: "different" }
+  | { readonly state: "unknown" };
+
+function identicalFieldHoverOwner(
+  project: MiniMessageParseProject,
+  document: Pick<TranslatableTextDocument, "message" | "path">,
+  frame: MiniMessageContextFrame,
+): IdenticalFieldHoverOwner {
+  const { message } = document;
+  if (
+    message.targetStatus !== "present" ||
+    message.target === undefined ||
+    canonicalJson(message.source) !== canonicalJson(message.target)
+  ) {
+    return { state: "different" };
+  }
+
+  const rootsFor = (origin: "source" | "target") =>
+    project.documents.filter(
+      (candidate) =>
+        candidate.message.id === message.id &&
+        candidate.origin === origin &&
+        candidate.documentIndex === 0 &&
+        candidate.path.length <= document.path.length &&
+        canonicalJson(candidate.path) ===
+          canonicalJson(document.path.slice(0, candidate.path.length)),
+    );
+  const sourceRoots = rootsFor("source");
+  const targetRoots = rootsFor("target");
+  if (sourceRoots.length !== 1 || targetRoots.length !== 1) {
+    return { state: "unknown" };
+  }
+
+  const sourceRoot = sourceRoots[0]!;
+  const targetRoot = targetRoots[0]!;
+  if (
+    sourceRoot.status !== "parsed" ||
+    targetRoot.status !== "parsed" ||
+    sourceRoot.input !== targetRoot.input ||
+    sourceRoot.surface !== targetRoot.surface ||
+    !samePosition(sourceRoot.range, targetRoot.range) ||
+    canonicalJson(sourceRoot.context) !== canonicalJson(targetRoot.context)
+  ) {
+    return { state: "unknown" };
+  }
+
+  const hoverNodes = (root: ParsedMiniMessageDocument) =>
+    root.nodes.filter(
+      (node) =>
+        node.kind === "tag" &&
+        node.name === "hover" &&
+        !node.closing &&
+        samePosition(node.position, frame.position),
+    );
+  const sourceHovers = hoverNodes(sourceRoot);
+  const targetHovers = hoverNodes(targetRoot);
+  if (sourceHovers.length !== 1 || targetHovers.length !== 1) {
+    return { state: "unknown" };
+  }
+
+  const sourceHover = sourceHovers[0]!;
+  const targetHover = targetHovers[0]!;
+  if (
+    sourceHover.kind !== "tag" ||
+    targetHover.kind !== "tag" ||
+    canonicalJson(sourceHover.context) !== canonicalJson(targetHover.context)
+  ) {
+    return { state: "unknown" };
+  }
+  return {
+    state: "identified",
+    identity: {
+      kind: "identical-field-hover",
+      name: sourceHover.name,
+      position: { ...frame.position },
+      context: sourceHover.context.map(({ kind, name, position }) => ({
+        kind,
+        name,
+        position: { ...position },
+      })),
+    },
+  };
+}
+
 type HoverHostClick =
   | { readonly state: "identified"; readonly identity: JsonValue }
   | { readonly state: "none" }
@@ -121,6 +207,17 @@ export function translatableTextOwnerIdentity(
       const hostClick = hoverHostClick(project, document, frame);
       if (hostClick.state === "unknown") return undefined;
       if (hostClick.state === "identified") owners.push(hostClick.identity);
+      if (hostClick.state === "none") {
+        const identicalOwner = identicalFieldHoverOwner(
+          project,
+          document,
+          frame,
+        );
+        if (identicalOwner.state === "unknown") return undefined;
+        if (identicalOwner.state === "identified") {
+          owners.push(identicalOwner.identity);
+        }
+      }
       continue;
     }
     if (frame.kind === "tag-argument") {
