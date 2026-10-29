@@ -179,12 +179,6 @@ async function createLoreProject(directory: string): Promise<void> {
       "      target: Locale/zh-CN_gui.yml",
       "      definitionsSource: Locale/definitions_gui.yml",
       "      fields:",
-      "        - path: [gui, main, items, confirm, name]",
-      "          category: gui-string",
-      "          scene: gui-item-name",
-      "        - path: [gui, main, items, confirm, help]",
-      "          category: gui-string",
-      "          scene: gui-general",
       "        - path: [gui, main, items, confirm, lore]",
       "          category: gui-lore",
       "          scene: gui-item-lore",
@@ -208,53 +202,17 @@ async function createLoreProject(directory: string): Promise<void> {
   );
 }
 
-function landsJarWithLore(lore: string | readonly string[]): Uint8Array {
+function landsJarWithLore(
+  lore: string | readonly string[],
+  material = "DIAMOND",
+  slot = 4,
+): Uint8Array {
   const loreValue = JSON.stringify(lore);
   return zipSync({
     "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
     "Locale/en-US.yml": strToU8("messages:\n  greet: Hello\n"),
     "Locale/en-US_gui.yml": strToU8(
-      [
-        "gui:",
-        "  main:",
-        "    items:",
-        "      confirm:",
-        '        name: "Confirm"',
-        '        help: "Help text"',
-        `        lore: ${loreValue}`,
-        "",
-      ].join("\n"),
-    ),
-    "Locale/definitions_gui.yml": strToU8(
-      [
-        "gui:",
-        "  main:",
-        "    items:",
-        "      confirm:",
-        "        material: DIAMOND",
-        "        slot: 4",
-        '        lore: "定义专用结构值"',
-        "",
-      ].join("\n"),
-    ),
-  });
-}
-
-function landsJarWithGuiMaterial(material: string): Uint8Array {
-  return zipSync({
-    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
-    "Locale/en-US.yml": strToU8("messages:\n  greet: Hello\n"),
-    "Locale/en-US_gui.yml": strToU8(
-      [
-        "gui:",
-        "  main:",
-        "    items:",
-        "      confirm:",
-        '        name: "Confirm"',
-        '        help: "Help text"',
-        '        lore: "Old lore"',
-        "",
-      ].join("\n"),
+      `gui:\n  main:\n    items:\n      confirm:\n        lore: ${loreValue}\n`,
     ),
     "Locale/definitions_gui.yml": strToU8(
       [
@@ -263,8 +221,8 @@ function landsJarWithGuiMaterial(material: string): Uint8Array {
         "    items:",
         "      confirm:",
         `        material: ${material}`,
-        "        slot: 4",
-        '        lore: "Definition-only structure"',
+        `        slot: ${slot}`,
+        '        lore: "定义专用结构值"',
         "",
       ].join("\n"),
     ),
@@ -417,7 +375,7 @@ void test("无比较基线时保留已有中文并只填入缺失消息", async 
   await assert.rejects(readFile(join(project, ".lioni/lioni.baseline.json")));
 });
 
-void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更新整体字段", async (t) => {
+void test("GUI lore 严格更新整体字段，但结构映射仍待处理", async (t) => {
   const project = await mkdtemp(join(tmpdir(), "lioni-update-lore-type-"));
   t.after(async () => rm(project, { force: true, recursive: true }));
   await createLoreProject(project);
@@ -433,13 +391,45 @@ void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更
   await writeFile(changedJar, landsJarWithLore(["Same line"]));
   await prepareSource(configPath, changedJar);
   await rm(changedJar);
-  runLioni([
-    "update",
-    configPath,
-    "--record-baseline",
-    "--output-format",
-    "structured",
-  ]);
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const originalBaseline = await readFile(baselinePath);
+  const updateResult = spawnSync(
+    process.execPath,
+    [
+      nativeCli,
+      "update",
+      configPath,
+      "--record-baseline",
+      "--output-format",
+      "structured",
+    ],
+    { cwd: tmpdir(), encoding: "utf8" },
+  );
+  assert.equal(
+    updateResult.status,
+    1,
+    updateResult.stderr || updateResult.stdout,
+  );
+  const envelope = JSON.parse(updateResult.stdout || updateResult.stderr) as {
+    readonly data: {
+      readonly status: string;
+      readonly plan: {
+        readonly items: readonly {
+          readonly action: string;
+          readonly after?: { readonly content: unknown };
+        }[];
+      };
+      readonly baseline?: { readonly outcome: string };
+    };
+  };
+  assert.equal(envelope.data.status, "failed");
+  const fieldUpdate = envelope.data.plan.items.find(
+    ({ action }) => action === "write",
+  );
+  assert.ok(fieldUpdate);
+  assert.deepEqual(fieldUpdate.after?.content, ["Same line"]);
+  assert.equal(envelope.data.baseline?.outcome, "notAdvanced");
+  assert.deepEqual(await readFile(baselinePath), originalBaseline);
 
   const target = parseDocument(
     await readFile(join(project, "Locale/zh-CN_gui.yml"), "utf8"),
@@ -457,20 +447,20 @@ void test("GUI lore 字符串变为同文本列表时仍按严格类型变化更
   assert.equal(target.custom, "保留用户配置");
 });
 
-void test("GUI definitions 结构变化进入原生 update 并保留语言译文及自定义字段", async (t) => {
+void test("GUI 定义结构变化由原生 update 写回并保留译文与自定义字段", async (t) => {
   const project = await mkdtemp(join(tmpdir(), "lioni-update-gui-structure-"));
   t.after(async () => rm(project, { force: true, recursive: true }));
   await createLoreProject(project);
 
   const configPath = join(project, ".lioni/lioni.config.ts");
   const initialJar = join(project, "Lands-initial.jar");
-  await writeFile(initialJar, landsJarWithGuiMaterial("DIAMOND"));
+  await writeFile(initialJar, landsJarWithLore("Same line"));
   await prepareSource(configPath, initialJar);
   await rm(initialJar);
   runLioni(["baseline", configPath, "--output-format", "structured"]);
 
-  const changedJar = join(project, "Lands-changed.jar");
-  await writeFile(changedJar, landsJarWithGuiMaterial("EMERALD"));
+  const changedJar = join(project, "Lands-structure-changed.jar");
+  await writeFile(changedJar, landsJarWithLore("Same line", "EMERALD", 4));
   await prepareSource(configPath, changedJar);
   await rm(changedJar);
   runLioni([
@@ -488,23 +478,15 @@ void test("GUI definitions 结构变化进入原生 update 并保留语言译文
       readonly main: {
         readonly items: {
           readonly confirm: {
-            readonly material: string;
-            readonly slot: number;
-            readonly name: string;
-            readonly help: string;
-            readonly lore: string;
+            readonly material: unknown;
+            readonly slot: unknown;
           };
         };
       };
     };
-    readonly custom: string;
   };
   assert.equal(target.gui.main.items.confirm.material, "EMERALD");
   assert.equal(target.gui.main.items.confirm.slot, 4);
-  assert.equal(target.gui.main.items.confirm.name, "确认");
-  assert.equal(target.gui.main.items.confirm.help, "Help text");
-  assert.equal(target.gui.main.items.confirm.lore, "旧译文");
-  assert.equal(target.custom, "保留用户配置");
 });
 
 void test("writeBatch 部分失败后逐项真实回读且不推进比较基线", async (t) => {

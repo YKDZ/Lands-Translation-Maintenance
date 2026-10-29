@@ -375,6 +375,18 @@ async function readProjectInput(paths: LandsProjectPaths): Promise<{
   };
 }
 
+/** 判断项目配置是否包含尚未接入更新计划的结构映射。 */
+export async function hasLandsStructureMappings(
+  entryUrl: string | URL,
+): Promise<boolean> {
+  const paths = landsProjectPaths(entryUrl);
+  const source = await readFile(paths.legacyManifestFile, "utf8");
+  const configuration = configurationFrom(source, paths.legacyManifestFile);
+  return configuration.translationScope.mappings.some(
+    ({ definitionsSource }) => definitionsSource !== undefined,
+  );
+}
+
 function parseResource(bytes: Uint8Array, path: string): ReadResourceResult {
   let text: string;
   try {
