@@ -3,6 +3,7 @@ import type {
   MiniMessageContextFrame,
   MiniMessageIncompleteFact,
   MiniMessageParseProject,
+  ParsedMiniMessageDocument,
   TranslatableTextDocument,
 } from "#/mini-message-model";
 import { canonicalJson } from "#/value";
@@ -13,6 +14,95 @@ export interface TranslatableTextPairing {
     readonly targetDocument: TranslatableTextDocument;
   }[];
   readonly incomplete: readonly MiniMessageIncompleteFact[];
+}
+
+function samePosition(
+  left: { readonly start: number; readonly end: number },
+  right: { readonly start: number; readonly end: number },
+): boolean {
+  return left.start === right.start && left.end === right.end;
+}
+
+function documentsFor(
+  project: MiniMessageParseProject,
+  document: Pick<
+    TranslatableTextDocument,
+    "message" | "origin" | "path" | "file"
+  >,
+): readonly ParsedMiniMessageDocument[] {
+  return project.documents.filter(
+    (candidate) =>
+      candidate.message.id === document.message.id &&
+      candidate.origin === document.origin &&
+      candidate.file === document.file &&
+      candidate.path.length <= document.path.length &&
+      canonicalJson(candidate.path) ===
+        canonicalJson(document.path.slice(0, candidate.path.length)),
+  );
+}
+
+type HoverHostClick =
+  | { readonly state: "identified"; readonly identity: JsonValue }
+  | { readonly state: "none" }
+  | { readonly state: "unknown" };
+
+/** 通过官方解析节点的位置与上下文确认 hover 所属的 click 组件。 */
+function hoverHostClick(
+  project: MiniMessageParseProject,
+  document: Pick<
+    TranslatableTextDocument,
+    "message" | "origin" | "path" | "file"
+  >,
+  frame: MiniMessageContextFrame,
+): HoverHostClick {
+  const matchingDocuments = documentsFor(project, document).filter(
+    (candidate) =>
+      candidate.nodes.some(
+        (node) =>
+          node.kind === "tag" &&
+          node.name === "hover" &&
+          !node.closing &&
+          samePosition(node.position, frame.position),
+      ),
+  );
+  if (matchingDocuments.length !== 1) return { state: "unknown" };
+
+  const [ownerDocument] = matchingDocuments;
+  if (ownerDocument === undefined) return { state: "unknown" };
+  const hostClicks = ownerDocument.nodes.filter((node) => {
+    if (node.kind !== "tag" || node.name !== "click" || node.closing) {
+      return false;
+    }
+    const frameIndex = node.context.findIndex(
+      (candidate) =>
+        candidate.kind === "tag" &&
+        candidate.name === "hover" &&
+        samePosition(candidate.position, frame.position),
+    );
+    return (
+      frameIndex >= 0 &&
+      !node.context
+        .slice(frameIndex + 1)
+        .some(
+          (candidate) => candidate.kind === "tag" && candidate.name === "click",
+        )
+    );
+  });
+  if (hostClicks.length === 0) return { state: "none" };
+  if (hostClicks.length !== 1) return { state: "unknown" };
+
+  const [click] = hostClicks;
+  if (click?.kind !== "tag" || click.parameters.length === 0) {
+    return { state: "unknown" };
+  }
+  return {
+    state: "identified",
+    identity: {
+      kind: "hover-host-click",
+      name: click.name,
+      parameters: click.parameters,
+    },
+  };
 }
 
 export function translatableTextOwnerIdentity(
@@ -26,29 +116,26 @@ export function translatableTextOwnerIdentity(
   if (context.length === 0) return [];
   const owners: JsonValue[] = [];
   for (const frame of context) {
-    if (frame.kind === "hover-text" || frame.kind === "tag-argument") {
+    if (frame.kind === "hover-text") {
+      owners.push({ kind: frame.kind, name: frame.name });
+      const hostClick = hoverHostClick(project, document, frame);
+      if (hostClick.state === "unknown") return undefined;
+      if (hostClick.state === "identified") owners.push(hostClick.identity);
+      continue;
+    }
+    if (frame.kind === "tag-argument") {
       owners.push({ kind: frame.kind, name: frame.name });
       continue;
     }
     if (frame.kind !== "tag" || frame.name !== "click") continue;
-    const matchingTags = project.documents
-      .filter(
-        (candidate) =>
-          candidate.message.id === document.message.id &&
-          candidate.origin === document.origin &&
-          candidate.file === document.file &&
-          candidate.path.length <= document.path.length &&
-          canonicalJson(candidate.path) ===
-            canonicalJson(document.path.slice(0, candidate.path.length)),
-      )
+    const matchingTags = documentsFor(project, document)
       .flatMap((candidate) => candidate.nodes)
       .filter(
         (node) =>
           node.kind === "tag" &&
           node.name === frame.name &&
           !node.closing &&
-          node.position.start === frame.position.start &&
-          node.position.end === frame.position.end,
+          samePosition(node.position, frame.position),
       );
     if (matchingTags.length !== 1) return undefined;
     const owner = matchingTags[0];
@@ -108,6 +195,13 @@ export function pairTranslatableTextDocuments(
       pairs.push({ sourceDocument: source[0]!, targetDocument: target[0]! });
       continue;
     }
+    if (
+      source.length === 1 &&
+      target.length === 0 &&
+      hasExplicitEmptyTranslation(source[0]!)
+    ) {
+      continue;
+    }
     for (const document of [...source, ...target]) {
       incomplete.push({
         code: "minimessage.text-pair-not-unique",
@@ -122,4 +216,31 @@ export function pairTranslatableTextDocuments(
     }
   }
   return { pairs, incomplete };
+}
+
+export function hasExplicitEmptyTranslation(
+  document: TranslatableTextDocument,
+): boolean {
+  const { message, path } = document;
+  if (message.targetStatus !== "present") return false;
+  if (
+    path.length === message.path.length &&
+    canonicalJson(path) === canonicalJson(message.path)
+  ) {
+    return message.target === "";
+  }
+  if (
+    !Array.isArray(message.source) ||
+    !Array.isArray(message.target) ||
+    path.length !== message.path.length + 1 ||
+    canonicalJson(path.slice(0, message.path.length)) !==
+      canonicalJson(message.path)
+  ) {
+    return false;
+  }
+  const itemIndex = path.at(-1);
+  return (
+    typeof itemIndex === "number" &&
+    (itemIndex >= message.target.length || message.target[itemIndex] === "")
+  );
 }

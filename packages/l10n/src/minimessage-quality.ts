@@ -453,10 +453,7 @@ export async function loadMiniMessageQualityDependencies(
   let sourceVersion = "";
   let theme: MiniMessageThemeInput = { issues: [] };
   try {
-    landsProjection = await readLandsStructureProjection(
-      entryUrl,
-      facts.source.units,
-    );
+    landsProjection = await readLandsStructureProjection(entryUrl);
     sourceVersion = landsProjection.sourceVersion;
     theme = themeInputFrom(landsProjection);
   } catch (error) {

@@ -591,10 +591,12 @@ function messagesToParseInputs(
     input: string,
     listItems?: readonly MiniMessageListItemRange[],
   ): void {
+    // 保留空文档以便原译配对；官方解析器只处理非空内容。
     const isLegacyColor = message.format?.includes("legacy-color") ?? false;
-    const legacy = isLegacyColor
-      ? adaptLegacyMiniMessageInput(input, sourceVersion)
-      : undefined;
+    const legacy =
+      isLegacyColor && input !== ""
+        ? adaptLegacyMiniMessageInput(input, sourceVersion)
+        : undefined;
     const adapted =
       legacy ??
       ({
@@ -615,7 +617,8 @@ function messagesToParseInputs(
       input,
       ...(listItems === undefined ? {} : { listItems }),
       adapted,
-      legacyAdapterUnsupported: isLegacyColor && legacy === undefined,
+      legacyAdapterUnsupported:
+        isLegacyColor && input !== "" && legacy === undefined,
       legacyIssues: legacy?.issues ?? [],
       range: { start: 0, end: input.length },
     });
@@ -1859,7 +1862,8 @@ export async function parseMiniMessages(
   const { messages, resources, sourceVersion, theme: themeInput } = input;
   const theme = parseTheme(themeInput.theme);
   const inputs = messagesToParseInputs(messages, resources, sourceVersion);
-  const java = await runOfficialParser(theme.definitions, inputs);
+  const parserInputs = inputs.filter(({ input: value }) => value !== "");
+  const java = await runOfficialParser(theme.definitions, parserInputs);
   const findings = [...theme.findings];
   const mapFindings: MiniMessageFinding[] = [];
   const unavailable = new Set<string>();
@@ -1942,7 +1946,7 @@ export async function parseMiniMessages(
     }
   }
   appendParserFindings(
-    inputs,
+    parserInputs,
     java,
     findings,
     unavailable,
@@ -1984,7 +1988,8 @@ export async function parseMiniMessages(
   }
   for (const input of inputs) {
     if (rootDocuments.has(input.index)) continue;
-    const result = java.messages.get(input.index);
+    const result =
+      input.input === "" ? { plainText: "" } : java.messages.get(input.index);
     documentResults.push({
       message: input.message,
       documentIndex: 0,
@@ -1994,7 +1999,7 @@ export async function parseMiniMessages(
       surface: input.surface,
       input: input.input,
       range: input.range,
-      status: parserStatus(input, java),
+      status: input.input === "" ? "parsed" : parserStatus(input, java),
       ...(result?.plainText === undefined
         ? {}
         : { plainText: result.plainText }),

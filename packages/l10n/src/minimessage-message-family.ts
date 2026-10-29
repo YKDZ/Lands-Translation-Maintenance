@@ -280,6 +280,7 @@ function familyGroup(
   source: readonly MessageFamilyFragment[],
   target: readonly MessageFamilyFragment[] | undefined,
   targetIssues: readonly MessageFamilyIssue[],
+  targetKnownEmpty = false,
 ): MessageFamilyInput["groups"][number] {
   const sourceRef: JsonValue = {
     messageId: sourceDocument.message.id,
@@ -291,7 +292,14 @@ function familyGroup(
   };
   const targetRef: JsonValue =
     targetDocument === undefined
-      ? { messageId: sourceDocument.message.id, state: "target-unavailable" }
+      ? targetKnownEmpty
+        ? {
+            messageId: sourceDocument.message.id,
+            file: sourceDocument.message.targetFile,
+            path: [...sourceDocument.path],
+            state: "target-empty",
+          }
+        : { messageId: sourceDocument.message.id, state: "target-unavailable" }
       : {
           messageId: targetDocument.message.id,
           documentIndex: targetDocument.documentIndex,
@@ -300,6 +308,7 @@ function familyGroup(
           contextKey,
           fragments: (target ?? []).map(({ ref }) => ref),
         };
+  const targetComplete = targetDocument !== undefined || targetKnownEmpty;
   return {
     ref: { source: sourceRef, target: targetRef },
     scope: familyScope(sourceDocument, contextKey),
@@ -310,7 +319,7 @@ function familyGroup(
     target: {
       language,
       fragments: target ?? [],
-      ...(targetDocument === undefined || targetIssues.length > 0
+      ...(!targetComplete || targetIssues.length > 0
         ? { complete: false, issues: targetIssues }
         : {}),
     },
@@ -337,6 +346,28 @@ function issueAppliesToDocument(
   return (
     (file === document.file || file === document.message.targetFile) &&
     canonicalJson(path) === canonicalJson(document.path)
+  );
+}
+
+function isExplicitlyEmptyTarget(
+  message: MiniMessageInputMessage,
+  document: TranslatableTextDocument,
+): boolean {
+  // 已知空译文可形成空签名；读取或配对缺口仍由后续完整性标记保留。
+  if (message.targetStatus !== "present") return false;
+  if (Array.isArray(message.target)) {
+    const itemIndex = document.path.at(-1);
+    return (
+      document.path.length === message.path.length + 1 &&
+      canonicalJson(document.path.slice(0, message.path.length)) ===
+        canonicalJson(message.path) &&
+      typeof itemIndex === "number" &&
+      (itemIndex >= message.target.length || message.target[itemIndex] === "")
+    );
+  }
+  return (
+    canonicalJson(document.path) === canonicalJson(message.path) &&
+    message.target === ""
   );
 }
 
@@ -456,6 +487,10 @@ async function projectMessage(
     const documentTargetIssues = targetIssues.filter((issue) =>
       issueAppliesToDocument(issue, sourceDocument),
     );
+    const explicitEmptyTarget = isExplicitlyEmptyTarget(
+      message,
+      sourceDocument,
+    );
     const extraTargetContexts =
       targetProjection === undefined
         ? []
@@ -475,7 +510,7 @@ async function projectMessage(
     for (const [contextKey, sourceFragments] of sourceProjection.groups) {
       const targetFragments = targetProjection?.groups.get(contextKey);
       const contextIssues = [...documentTargetIssues];
-      if (targetFragments === undefined) {
+      if (targetFragments === undefined && !explicitEmptyTarget) {
         contextIssues.push({
           code: "message-family-target-context-missing",
           message: "译文没有提供与该原文上下文对应的正文。",
@@ -499,6 +534,7 @@ async function projectMessage(
           sourceFragments,
           targetFragments,
           contextIssues,
+          explicitEmptyTarget,
         ),
       );
     }
@@ -506,6 +542,7 @@ async function projectMessage(
 
   for (const sourceDocument of sourceDocuments) {
     if (pairedSources.has(sourceDocument)) continue;
+    if (isExplicitlyEmptyTarget(message, sourceDocument)) continue;
     const sourceProjection = projectSide(sourceDocument);
     sourceIssues.push(...sourceProjection.issues);
     for (const [contextKey, sourceFragments] of sourceProjection.groups) {
