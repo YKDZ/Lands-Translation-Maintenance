@@ -34,14 +34,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@lioni/lioni": "0.2.0",
-    "fflate": "0.8.3",
-    "parse5": "8.0.1",
-    "yaml": "2.9.1",
-    "zod": "4.6.7"
+    "@lioni/lioni": "catalog:",
+    "fflate": "catalog:",
+    "parse5": "catalog:",
+    "yaml": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@lands-l10n/typescript-config": "workspace:*",
+    "@lands-l10n/typescript-config": "catalog:",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
