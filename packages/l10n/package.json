@@ -19,6 +19,11 @@
       "source": "./lioni.config.ts",
       "types": "./lioni.config.ts",
       "default": "./lioni.config.ts"
+    },
+    "./maintenance": {
+      "source": "./src/lioni/maintenance.ts",
+      "types": "./src/lioni/maintenance.ts",
+      "default": "./dist/lioni/maintenance.js"
     }
   },
   "scripts": {

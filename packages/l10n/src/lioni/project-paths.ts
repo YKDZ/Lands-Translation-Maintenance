@@ -8,6 +8,7 @@ export interface LandsProjectPaths {
   readonly sourceDirectory: string;
   readonly projectConfigurationFile: string;
   readonly exceptionFile: string;
+  readonly baselineFile: string;
   readonly termbaseDirectory: string;
 }
 
@@ -29,6 +30,7 @@ export function landsProjectPaths(entryUrl: string | URL): LandsProjectPaths {
     sourceDirectory: join(maintenanceDirectory, "source"),
     projectConfigurationFile: join(maintenanceDirectory, "project.yml"),
     exceptionFile: join(maintenanceDirectory, "lioni.exceptions.yaml"),
+    baselineFile: join(maintenanceDirectory, "lioni.baseline.json"),
     termbaseDirectory: join(maintenanceDirectory, "terms"),
   };
 }

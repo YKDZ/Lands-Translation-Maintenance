@@ -64,6 +64,15 @@
       "cache": false,
       "tags": ["work:repair"]
     },
+    "//#l10n:update": {
+      "cache": false,
+      "dependsOn": [
+        "@lands-l10n/l10n#build",
+        "@lands-l10n/l10n#build:minimessage"
+      ],
+      "outputs": [],
+      "tags": ["work:on-demand"]
+    },
     "//#typecheck": {
       "inputs": [
         "$TURBO_DEFAULT$",

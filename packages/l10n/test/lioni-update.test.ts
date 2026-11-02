@@ -21,6 +21,7 @@ import { parseDocument } from "yaml";
 
 import { createLandsConfig } from "../lioni.config.ts";
 import { readLandsStructureProjection } from "../src/lioni/lands-facts.ts";
+import { runLandsUpdateStage } from "../src/lioni/update-stage.ts";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nativeCli = join(packageDirectory, "node_modules/.bin/lioni");
@@ -1718,5 +1719,117 @@ void test("执行期间来源变化时保留已写结果但不推进比较基线
   ).toJS() as { readonly messages: Record<string, unknown> };
   assert.equal(target.messages.greet, "Hello again");
   assert.equal(target.messages.leave, "Goodbye again");
+  assert.deepEqual(await readFile(project.baselinePath), originalBaseline);
+});
+
+void test("同步阶段使用正式更新与 QA，数据错误不阻止完整阶段", async (t) => {
+  const project = await prepareBaselineUpdate(t);
+  await mkdir(join(project.projectDirectory, ".lioni/terms"), {
+    recursive: true,
+  });
+  await Promise.all(
+    ["concepts", "en-US", "zh-CN"].map((name) =>
+      writeFile(
+        join(project.projectDirectory, `.lioni/terms/${name}.yaml`),
+        "concepts: {}\n",
+      ),
+    ),
+  );
+  const initialJar = join(project.projectDirectory, "Lands-initial.jar");
+  await writeFile(
+    initialJar,
+    landsJar(
+      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
+    ),
+  );
+  await prepareSource(project.configPath, initialJar, "8.9.2");
+  await rm(initialJar);
+  await writeFile(
+    project.targetPath,
+    (await readFile(project.targetPath, "utf8")).replace(
+      "greet: 你好 # 保留字段注释",
+      'greet: "<red>人工翻译</red>" # 保留字段注释',
+    ),
+  );
+
+  const first = await runLandsUpdateStage(project.configPath);
+  assert.equal(first.status, "completed");
+  assert.equal(first.qualityDecision.executionStatus, "complete");
+  assert.equal(first.qualityDecision.passed, false);
+  assert.ok(first.qualityDecision.activeErrorCount > 0);
+  assert.match(first.qualityReport, /质量结论/u);
+
+  const translatedTarget = await readFile(project.targetPath, "utf8");
+  const recordedBaseline = await readFile(project.baselinePath);
+  const repeated = await runLandsUpdateStage(project.configPath);
+  assert.equal(repeated.status, "completed");
+  assert.equal(await readFile(project.targetPath, "utf8"), translatedTarget);
+  assert.deepEqual(await readFile(project.baselinePath), recordedBaseline);
+
+  await writeFile(
+    project.targetPath,
+    translatedTarget.replace(
+      'greet: "<red>人工翻译</red>"',
+      "greet: 人工二次校订",
+    ),
+  );
+  const editedTarget = await readFile(project.targetPath, "utf8");
+  const edited = await runLandsUpdateStage(project.configPath);
+  assert.equal(edited.status, "completed");
+  assert.equal(await readFile(project.targetPath, "utf8"), editedTarget);
+});
+
+void test("同步阶段的部分写入保留实际修改且不推进比较基线", async (t) => {
+  const project = await prepareBaselineUpdate(t);
+  const originalTarget = await readFile(project.targetPath);
+  const originalBaseline = await readFile(project.baselinePath);
+  await writeFile(
+    project.configPath,
+    [
+      'import { createLandsConfig } from "@lands-l10n/l10n/lioni.config";',
+      "",
+      "const config = createLandsConfig(import.meta.url);",
+      "const adapter = config.translationWriteback;",
+      "if (adapter === undefined || adapter.writeBatch === undefined) {",
+      '  throw new Error("测试配置缺少批量写回接口。");',
+      "}",
+      "const writeBatch = adapter.writeBatch;",
+      "export default {",
+      "  ...config,",
+      "  translationWriteback: {",
+      "    ...adapter,",
+      "    writeBatch: async (input: Parameters<typeof writeBatch>[0]) => {",
+      "      await writeBatch({ requests: input.requests.slice(0, 1) });",
+      '      throw new Error("测试中断批次");',
+      "    },",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const result = await runLandsUpdateStage(project.configPath);
+
+  assert.equal(result.status, "sync-incomplete");
+  assert.equal(result.update?.status, "failed");
+  assert.equal(result.update?.baseline?.outcome, "notAdvanced");
+  assert.notDeepEqual(await readFile(project.targetPath), originalTarget);
+  assert.deepEqual(await readFile(project.baselinePath), originalBaseline);
+});
+
+void test("同步阶段遇到不完整事实时不运行写回", async (t) => {
+  const project = await prepareBaselineUpdate(t);
+  const originalTarget = await readFile(project.targetPath);
+  const originalBaseline = await readFile(project.baselinePath);
+  await writeFile(
+    join(project.projectDirectory, ".lioni/source/current.json"),
+    "{}\n",
+  );
+
+  const result = await runLandsUpdateStage(project.configPath);
+
+  assert.equal(result.status, "sync-incomplete");
+  assert.equal(result.update, undefined);
+  assert.deepEqual(await readFile(project.targetPath), originalTarget);
   assert.deepEqual(await readFile(project.baselinePath), originalBaseline);
 });
