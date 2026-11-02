@@ -73,6 +73,11 @@
       "outputs": [],
       "tags": ["work:on-demand"]
     },
+    "//#l10n:review": {
+      "cache": false,
+      "outputs": [],
+      "tags": ["work:on-demand"]
+    },
     "//#l10n:submit": {
       "cache": false,
       "outputs": [],
@@ -91,6 +96,12 @@
     "//#test:task-gates": {
       "outputs": [],
       "tags": ["quality:light"]
+    },
+    "//#test:l10n-review": {
+      "cache": false,
+      "dependsOn": ["@lands-l10n/l10n#build:minimessage"],
+      "outputs": [],
+      "tags": ["quality:heavy"]
     },
     "//#test:l10n-submit": {
       "outputs": [],
