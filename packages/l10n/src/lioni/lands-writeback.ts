@@ -17,7 +17,7 @@ import {
   isYamlDocumentRootMap,
   parseYaml,
   reorderYamlMapping,
-  setDocumentPath,
+  setDocumentPathPreservingMappingOrder,
 } from "#/yaml-data";
 
 interface LandsTarget {
@@ -250,7 +250,11 @@ export function createLandsWritebackAdapter<
             continue;
           }
           if (request.operation === "write") {
-            setDocumentPath(document, path, request.content);
+            setDocumentPathPreservingMappingOrder(
+              document,
+              path,
+              request.content,
+            );
           } else {
             document.deleteIn(path);
             deletedPaths.push(path);

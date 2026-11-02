@@ -1,5 +1,6 @@
 import {
   isMap,
+  isNode,
   isScalar,
   LineCounter,
   Pair,
@@ -7,6 +8,7 @@ import {
   Scalar,
   YAMLMap,
   type Document,
+  type Node,
 } from "yaml";
 
 import type { JsonValue } from "#/json-value";
@@ -182,6 +184,81 @@ export function setDocumentPath(
   value: JsonValue,
 ): void {
   document.setIn(path, value);
+}
+
+function mergeYamlNodeByExistingPairOrder(
+  current: unknown,
+  incoming: unknown,
+): unknown {
+  if (isMap(current) && isMap(incoming)) {
+    const incomingPairs = new Map<string, Pair>();
+    for (const pair of incoming.items) {
+      const key = pairKey(pair);
+      if (key !== undefined) incomingPairs.set(key, pair);
+    }
+
+    const retainedKeys = new Set<string>();
+    const pairs: Pair[] = [];
+    for (const pair of current.items) {
+      const key = pairKey(pair);
+      const nextPair = key === undefined ? undefined : incomingPairs.get(key);
+      if (key === undefined || nextPair === undefined) continue;
+      retainedKeys.add(key);
+      pair.value = mergeYamlNodeByExistingPairOrder(pair.value, nextPair.value);
+      pairs.push(pair);
+    }
+    for (const pair of incoming.items) {
+      const key = pairKey(pair);
+      if (key === undefined || !retainedKeys.has(key)) pairs.push(pair);
+    }
+    current.items = pairs;
+    return current;
+  }
+
+  if (isScalar(current) && isScalar(incoming)) {
+    if (typeof current.value === typeof incoming.value) {
+      current.value = incoming.value;
+      if (incoming.tag === undefined) delete current.tag;
+      else current.tag = incoming.tag;
+      if (incoming.format === undefined) delete current.format;
+      else current.format = incoming.format;
+      if (incoming.minFractionDigits === undefined)
+        delete current.minFractionDigits;
+      else current.minFractionDigits = incoming.minFractionDigits;
+      return current;
+    }
+  }
+
+  if (isNode(current) && isNode(incoming)) {
+    copyYamlNodeComments(current, incoming);
+  }
+  return incoming;
+}
+
+function copyYamlNodeComments(from: Node, to: Node): void {
+  if (from.comment === undefined) delete to.comment;
+  else to.comment = from.comment;
+  if (from.commentBefore === undefined) delete to.commentBefore;
+  else to.commentBefore = from.commentBefore;
+  if (from.spaceBefore === undefined) delete to.spaceBefore;
+  else to.spaceBefore = from.spaceBefore;
+}
+
+/**
+ * 更新父映射时保留未变更的子映射顺序与节点注释；来源顺序变化由同批顺序事实调整。
+ */
+export function setDocumentPathPreservingMappingOrder(
+  document: Document,
+  path: readonly string[],
+  value: JsonValue,
+): void {
+  const current = document.getIn(path, true);
+  const incoming = document.createNode(value);
+  if (isMap(current) && isMap(incoming)) {
+    mergeYamlNodeByExistingPairOrder(current, incoming);
+  } else {
+    document.setIn(path, value);
+  }
 }
 
 export function isYamlDocumentRootMap(document: Document): boolean {

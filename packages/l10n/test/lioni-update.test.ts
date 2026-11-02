@@ -1517,6 +1517,139 @@ void test("Lands 9.1.1 首次具名等级迁移保留来源顺序与自定义内
   );
 });
 
+void test("普通等级结构值更新保留既有国家等级顺序并推进基线", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-retained-nation-order-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLevelsProject(project);
+
+  const projectConfigurationPath = join(project, ".lioni/project.yml");
+  const projectConfiguration = await readFile(projectConfigurationPath, "utf8");
+  const landFieldsOnly = projectConfiguration.replace(
+    /        - path: \[nation, levels, "\*", name\]\n          category: configuration-string\n          scene: level-title\n/u,
+    "",
+  );
+  assert.notEqual(landFieldsOnly, projectConfiguration);
+  await writeFile(projectConfigurationPath, landFieldsOnly);
+
+  const sourceForCost = (federationCost: number) =>
+    [
+      "land:",
+      "  levels:",
+      "    alpha:",
+      "      name: Alpha",
+      "      cost: 1",
+      "nation:",
+      "  levels:",
+      "    federation:",
+      `      cost: ${federationCost}`,
+      "    alliance:",
+      "      cost: 20",
+      "",
+    ].join("\n");
+  const targetPath = join(project, "levels.yml");
+  await writeFile(
+    targetPath,
+    [
+      "land:",
+      "  levels:",
+      "    alpha:",
+      "      name: Alpha",
+      "      cost: 1",
+      "nation:",
+      "  customSetting: 用户设置",
+      "  levels: # 保留等级映射注释",
+      "    federation: # 保留联邦注释",
+      "      cost: 10 # 保留费用注释",
+      "    customLevel: # 保留自定义槽位",
+      "      cost: 30",
+      "    alliance:",
+      "      cost: 20",
+      "",
+    ].join("\n"),
+  );
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const initialJar = join(project, "Lands-order-initial.jar");
+  await writeFile(initialJar, landsJarWithLevels(sourceForCost(10), "9.1.1"));
+  await prepareSource(configPath, initialJar, "9.1.1");
+  await rm(initialJar);
+
+  const config = createLandsConfig(pathToFileURL(configPath));
+  const baselineStore = createFileComparisonBaselineStore(
+    baselinePath,
+  ) as unknown as BaselineStoreFor<typeof config>;
+  const initialUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(initialUpdate.status, "completed");
+  assert.equal(initialUpdate.baseline?.outcome, "saved");
+
+  const changedJar = join(project, "Lands-order-cost-change.jar");
+  await writeFile(changedJar, landsJarWithLevels(sourceForCost(11), "9.1.2"));
+  await prepareSource(configPath, changedJar, "9.1.2");
+  await rm(changedJar);
+
+  const preview = await previewUpdate(config, baselineStore);
+  assert.equal(
+    preview.items.find(
+      (item) => item.sourceKey === 'structure:levels.yml:["nation"]',
+    )?.action,
+    "write",
+  );
+  assert.equal(
+    preview.items.find(
+      (item) =>
+        item.sourceKey === 'structure-order:levels.yml:["nation","levels"]',
+    )?.action,
+    "retain",
+  );
+
+  const updateResult = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(updateResult.status, "completed");
+  assert.equal(updateResult.baseline?.outcome, "saved");
+
+  const target = parseDocument(await readFile(targetPath, "utf8")).toJS() as {
+    readonly nation: {
+      readonly customSetting: string;
+      readonly levels: Record<string, { readonly cost?: number }>;
+    };
+  };
+  assert.deepEqual(Object.keys(target.nation.levels), [
+    "federation",
+    "customLevel",
+    "alliance",
+  ]);
+  assert.equal(target.nation.levels.federation?.cost, 11);
+  assert.equal(target.nation.levels.customLevel?.cost, 30);
+  assert.equal(target.nation.customSetting, "用户设置");
+  const targetText = await readFile(targetPath, "utf8");
+  assert.match(targetText, /# 保留等级映射注释/u);
+  assert.match(targetText, /# 保留联邦注释/u);
+  assert.match(targetText, /# 保留费用注释/u);
+  assert.match(targetText, /# 保留自定义槽位/u);
+
+  const reread = await readFacts(config);
+  const nationOrder = reread.translations.records.find(
+    (record) => record.identity.key === 'order:["nation","levels"]',
+  );
+  assert.ok(nationOrder?.bodyAvailability === "available");
+  assert.equal(nationOrder.translation.role, "structure");
+  assert.deepEqual(nationOrder.content, ["federation", "alliance"]);
+
+  const repeatedUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(repeatedUpdate.status, "completed");
+  assert.ok(
+    repeatedUpdate.results.every(({ status }) => status === "retained"),
+  );
+});
+
 void test("等级顺序以公开结构事实回读，支持顺序变更、手工修复与失败闭环", async (t) => {
   const project = await mkdtemp(
     join(tmpdir(), "lioni-update-level-order-sdk-"),
