@@ -14,7 +14,9 @@
     "format:write": "oxfmt --write --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json tsconfig.scripts.json *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/project.yml translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/lioni.baseline.json translations/zhcn/.lioni/lioni.exceptions.yaml translations/zhcn/.lioni/terms",
     "lint": "oxlint --quiet --format=unix --no-error-on-unmatched-pattern *.config.ts scripts translations/zhcn/.lioni/lioni.config.ts",
     "lint:fix": "oxlint --format=unix --no-error-on-unmatched-pattern *.config.ts scripts translations/zhcn/.lioni/lioni.config.ts --fix",
+    "l10n:submit": "node --conditions=source scripts/l10n-submit.ts",
     "test:task-gates": "node --conditions=source --test scripts/task-gates.test.ts",
+    "test:l10n-submit": "node --conditions=source --test scripts/l10n-submit.test.ts",
     "typecheck": "tsc --build --noEmit --pretty false"
   },
   "devDependencies": {
