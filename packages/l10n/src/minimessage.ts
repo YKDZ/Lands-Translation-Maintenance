@@ -538,6 +538,12 @@ function messageSurface(
   if (message.scene !== undefined && guiScenes.has(message.scene)) return "gui";
   if (message.scene !== undefined && dialogScenes.has(message.scene))
     return "dialog";
+  if (
+    message.category === "chat-string" ||
+    message.category === "chat-string-list"
+  ) {
+    return "chat";
+  }
   const path = message.path.map((segment) => segment.toLowerCase());
   const file = message.sourceFile.toLowerCase();
   if (
@@ -1772,7 +1778,7 @@ export async function parseMiniMessages(
           input,
           "legacy-format.source-version-unsupported",
           `无法按未知 Lands 版本 ${sourceVersion} 确认旧颜色码转换行为`,
-          { supportedVersions: ["8.0.1", "8.9.2"] },
+          { supportedVersions: ["8.0.1", "8.9.2", "9.1.1"] },
           { sourceVersion, format: input.message.format ?? "unknown" },
         ),
       );

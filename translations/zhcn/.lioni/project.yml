@@ -253,6 +253,12 @@ translationScope:
       target: levels.yml
       definitionsSource: levels.yml
       fields:
+        - path: [land, levels, "*", name]
+          category: configuration-string
+          scene: level-title
+        - path: [land, levels, "*", titles, "*"]
+          category: configuration-string
+          scene: level-title
         - path: [land, levels, "*", title]
           category: configuration-string
           scene: level-title
@@ -265,6 +271,9 @@ translationScope:
         - path: [land, levels, "*", requirements, "*", description]
           category: configuration-string-list
           scene: level-requirement-description
+        - path: [land, levels, "*", rewards, "*", description]
+          category: configuration-string
+          scene: level-attribute-description
         - path: [land, levels, "*", requirements, betterfarming, farms, title]
           category: configuration-string
           scene: level-requirement-title
@@ -323,6 +332,12 @@ translationScope:
         - path: [nation, levels, "*", title]
           category: configuration-string
           scene: level-title
+        - path: [nation, levels, "*", name]
+          category: configuration-string
+          scene: level-title
+        - path: [nation, levels, "*", titles, "*"]
+          category: configuration-string
+          scene: level-title
         - path: [nation, levels, "*", attributes, "*", description]
           category: configuration-string
           scene: level-attribute-description
@@ -332,6 +347,9 @@ translationScope:
         - path: [nation, levels, "*", requirements, "*", description]
           category: configuration-string-list
           scene: level-requirement-description
+        - path: [nation, levels, "*", rewards, "*", description]
+          category: configuration-string
+          scene: level-attribute-description
         - path: [nation, levels, "*", requirements, betterfarming, farms, title]
           category: configuration-string
           scene: level-requirement-title

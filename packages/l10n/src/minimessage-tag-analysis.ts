@@ -1151,11 +1151,14 @@ function guiLoreControlScopes(
 ): void {
   if (!guiLoreDocument(root)) return;
   const supportedVersion =
-    sourceVersion === "8.0.1" || sourceVersion === "8.9.2";
-  const actionPattern =
-    sourceVersion === "8.9.2"
-      ? /<action:([a-z]+)>(.*?)<\/action>(<newline>)?/gis
-      : /<action:([a-z]+)>(.*?)<\/action>/gis;
+    sourceVersion === "8.0.1" ||
+    sourceVersion === "8.9.2" ||
+    sourceVersion === "9.1.1";
+  const usesCurrentActionRules =
+    sourceVersion === "8.9.2" || sourceVersion === "9.1.1";
+  const actionPattern = usesCurrentActionRules
+    ? /<action:([a-z]+)>(.*?)<\/action>(<newline>)?/gis
+    : /<action:([a-z]+)>(.*?)<\/action>/gis;
   let occurrence = 0;
   let actionMatch: RegExpExecArray | null;
   while ((actionMatch = actionPattern.exec(input)) !== null) {
@@ -1170,7 +1173,7 @@ function guiLoreControlScopes(
         "action",
         occurrence,
         `GUI lore action 尚无 ${sourceVersion ?? "未知"} Lands 版本的已核实预处理语义`,
-        { sourceVersion: ["8.0.1", "8.9.2"] },
+        { sourceVersion: ["8.0.1", "8.9.2", "9.1.1"] },
         { tag: actionMatch[0], position: actionMatch.index },
       );
       continue;
@@ -1233,7 +1236,7 @@ function guiLoreControlScopes(
       action,
       occurrence,
     );
-    if (sourceVersion === "8.9.2") {
+    if (usesCurrentActionRules) {
       actionField(
         documents,
         contexts,
@@ -1904,7 +1907,11 @@ function controlIssues(
   if (controls.length === 0) return [];
 
   const issues: MiniMessageIncompleteFact[] = [];
-  if (sourceVersion !== "8.0.1" && sourceVersion !== "8.9.2") {
+  if (
+    sourceVersion !== "8.0.1" &&
+    sourceVersion !== "8.9.2" &&
+    sourceVersion !== "9.1.1"
+  ) {
     for (const document of new Map(
       controls.map(({ document }) => [document.origin, document]),
     ).values()) {
@@ -1913,7 +1920,7 @@ function controlIssues(
         message,
         origin: document.origin,
         location: { file: document.file, path: document.path },
-        reason: `Lands 控制语义只核实了 8.0.1 与 8.9.2；当前版本 ${sourceVersion || "未知"} 仍需核实`,
+        reason: `Lands 控制语义只核实了 8.0.1、8.9.2 与 9.1.1；当前版本 ${sourceVersion || "未知"} 仍需核实`,
       });
     }
   }

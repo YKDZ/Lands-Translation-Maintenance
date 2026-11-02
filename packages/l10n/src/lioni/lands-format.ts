@@ -12,11 +12,36 @@ export function formatForMessagePath(
 ):
   | Extract<
       TranslationFormat,
-      "legacy-variable-minimessage" | "map-html-minimessage"
+      | "legacy-color-minimessage"
+      | "legacy-color-variable-minimessage"
+      | "legacy-variable-minimessage"
+      | "map-html-minimessage"
     >
   | undefined {
   if (category !== "chat-string" || purpose !== "chat-language") {
     return undefined;
+  }
+
+  if (
+    path[0] === "general" &&
+    path[1] === "level" &&
+    (path[3] === "land" || path[3] === "nation")
+  ) {
+    if (path.length === 5 && (path[2] === "name" || path[2] === "reward")) {
+      return path[2] === "name"
+        ? "legacy-color-minimessage"
+        : "legacy-color-variable-minimessage";
+    }
+    if (path.length === 6 && path[2] === "title") {
+      return "legacy-color-minimessage";
+    }
+    if (path.length === 6 && path[2] === "requirement") {
+      return path[5] === "title"
+        ? "legacy-variable-minimessage"
+        : path[5] === "description"
+          ? "legacy-color-variable-minimessage"
+          : undefined;
+    }
   }
 
   if (

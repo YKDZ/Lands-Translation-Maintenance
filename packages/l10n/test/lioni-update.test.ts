@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { ComparisonBaselineStore, FrameworkConfig } from "@lioni/lioni";
-import { update } from "@lioni/lioni";
+import { readFacts, update } from "@lioni/lioni";
 import { createFileComparisonBaselineStore } from "@lioni/lioni/node";
 import { strToU8, zipSync } from "fflate";
 import { parseDocument } from "yaml";
@@ -1500,6 +1500,536 @@ void test("结构字段类型变化只在目标仍等于历史来源时安全替
     managed: true,
     customSetting: true,
   });
+});
+
+void test("Lands 9.1.1 等级与确认文案通过正式更新和回读", async (t) => {
+  const project = await mkdtemp(join(tmpdir(), "lioni-update-lands-911-"));
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await mkdir(join(project, ".lioni"), { recursive: true });
+  await mkdir(join(project, "Locale"), { recursive: true });
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  await writeFile(
+    join(project, ".lioni/project.yml"),
+    [
+      "format: lands-l10n-project/v1",
+      "resources:",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: Locale/en-US.yml",
+      "    purpose: chat-language",
+      "  - path: Locale/en-US_dialogs.yml",
+      "    purpose: dialog-language",
+      "  - path: levels.yml",
+      "    purpose: configuration",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      "    - source: Locale/en-US.yml",
+      "      target: Locale/zh-CN.yml",
+      "      fields:",
+      "        - path: [general, level]",
+      "          category: chat-string",
+      "    - source: Locale/en-US_dialogs.yml",
+      "      target: Locale/zh-CN_dialogs.yml",
+      "      definitionsSource: Locale/en-US_dialogs.yml",
+      "      fields:",
+      "        - path: [value, confirm]",
+      "          category: chat-string",
+      '        - path: [dialogs, "*", title]',
+      "          category: dialog-string",
+      "          scene: dialog-title",
+      '        - path: [dialogs, "*", bodies, "*", text]',
+      "          category: dialog-string",
+      "          scene: dialog-body-text",
+      '        - path: [dialogs, "*", buttons, "*", label]',
+      "          category: dialog-string",
+      "          scene: dialog-button-label",
+      '        - path: [dialogs, "*", buttons, "*", tooltip]',
+      "          category: dialog-string",
+      "          scene: dialog-button-tooltip",
+      "    - source: levels.yml",
+      "      target: levels.yml",
+      "      definitionsSource: levels.yml",
+      "      fields:",
+      '        - path: [land, levels, "*", name]',
+      "          category: configuration-string",
+      "          scene: level-title",
+      '        - path: [land, levels, "*", titles, "*"]',
+      "          category: configuration-string",
+      "          scene: level-title",
+      '        - path: [land, levels, "*", requirements, "*", title]',
+      "          category: configuration-string",
+      "          scene: level-requirement-title",
+      '        - path: [land, levels, "*", requirements, "*", description]',
+      "          category: configuration-string-list",
+      "          scene: level-requirement-description",
+      '        - path: [land, levels, "*", rewards, "*", description]',
+      "          category: configuration-string",
+      "          scene: level-attribute-description",
+      '        - path: [nation, levels, "*", name]',
+      "          category: configuration-string",
+      "          scene: level-title",
+      '        - path: [nation, levels, "*", titles, "*"]',
+      "          category: configuration-string",
+      "          scene: level-title",
+      '        - path: [nation, levels, "*", requirements, "*", title]',
+      "          category: configuration-string",
+      "          scene: level-requirement-title",
+      '        - path: [nation, levels, "*", requirements, "*", description]',
+      "          category: configuration-string-list",
+      "          scene: level-requirement-description",
+      '        - path: [nation, levels, "*", rewards, "*", description]',
+      "          category: configuration-string",
+      "          scene: level-attribute-description",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    configPath,
+    [
+      'import { createLandsConfig } from "@lands-l10n/l10n/lioni.config";',
+      "",
+      "export default createLandsConfig(import.meta.url);",
+      "",
+    ].join("\n"),
+  );
+  const scopedPackageDirectory = join(project, "node_modules/@lands-l10n");
+  await mkdir(scopedPackageDirectory, { recursive: true });
+  await symlink(packageDirectory, join(scopedPackageDirectory, "l10n"), "dir");
+
+  await writeFile(
+    join(project, "Locale/zh-CN.yml"),
+    [
+      "general:",
+      "  level:",
+      "    name:",
+      "      land:",
+      '        hamlet: "小村"',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(project, "Locale/zh-CN_dialogs.yml"),
+    [
+      "dialogs:",
+      "  confirm:",
+      "    bodies:",
+      "      info:",
+      '        text: "<v:message>"',
+      "value:",
+      "  confirm:",
+      "    delete:",
+      '      confirm: "删除 <v:land>？"',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(project, "levels.yml"),
+    [
+      "land:",
+      "  levels:",
+      "    hamlet:",
+      "      cost: 100",
+      '      name: "小村"',
+      "      titles:",
+      '        owner: "镇长"',
+      '        member: "村民"',
+      "      requirements:",
+      "        members:",
+      "          required: 2",
+      '          title: "<v:req> 位成员"',
+      "          description:",
+      '            - "需要 <v:req> 位成员"',
+      "      rewards:",
+      "        chunks:",
+      "          value: 2",
+      '          description: "<v:value> 个区块"',
+      '      custom-setting: "保留"',
+      "",
+    ].join("\n"),
+  );
+
+  const writeSourceSnapshot = async (input: {
+    readonly defaultLevelName: string;
+    readonly levelName: string;
+    readonly cost: number;
+    readonly includeNewConfirm: boolean;
+    readonly rewardDescription?: string;
+    readonly includeMemberReward: boolean;
+  }): Promise<void> => {
+    const levelDescription =
+      input.rewardDescription === undefined
+        ? []
+        : [`          description: ${JSON.stringify(input.rewardDescription)}`];
+    const memberReward = input.includeMemberReward
+      ? ["        members:", "          value: 1"]
+      : [];
+    const confirm = input.includeNewConfirm
+      ? ["    cancel:", `      confirm: ${JSON.stringify("Cancel <v:land>?")}`]
+      : [];
+    const jarPath = join(project, "Lands-9.1.1.jar");
+    await writeFile(
+      jarPath,
+      zipSync({
+        "plugin.yml": strToU8("name: Lands\nversion: 9.1.1\n"),
+        "Locale/en-US.yml": strToU8(
+          [
+            "general:",
+            "  level:",
+            "    name:",
+            "      land:",
+            `        hamlet: ${JSON.stringify(input.defaultLevelName)}`,
+            "    title:",
+            "      land:",
+            "        hamlet:",
+            '          owner: "Mayor"',
+            '          member: "Settler"',
+            "    requirement:",
+            "      land:",
+            "        members:",
+            '          title: "<v:req> Members"',
+            '          description: "<t:regular>Have <v:req> members</t>"',
+            "    reward:",
+            "      land:",
+            '        chunks: "<t:regular><v:value> claims</t>"',
+            "",
+          ].join("\n"),
+        ),
+        "Locale/en-US_dialogs.yml": strToU8(
+          [
+            "dialogs:",
+            "  confirm:",
+            "    title: Confirm",
+            "    bodies:",
+            "      info:",
+            '        text: "<v:message>"',
+            "    buttons:",
+            "      confirm:",
+            '        label: "<t:positive>Confirm"',
+            '        tooltip: "Confirm this action."',
+            "value:",
+            "  confirm:",
+            "    delete:",
+            '      confirm: "<t:regular>Delete <v:land>?</t>"',
+            "    rename:",
+            '      confirm: "<t:regular>Rename <v:land>?</t>"',
+            ...confirm,
+            "",
+          ].join("\n"),
+        ),
+        "levels.yml": strToU8(
+          [
+            "land:",
+            "  levels:",
+            "    hamlet:",
+            `      cost: ${input.cost}`,
+            `      name: ${JSON.stringify(input.levelName)}`,
+            "      titles:",
+            '        owner: "Mayor"',
+            '        member: "Settler"',
+            "      requirements:",
+            "        members:",
+            "          required: 2",
+            '          title: "<v:req> Members"',
+            "          description:",
+            '            - "<t:regular>Have <v:req> members</t>"',
+            "      rewards:",
+            "        chunks:",
+            "          value: 2",
+            ...levelDescription,
+            ...memberReward,
+            "      commands: []",
+            "",
+          ].join("\n"),
+        ),
+      }),
+    );
+    await prepareSource(configPath, jarPath, "9.1.1");
+    await rm(jarPath);
+  };
+
+  await writeSourceSnapshot({
+    defaultLevelName: "<green>Hamlet",
+    levelName: "&aHamlet",
+    cost: 100,
+    includeNewConfirm: false,
+    rewardDescription: "<t:regular><v:value> claims</t>",
+    includeMemberReward: false,
+  });
+
+  const config = createLandsConfig(pathToFileURL(configPath));
+  const baselineStore = createFileComparisonBaselineStore(
+    baselinePath,
+  ) as unknown as BaselineStoreFor<typeof config>;
+  const initialFacts = await readFacts(config);
+  const defaultLevelName = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US.yml" &&
+      unit.context.path.join(".") === "general.level.name.land.hamlet",
+  );
+  assert.ok(
+    defaultLevelName?.unit.context.role === "message",
+    JSON.stringify(initialFacts.source.read, null, 2),
+  );
+  assert.equal(defaultLevelName.unit.context.category, "chat-string");
+  assert.equal(
+    defaultLevelName.unit.context.format,
+    "legacy-color-minimessage",
+  );
+  const defaultLevelTitle = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US.yml" &&
+      unit.context.path.join(".") === "general.level.title.land.hamlet.owner",
+  );
+  assert.ok(defaultLevelTitle?.unit.context.role === "message");
+  assert.equal(
+    defaultLevelTitle.unit.context.format,
+    "legacy-color-minimessage",
+  );
+  const defaultRequirementTitle = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US.yml" &&
+      unit.context.path.join(".") ===
+        "general.level.requirement.land.members.title",
+  );
+  assert.ok(defaultRequirementTitle?.unit.context.role === "message");
+  assert.equal(
+    defaultRequirementTitle.unit.context.format,
+    "legacy-variable-minimessage",
+  );
+  const defaultRequirementDescription = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US.yml" &&
+      unit.context.path.join(".") ===
+        "general.level.requirement.land.members.description",
+  );
+  assert.ok(defaultRequirementDescription?.unit.context.role === "message");
+  assert.equal(
+    defaultRequirementDescription.unit.context.format,
+    "legacy-color-variable-minimessage",
+  );
+  const defaultRewardDescription = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US.yml" &&
+      unit.context.path.join(".") === "general.level.reward.land.chunks",
+  );
+  assert.ok(defaultRewardDescription?.unit.context.role === "message");
+  assert.equal(
+    defaultRewardDescription.unit.context.format,
+    "legacy-color-variable-minimessage",
+  );
+
+  const confirmMessage = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US_dialogs.yml" &&
+      unit.context.path.join(".") === "value.confirm.rename.confirm",
+  );
+  assert.ok(confirmMessage?.unit.context.role === "message");
+  assert.equal(confirmMessage.unit.context.category, "chat-string");
+
+  const dialogMessage = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US_dialogs.yml" &&
+      unit.context.path.join(".") === "dialogs.confirm.bodies.info.text",
+  );
+  assert.ok(dialogMessage?.unit.context.role === "message");
+  assert.equal(dialogMessage.unit.context.scene, "dialog-body-text");
+  assert.equal(dialogMessage.unit.source, "<v:message>");
+
+  const levelName = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") === "land.levels.hamlet.name",
+  );
+  assert.ok(levelName?.unit.context.role === "message");
+  assert.equal(levelName.unit.context.scene, "level-title");
+  assert.equal(levelName.unit.context.format, "legacy-color-minimessage");
+  const levelTitle = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") === "land.levels.hamlet.titles.owner",
+  );
+  assert.ok(levelTitle?.unit.context.role === "message");
+  assert.equal(levelTitle.unit.context.scene, "level-title");
+  assert.equal(levelTitle.unit.context.format, "legacy-color-minimessage");
+  const levelRequirementTitle = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") ===
+        "land.levels.hamlet.requirements.members.title",
+  );
+  assert.ok(levelRequirementTitle?.unit.context.role === "message");
+  assert.equal(
+    levelRequirementTitle.unit.context.format,
+    "legacy-variable-minimessage",
+  );
+  const levelRequirementDescription = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") ===
+        "land.levels.hamlet.requirements.members.description",
+  );
+  assert.ok(levelRequirementDescription?.unit.context.role === "message");
+  assert.equal(
+    levelRequirementDescription.unit.context.format,
+    "legacy-color-variable-minimessage",
+  );
+  const levelRewardDescription = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") ===
+        "land.levels.hamlet.rewards.chunks.description",
+  );
+  assert.ok(levelRewardDescription?.unit.context.role === "message");
+  assert.equal(
+    levelRewardDescription.unit.context.format,
+    "legacy-color-variable-minimessage",
+  );
+
+  const levelCost = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "structure" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") === "land.levels.hamlet.cost",
+  );
+  assert.ok(levelCost);
+  assert.equal(levelCost.unit.source, 100);
+  const rewardValue = initialFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "structure" &&
+      unit.context.sourceFile === "levels.yml" &&
+      unit.context.path.join(".") === "land.levels.hamlet.rewards.chunks.value",
+  );
+  assert.ok(rewardValue);
+  assert.equal(rewardValue.unit.source, 2);
+
+  const initialUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(
+    initialUpdate.status,
+    "completed",
+    JSON.stringify(
+      initialUpdate.results
+        .filter(({ status }) => status !== "retained" && status !== "written")
+        .map(({ index, action, status, reason }) => ({
+          index,
+          action,
+          status,
+          reason,
+        })),
+      null,
+      2,
+    ),
+  );
+  const afterInitialUpdate = await readFacts(config);
+  const initialTarget = afterInitialUpdate.translations.records.find(
+    (record) =>
+      record.bodyAvailability === "available" &&
+      record.translation.role === "message" &&
+      record.translation.targetFile === "Locale/zh-CN_dialogs.yml" &&
+      record.translation.path.join(".") === "value.confirm.rename.confirm",
+  );
+  assert.ok(initialTarget);
+  assert.equal(initialTarget.content, "<t:regular>Rename <v:land>?</t>");
+
+  const localeTargetPath = join(project, "Locale/zh-CN_dialogs.yml");
+  const localeTarget = parseDocument(await readFile(localeTargetPath, "utf8"));
+  localeTarget.setIn(
+    ["value", "confirm", "rename", "confirm"],
+    "重命名 <v:land>？",
+  );
+  await writeFile(localeTargetPath, localeTarget.toString({ lineWidth: 0 }));
+
+  await writeSourceSnapshot({
+    defaultLevelName: "<red>Hamlet II",
+    levelName: "&cHamlet II",
+    cost: 200,
+    includeNewConfirm: true,
+    includeMemberReward: true,
+  });
+  const updateResult = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(updateResult.status, "completed");
+
+  const rereadFacts = await readFacts(config);
+  assert.ok(
+    rereadFacts.translations.reads.every(({ status }) => status === "complete"),
+  );
+  const changedLocaleTarget = rereadFacts.translations.records.find(
+    (record) =>
+      record.bodyAvailability === "available" &&
+      record.translation.role === "message" &&
+      record.translation.targetFile === "Locale/zh-CN.yml" &&
+      record.translation.path.join(".") === "general.level.name.land.hamlet",
+  );
+  assert.ok(changedLocaleTarget);
+  assert.equal(changedLocaleTarget.content, "<red>Hamlet II");
+  const retainedLocaleTarget = rereadFacts.translations.records.find(
+    (record) =>
+      record.bodyAvailability === "available" &&
+      record.translation.role === "message" &&
+      record.translation.targetFile === "Locale/zh-CN_dialogs.yml" &&
+      record.translation.path.join(".") === "value.confirm.rename.confirm",
+  );
+  assert.ok(retainedLocaleTarget);
+  assert.equal(retainedLocaleTarget.content, "重命名 <v:land>？");
+  const newLocaleTarget = rereadFacts.translations.records.find(
+    (record) =>
+      record.bodyAvailability === "available" &&
+      record.translation.role === "message" &&
+      record.translation.targetFile === "Locale/zh-CN_dialogs.yml" &&
+      record.translation.path.join(".") === "value.confirm.cancel.confirm",
+  );
+  assert.ok(newLocaleTarget);
+  assert.equal(newLocaleTarget.content, "Cancel <v:land>?");
+
+  const targetLevels = parseDocument(
+    await readFile(join(project, "levels.yml"), "utf8"),
+  ).toJS() as {
+    readonly land: {
+      readonly levels: {
+        readonly hamlet: {
+          readonly cost: number;
+          readonly name: string;
+          readonly rewards: {
+            readonly chunks: Record<string, unknown>;
+            readonly members: { readonly value: number };
+          };
+          readonly [key: string]: unknown;
+        };
+      };
+    };
+  };
+  assert.equal(targetLevels.land.levels.hamlet.cost, 200);
+  assert.equal(targetLevels.land.levels.hamlet.name, "&cHamlet II");
+  assert.equal(
+    Object.hasOwn(
+      targetLevels.land.levels.hamlet.rewards.chunks,
+      "description",
+    ),
+    false,
+  );
+  assert.deepEqual(targetLevels.land.levels.hamlet.rewards.members, {
+    value: 1,
+  });
+  assert.equal(targetLevels.land.levels.hamlet["custom-setting"], "保留");
 });
 
 void test("writeBatch 部分失败后逐项真实回读且不推进比较基线", async (t) => {
