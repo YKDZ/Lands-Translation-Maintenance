@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "boundaries": "node --conditions=source scripts/run-turbo-boundaries.ts && node --conditions=source scripts/check-toolchain-versions.ts",
+    "boundaries": "turbo boundaries",
     "check": "node --conditions=source scripts/task-gates.ts check",
     "check:full": "node --conditions=source scripts/task-gates.ts check:full",
     "check:heavy": "node --conditions=source scripts/task-gates.ts check:heavy",
@@ -13,6 +13,7 @@
     "format:write": "oxfmt --write --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json tsconfig.scripts.json *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/project.yml translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/lioni.baseline.json translations/zhcn/.lioni/lioni.exceptions.yaml translations/zhcn/.lioni/terms",
     "lint": "oxlint --quiet --format=unix --no-error-on-unmatched-pattern *.config.ts scripts translations/zhcn/.lioni/lioni.config.ts",
     "lint:fix": "oxlint --format=unix --no-error-on-unmatched-pattern *.config.ts scripts translations/zhcn/.lioni/lioni.config.ts --fix",
+    "test:task-gates": "node --conditions=source --test scripts/task-gates.test.ts",
     "typecheck": "tsc --build --noEmit --pretty false"
   },
   "devDependencies": {
@@ -22,7 +23,6 @@
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "smol-toml": "catalog:",
     "turbo": "catalog:",
     "typescript-7": "catalog:"
   },

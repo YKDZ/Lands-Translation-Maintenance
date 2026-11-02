@@ -8,7 +8,6 @@
       }
     }
   },
-  "globalPassThroughEnv": ["CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"],
   "tasks": {
     "//#boundaries": {
       "tags": ["quality:light"]
@@ -72,6 +71,10 @@
         "packages/tooling-config/base.json",
         "packages/tooling-config/node.json"
       ],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#test:task-gates": {
       "outputs": [],
       "tags": ["quality:light"]
     }
