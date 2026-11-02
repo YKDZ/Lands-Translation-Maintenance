@@ -947,7 +947,7 @@ public final class MiniMessageBridge {
           boolean roleNameTarget = false;
           if (fields.size() == 9) {
             if (!fields.get(8).equals("true") && !fields.get(8).equals("false")) {
-              throw new IllegalArgumentException("Invalid role name flag");
+              throw new IllegalArgumentException("角色名标记无效");
             }
             roleNameTarget = fields.get(8).equals("true");
           }

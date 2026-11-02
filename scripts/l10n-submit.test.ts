@@ -155,10 +155,6 @@ function remoteRef(remote: string, ref: string): string {
   return String(result.stdout).trim();
 }
 
-function assertCommandSucceeded(result: CommandOutput): void {
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-}
-
 void test("缺少 --message 时拒绝且不改变 Git index", async (context) => {
   const directory = await createRepository(context);
   const indexTreeBefore = indexTree(directory);
@@ -212,7 +208,7 @@ void test("只提交翻译项目增删改并沿 origin 同名分支推送", asyn
 
   const result = runSubmit(directory, ["--message", "更新 Lands 9.1.1 翻译"]);
 
-  assertCommandSucceeded(result);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
   const commit = runGit(directory, ["rev-parse", "HEAD"]);
   assert.equal(
     runGit(directory, ["log", "-1", "--format=%s"]),
@@ -284,7 +280,7 @@ void test("沿用上游实际 remote/ref，即使目标名不同且 push.default
 
   const result = runSubmit(directory, ["--message=更新例外资料"]);
 
-  assertCommandSucceeded(result);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
   const commit = runGit(directory, ["rev-parse", "HEAD"]);
   assert.equal(
     remoteRef(publication, "refs/heads/review/translation-candidate"),
@@ -416,7 +412,7 @@ void test("推送失败保留本地提交，修复远端后重试不重复提交
   await rm(hook);
   const retry = runSubmit(directory, ["--message", "提交审阅后的翻译"]);
 
-  assertCommandSucceeded(retry);
+  assert.equal(retry.status, 0, retry.stderr || retry.stdout);
   assert.equal(runGit(directory, ["rev-parse", "HEAD"]), retainedCommit);
   assert.equal(
     remoteRef(origin, "refs/heads/update/lands-9.1.1"),
