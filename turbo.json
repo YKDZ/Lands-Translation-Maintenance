@@ -99,7 +99,10 @@
     },
     "//#test:l10n-review": {
       "cache": false,
-      "dependsOn": ["@lands-l10n/l10n#build:minimessage"],
+      "dependsOn": [
+        "@lands-l10n/l10n#build",
+        "@lands-l10n/l10n#build:minimessage"
+      ],
       "outputs": [],
       "tags": ["quality:heavy"]
     },
