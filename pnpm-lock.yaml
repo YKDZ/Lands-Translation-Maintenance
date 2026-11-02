@@ -208,6 +208,9 @@ importers:
       '@lands-l10n/tooling-config':
         specifier: workspace:*
         version: link:packages/tooling-config
+      '@lioni/lioni':
+        specifier: 'catalog:'
+        version: 0.2.0
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2

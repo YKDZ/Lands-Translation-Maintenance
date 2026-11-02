@@ -12,13 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
+import { pathToFileURL } from "node:url";
+
+import { prepareLandsSource } from "@lands-l10n/l10n/maintenance";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const l10nPackage = join(repositoryRoot, "packages/l10n");
 const taskGateScript = join(repositoryRoot, "scripts/task-gates.ts");
 const reviewScript = join(repositoryRoot, "scripts/l10n-review.ts");
-const lioniCli = join(l10nPackage, "node_modules/.bin/lioni");
-const turboCli = join(repositoryRoot, "node_modules/.bin/turbo");
 const projectDirectory = "translations/zhcn";
 const targetFile = projectDirectory + "/Locale/zh-CN.yml";
 
@@ -43,9 +43,9 @@ async function createReviewRepository(context: TestContext): Promise<string> {
       fix: rootScripts.fix,
       "l10n:review": rootScripts["l10n:review"],
       "check:l10n": [
-        JSON.stringify(process.execPath),
-        "--conditions=source",
-        JSON.stringify(lioniCli),
+        "pnpm",
+        "exec",
+        "lioni",
         "qa",
         JSON.stringify(projectDirectory + "/.lioni/lioni.config.ts"),
         "--output-format",
@@ -138,23 +138,18 @@ async function createReviewRepository(context: TestContext): Promise<string> {
     }),
   );
   await writeFile(join(directory, ".gitignore"), "node_modules/\n.turbo/\n");
-  await mkdir(join(directory, "node_modules/.bin"), { recursive: true });
-  await symlink(turboCli, join(directory, "node_modules/.bin/turbo"));
-  await mkdir(join(directory, "node_modules/@lands-l10n"), {
-    recursive: true,
-  });
-  await symlink(
-    l10nPackage,
-    join(directory, "node_modules/@lands-l10n/l10n"),
-    "dir",
-  );
-
   const rootLock = spawnSync("pnpm", ["install", "--lockfile-only"], {
     cwd: directory,
     encoding: "utf8",
     timeout: 30_000,
   });
   assert.equal(rootLock.status, 0, String(rootLock.stderr || rootLock.stdout));
+  await rm(join(directory, "node_modules"), { recursive: true, force: true });
+  await symlink(
+    join(repositoryRoot, "node_modules"),
+    join(directory, "node_modules"),
+    "dir",
+  );
 
   await writeFile(
     join(directory, projectDirectory + "/.lioni/project.yml"),
@@ -236,19 +231,12 @@ async function createReviewRepository(context: TestContext): Promise<string> {
     { cwd: directory, encoding: "utf8" },
   );
   assert.equal(jar.status, 0, String(jar.stderr || jar.stdout));
-  const prepared = spawnSync(
-    process.execPath,
-    [
-      "--conditions=source",
-      join(l10nPackage, "scripts/prepare-lioni-source.ts"),
-      "--jar",
-      jarFile,
-      "--config",
+  await prepareLandsSource(
+    jarFile,
+    pathToFileURL(
       join(directory, projectDirectory + "/.lioni/lioni.config.ts"),
-    ],
-    { cwd: directory, encoding: "utf8", timeout: 30_000 },
+    ),
   );
-  assert.equal(prepared.status, 0, String(prepared.stderr || prepared.stdout));
   await rm(jarFile);
   await rm(join(directory, ".review-source"), { recursive: true, force: true });
 

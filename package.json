@@ -24,6 +24,7 @@
   "devDependencies": {
     "@lands-l10n/l10n": "workspace:*",
     "@lands-l10n/tooling-config": "workspace:*",
+    "@lioni/lioni": "catalog:",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
