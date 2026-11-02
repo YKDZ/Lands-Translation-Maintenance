@@ -398,6 +398,9 @@ lands:
         disabled: <t:error>Independence wars are disabled on this server.
         not-vassal: <t:error>Your land<t:error_value> <v:land></t> isn't a vassal, so it has no overlord to break free from.
         success: <t:regular>Your land<t:entity_land> <v:land></t> declared independence from nation<t:entity_nation> <v:nation></t>. The war will start in<t:time> <v:time></t>.
+        confirm: |
+          <t:regular>Please confirm that you want to declare independence from nation<t:entity_nation> <v:nation></t> with land<t:entity_land> <v:land></t>. The land leaves the nation and a war against it starts:
+            <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
       spawn:
         success: <t:regular>You were teleported near the border of enemy <v:enemy><t:regular>.
         arena-success: <t:regular>You were teleported to your team's arena spawn.

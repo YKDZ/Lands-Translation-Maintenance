@@ -40,6 +40,7 @@ general:
       camp: <t:regular><t:regular_value>%owner%</t> 的露营地.
       admin: <t:regular>这个城镇属于服务器.
     default-area: 默认总区域
+    all-areas: All areas
   area:
     description:
       default: <t:regular>新占领的领土将属于这个子区域.
@@ -136,6 +137,13 @@ general:
         add: <t:regular>我们现已与<t:regular_value> <v:0> </t>互为政敌.
         offer: <t:regular_value><v:0> </t><t:regular>不想再与我们互为政敌.
         accepted: <t:regular>我们不再与<t:regular_value> <v:0> </t>互为政敌.
+    expiration:
+      delete: <t:negative>This land will be deleted on <t:error_value><v:0></t>, because its owner <t:error_value><v:1></t> is inactive. It stays if they log in.
+      for-sale: <t:negative>This land is for sale now for <t:cost><v:0></t>, because its owner <t:error_value><v:1></t> is inactive. It stays theirs if they log in.
+      for-sale_delete: <t:negative>This land is for sale now for <t:cost><v:0></t>, because its owner <t:error_value><v:1></t> is inactive. If nobody buys it, it's deleted on <t:error_value><v:2></t>. It stays theirs if they log in.
+      sell: <t:negative>This land goes up for sale on <t:error_value><v:0></t>, because its owner <t:error_value><v:1></t> is inactive. It stays theirs if they log in.
+      sold: <t:regular_value><v:0></t><t:regular> bought this land for<t:cost> <v:1></t>, because its owner <t:regular_value><v:2></t> was inactive. Its members were untrusted.
+      transfer: <t:regular>The owner <t:regular_value><v:1></t> is inactive. On <t:time><v:0></t>, <t:regular_value><v:2></t> becomes the new owner, unless <t:regular_value><v:1></t> logs in.
   combat-logout: <t:regular_value><v:player> </t><t:regular>因在战斗中离开服务器而死亡.
   command:
     argument:
@@ -181,6 +189,192 @@ general:
         backup: 备份
         message: 消息
   player-load-failed: <t:error>你的 Lands 数据无法被加载.</t> <t:regular>请重新登入. 如果这持续发生, 联系管理员.
+  level:
+    effect:
+      absorption: Absorption
+      bad_omen: Bad Omen
+      blindness: Blindness
+      conduit_power: Conduit Power
+      darkness: Darkness
+      dolphins_grace: Dolphin's Grace
+      fire_resistance: Fire Resistance
+      glowing: Glowing
+      haste: Haste
+      health_boost: Health Boost
+      hero_of_the_village: Hero of the Village
+      hunger: Hunger
+      infested: Infested
+      instant_damage: Instant Damage
+      instant_health: Instant Health
+      invisibility: Invisibility
+      jump_boost: Jump Boost
+      levitation: Levitation
+      luck: Luck
+      mining_fatigue: Mining Fatigue
+      nausea: Nausea
+      night_vision: Night Vision
+      oozing: Oozing
+      poison: Poison
+      raid_omen: Raid Omen
+      regeneration: Regeneration
+      resistance: Resistance
+      saturation: Saturation
+      slow_falling: Slow Falling
+      slowness: Slowness
+      speed: Speed
+      strength: Strength
+      trial_omen: Trial Omen
+      unluck: Bad Luck
+      water_breathing: Water Breathing
+      weakness: Weakness
+      weaving: Weaving
+      wind_charged: Wind Charged
+      wither: Wither
+    name:
+      land:
+        borough: <aqua>Borough
+        city: <dark_aqua>City
+        duchy: <gold>Duchy
+        hamlet: <white>Hamlet
+        kingdom: <red>Kingdom
+        metropolis: <blue>Metropolis
+        province: <light_purple>Province
+        settlement: Settlement
+        town: <dark_green>Town
+        village: <green>Village
+      nation:
+        alliance: <green>Alliance
+        dominion: <red>Dominion
+        empire: <gold>Empire
+        federation: Federation
+        nation: <aqua>Nation
+    requirement:
+      land:
+        age:
+          description: <t:regular>The land exists for at least <t:regular_value><v:req></t>.
+          title: Exists for <v:req>
+        chunks:
+          description: "<t:regular>Have <t:regular_value><v:req></t> claims. Command: <t:cmd>/claim</t>"
+          title: Claim <v:req> Chunks
+        level_held:
+          description: <t:regular>Have the current level for at least <t:regular_value><v:req></t>.
+          title: Held the Level for <v:req>
+        members:
+          description: "<t:regular>Have <t:regular_value><v:req></t> members, you included. Command: <t:cmd>/lands trust</t>"
+          title: <v:req> Members
+        playtime:
+          description: <t:regular>Members trusted for <t:regular_value><v:trusted></t> or more played <t:regular_value><v:req></t> together.
+          title: Played <v:req>
+        tenure:
+          description: <t:regular>Have <t:regular_value><v:req></t> members who are trusted for at least <t:regular_value><v:trusted></t>.
+          title: <v:req> Loyal Members
+      nation:
+        age:
+          description: <t:regular>The nation exists for at least <t:regular_value><v:req></t>.
+          title: Exists for <v:req>
+        chunks:
+          description: <t:regular>Have <t:regular_value><v:req></t> claims in the lands of the nation.
+          title: Claim <v:req> Chunks
+        land_time: <t:regular>A land counts after <t:time><v:time></t> in the nation.
+        lands:
+          description: "<t:regular>Have <t:regular_value><v:req></t> lands in the nation, besides the capital. Command: <t:cmd>/nations trust</t>"
+          title: <v:req> Lands
+        level_held:
+          description: <t:regular>Have the current level for at least <t:regular_value><v:req></t>.
+          title: Held the Level for <v:req>
+        members:
+          description: "<t:regular>Have <t:regular_value><v:req></t> members in the lands of the nation. Command: <t:cmd>/lands trust</t>"
+          title: <v:req> Members
+        playtime:
+          description: <t:regular>Members of the lands trusted for <t:regular_value><v:trusted></t> or more played <t:regular_value><v:req></t> together.
+          title: Played <v:req>
+        tenure:
+          description: <t:regular>Have <t:regular_value><v:req></t> members in the lands who are trusted for at least <t:regular_value><v:trusted></t>.
+          title: <v:req> Loyal Members
+      time_left: <v:time> left
+    reward:
+      land:
+        allies: <t:regular><v:value> allies</t>
+        areas: <t:regular><v:value> sub areas</t>
+        chunks: <t:regular><v:value> claims</t>
+        crop_growth: <t:regular><v:value>% crop growth</t>
+        enemies: <t:regular><v:value> enemies</t>
+        members: <t:regular><v:value> members</t>
+        mob_drops: <t:regular><v:value>% mob drops</t>
+        mob_xp: <t:regular><v:value>% mob XP</t>
+        permissions: "<t:positive>+ Permissions: </t><v:value>"
+        spawner_rate: <t:regular><v:value>% spawner speed</t>
+        unlock: "<t:positive>+ Unlocks: </t><v:value>"
+        upkeep: <t:regular><v:value>% upkeep cost</t>
+        war_shield: <t:positive>+ </t><v:value><t:positive> longer war shield after a lost war</t>
+      nation:
+        allies: <t:regular><v:value> allies</t>
+        chunks: <t:regular><v:value> claims for every land</t>
+        crop_growth: <t:regular><v:value>% crop growth in the lands</t>
+        effects: "<t:positive>+ Effects: </t><v:value>"
+        effects_amount: <t:regular><v:value> effects active at once</t>
+        enemies: <t:regular><v:value> enemies</t>
+        lands: <t:regular><v:value> lands</t>
+        mob_drops: <t:regular><v:value>% mob drops in the lands</t>
+        mob_xp: <t:regular><v:value>% mob XP in the lands</t>
+        permissions: "<t:positive>+ Permissions: </t><v:value>"
+        spawner_rate: <t:regular><v:value>% spawner speed in the lands</t>
+        unlock: "<t:positive>+ Unlocks: </t><v:value>"
+        upkeep: <t:regular><v:value>% upkeep cost</t>
+        war_shield: <t:positive>+ </t><v:value><t:positive> longer war shield after a lost war</t>
+    title:
+      land:
+        borough:
+          member: Citizen
+          owner: Reeve
+        city:
+          member: Citizen
+          owner: Lord Mayor
+        duchy:
+          member: Noble
+          owner: Duke
+        hamlet:
+          member: Settler
+          owner: Chief
+        kingdom:
+          member: Noble
+          owner: King
+        metropolis:
+          member: Resident
+          owner: Governor
+        province:
+          member: Resident
+          owner: Count
+        settlement:
+          member: Settler
+          owner: Founder
+        town:
+          member: Citizen
+          owner: Mayor
+        village:
+          member: Villager
+          owner: Elder
+      nation:
+        alliance:
+          member: Allied
+          owner: High Chancellor
+        dominion:
+          member: Imperial
+          owner: Sovereign
+        empire:
+          member: Imperial
+          owner: Emperor
+        federation:
+          member: Federal
+          owner: Chancellor
+        nation:
+          member: Patriot
+          owner: President
+    unlock:
+      declare_war: Declaring wars
+      public_spawn: Public land spawn
+      rentals: Renting out areas
+      storage: Land storage
 
 help:
   help:
@@ -228,6 +422,7 @@ help:
       selection:
         main: <hover:show_text:"<t:regular>使用此命令可创建选区来调整子区域大小, 或将选区扩展到完整 Y 轴范围. <t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>选区模式</click></hover>
         expand: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>扩展选区</click></hover>
+        assign: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Assign selection to a new or existing area</click></hover>
       invites:
         main: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>管理邀请</click></hover>
         menu: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>打开菜单</click></hover>
@@ -251,6 +446,7 @@ help:
         cancel: <hover:show_text:"<t:regular>取消你对当前位置子区域的租赁. <t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>取消租赁</click></hover>
         info: <hover:show_text:"<t:regular>查看当前位置子区域的租赁信息. <t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>查看信息</click></hover>
         list: <hover:show_text:"<t:regular>查看所有城镇的租赁报价. <t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>查看全部租赁报价</click></hover>
+        buy: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Buy an area or a land that's for sale</click></hover>
 
       admin:
         main: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>管理员命令</click></hover>
@@ -265,7 +461,6 @@ help:
         dismiss: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>忽略通知</click></hover>
         import: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>导入第三方领土数据</click></hover>
         menu: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>打开管理员菜单</click></hover>
-        deleteinactive: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>删除不活跃玩家和城镇</click></hover>
         limits:
           main: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>刷新或迁移限制</click></hover>
           refresh: <hover:show_text:"<t:regular>点击执行."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>同步玩家, 城镇和联邦限制</click></hover>
@@ -300,11 +495,16 @@ help:
             main: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>修改金库余额</click></hover>
             modify: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>增加 (+) 或扣除 (-) 余额</click></hover>
             set: <hover:show_text:"<t:regular>点击复制."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>设置余额</click></hover>
+          level: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set the level of a land</click></hover>
         database:
           main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Database maintenance</click></hover>
           migrate: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Migrate database</click></hover>
           restore: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Restore database from a backup</click></hover>
           backup: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Create a database backup</click></hover>
+        expiration:
+          list: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Lands that expire soon</click></hover>
+          main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Land expiration</click></hover>
+          run: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Check inactive lands now</click></hover>
       setspawn: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Set land spawn</click></hover>
       area:
         main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage area</click></hover>
@@ -341,13 +541,13 @@ help:
         main: <hover:show_text:"<t:regular>Add lands and nations as your allies or enemies. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage relations</click></hover>
       member:
         main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage members</click></hover>
-        trust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add player to the whole land</click></hover>
+        trust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add player to the default area, an area or all</click></hover>
         setRole: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set role</click></hover>
         setowner: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Transfer ownership</click></hover>
         menu: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Open member management menu</click></hover>
         ban: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Ban player</click></hover>
         unban: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Unban player</click></hover>
-        untrust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove player from the whole land</click></hover>
+        untrust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove player from the whole land or an area</click></hover>
       camp: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Create or open camp</click></hover>
       menu:
         close: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Close your open menu</click></hover>
@@ -448,6 +648,7 @@ lands:
       max: <t:error>你的城镇<t:error_value> <v:land> </t>已达到子区域数量上限<t:error_value> <v:max></t><t:regular>, 而子区域<t:regular_value> <v:area> </t>尚不存在.
       not-exist: <t:error>城镇<t:error_value> <v:land> </t>中不存在子区域<t:error_value> <v:area> </t>.
       default: <t:error>你不能对城镇<t:error_value> <v:land> </t>的默认子区域<t:error_value> <v:area> </t>这样做.
+      koth: <t:error>You can't delete the area<t:error_value> <v:area> </t>of land<t:error_value> <v:land></t>, because it's a KotH arena. <t:regular>An admin must remove the arena first.
     introduction:
       container-placement: |
         <t:negative>你在荒野放置了一个容器. <t:regular>其他玩家可能会打开它并取走物品.
@@ -474,6 +675,14 @@ lands:
       level:
         up: '<title><t:regular_heading><v:object><subtitle><t:regular>升级到: <t:regular_value><v:level></t>'
         down: '<title><t:regular_heading><v:object><subtitle><t:regular>降级到: <t:regular_value><v:level></t>'
+        announce: <t:regular_value><v:object></t><t:regular> reached the level </t><t:regular_value><v:level></t><t:regular>!</t>
+        locked:
+          declare_war: <v:object><t:error> can declare wars once it reached the level </t><t:regular_value><v:level></t><t:error>.</t>
+          public_spawn: <t:error>Visitors can teleport to the spawn of </t><v:object><t:error> once it reached the level </t><t:regular_value><v:level></t><t:error>.</t>
+          rentals: <t:error>Areas of </t><v:object><t:error> can be rented out or sold once it reached the level </t><t:regular_value><v:level></t><t:error>.</t>
+          storage: <t:error>The storage of </t><v:object><t:error> can be used once it reached the level </t><t:regular_value><v:level></t><t:error>.</t>
+        nation_join: <t:regular_value><v:land></t><t:regular> counts for the level requirements of </t><t:regular_value><v:nation></t><t:regular> after </t><t:time><v:time></t><t:regular> in the nation.</t>
+        ready: <t:regular_value><v:object></t><t:regular> can level up to </t><t:regular_value><v:level></t><t:regular> for </t><t:cost><v:cost></t><t:regular>.</t>
       inbox: '<t:cmd>日志箱 </t><t:decoration>- </t><t:regular_value><v:object></t>: <t:user_content><v:message></t>'
     teleportation:
       already: <t:error>你不能再次开始传送. 当前已有一个传送正在进行. <t:regular>请等待其完成.
@@ -494,6 +703,7 @@ lands:
     camp:
       dropped: <t:error>部分露营地物品掉落在地上. <t:regular>你的背包没有剩余空间.
       success: <t:regular>你获得了<t:regular_value> <v:blocks> </t>个露营地物品. 将其放置在目标位置即可创建露营地.
+      expired: <t:error>This camp item has no time left. <t:regular>Its camp would expire right away.
     blacklist:
       untrusted: <t:error>你不能在这里使用此命令. <t:regular>你不是子区域<t:regular_value> <v:area> </t>(城镇<t:entity_land> <v:land></t>)的成员.
       general: <t:error>你不能在已占领的城镇领土内使用此命令.
@@ -539,6 +749,12 @@ lands:
         prompt: <title><t:regular_heading>Select a new Position<subtitle><t:regular>for the main block of<t:regular_value> <v:land></t>
         success: <t:success>The main block of<t:success_value> <v:land> </t>was moved.
         space: <t:error>There's not enough space at that position. <t:regular>Choose a different position.
+    expiration:
+      warning:
+        delete: <t:negative>Your land <t:entity_land><v:land></t> will be deleted on <t:error_value><v:date></t>, because its owner <t:error_value><v:owner></t> is inactive. It stays if they log in.
+        for-sale: <t:negative>Your land <t:entity_land><v:land></t> is for sale for <t:cost><v:price></t>, because its owner <t:error_value><v:owner></t> is inactive. It stays theirs if they log in.
+        sell: <t:negative>Your land <t:entity_land><v:land></t> goes up for sale on <t:error_value><v:date></t>, because its owner <t:error_value><v:owner></t> is inactive. It stays theirs if they log in.
+        transfer: <t:regular>Your land <t:entity_land><v:land></t> goes to <t:regular_value><v:player></t> on <t:time><v:date></t>, because its owner <t:regular_value><v:owner></t> is inactive.
   command:
     menu:
       invalid: <t:error>没有名为<t:error_value> <v:shortcut> </t>的快捷方式.
@@ -651,6 +867,19 @@ lands:
         locked: <t:error>The area<t:error_value> <v:area> </t>is being prepared or restored at the moment. <t:regular>Please try again shortly.
         notice: <t:negative>Once your rental or purchase ends, this area is restored to its state from right now. <t:regular>Anything you build or leave in chests there is removed then.
         failed: <t:error>The area<t:error_value> <v:area> </t>couldn't be prepared. <t:regular>Nothing was charged. Please try again later.
+      buy:
+        confirm: |
+          <t:regular>The land<t:entity_land> <v:land> </t>costs<t:cost> <v:price></t>. Its members are untrusted once you bought it. Please confirm by clicking below:
+            <hover:show_text:"<t:regular>Click here to buy the land."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        confirm-area: |
+          <t:regular>The area <t:regular_value><v:area></t> of <t:entity_land><v:land></t> costs <t:cost><v:price></t>. Please confirm by clicking below:
+            <hover:show_text:"<t:regular>Click here to buy the area."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        confirm-land: |
+          <t:regular>The land <t:entity_land><v:land></t> costs <t:cost><v:price></t>. Please confirm by clicking below:
+            <hover:show_text:"<t:regular>Click here to buy the land."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        failed: <t:error>The land<t:error_value> <v:land> </t>couldn't be bought. <t:regular>Someone else may have bought it.
+        not-for-sale: <t:error>The land<t:error_value> <v:land> </t>isn't for sale.
+        success: <t:positive>You bought the land<t:entity_land> <v:land> </t>for<t:cost> <v:price></t>. It's yours now.
     general:
       no-permission: <t:error>你无权执行此操作.
       not-exist: <t:error>不存在名为<t:error_value> <v:object> </t>的城镇或联邦. <t:regular>是不是拼写错了?
@@ -903,6 +1132,7 @@ lands:
             <hover:show_text:"<t:regular>Click here to claim this selection."><click:suggest_command:"/<v:cmd_claim>"><t:regular>✖ Claim: <t:cmd>/<v:cmd_claim> </t><java><t:click>[CLICK]</t></java></click></hover>
             <hover:show_text:"<t:regular>Click here to unclaim this selection."><click:suggest_command:"/<v:cmd_unclaim>"><t:regular>✖ Unclaim: <t:cmd>/<v:cmd_unclaim> </t><java><t:click>[CLICK]</t></java></click></hover>
             <hover:show_text:"<t:regular>Assign this selection to a subarea."><click:suggest_command:"/<v:cmd_assign>"><t:regular>✖ Subarea: <t:cmd>/<v:cmd_assign> </t><java><t:click>[CLICK]</t></java></click></hover>
+          <hover:show_text:"<t:regular>Click here to disable the selection."><click:run_command:"/<v:cmd_selection>"><t:regular>Disable the selection: <t:cmd>/<v:cmd_selection> </t><java><t:click>[CLICK]</t></java></click></hover>
         not-complete: <t:error>你的选区尚未完成. <t:regular>请确保两个位置都已设置. <hover:show_text:"<t:regular>点击此处切换选区模式."><click:run_command:"/<v:cmd>"><t:regular>执行<t:cmd>/<v:cmd> </t>即可切换选区模式<java><t:click>[点击]</t></java></click></hover>
         disabled: <title><t:regular_heading>选区模式<subtitle><t:negative>模式已禁用
     invites:
@@ -1087,6 +1317,7 @@ lands:
           target: <t:error>Land<t:error_value> <v:land> </t>banned you from their area<t:error_value> <v:area> </t>inside their land. <t:regular>You won't be able to enter it or teleport to the spawn, if it is located in this area.
         unban:
           success: <t:regular>Successfully unbanned player<t:regular_value> <v:player> </t>from this area <t:decoration>(</t><t:regular>Area:<t:regular_value> <v:area> </t>Land:<t:entity_land> <v:land></t><t:decoration>)</t><t:regular>.
+          not-banned: <t:error>The player<t:error_value> <v:player></t> isn't banned in the area<t:error_value> <v:area></t> of land<t:error_value> <v:land></t>.
         untrust:
           success: <t:regular>Successfully removed player<t:regular_value> <v:player> </t>from this area <t:decoration>(</t><t:regular>Area:<t:regular_value> <v:area> </t>Land:<t:entity_land> <v:land></t><t:decoration>)</t><t:regular>.
           owner: <t:error>Land owners can't be removed. <hover:show_text:"<t:regular>Click here to copy this command."><click:suggest_command:"/<v:cmd>"><t:regular>New owners can be set using <t:cmd>/<v:cmd></t><t:regular>. <java><t:click>[CLICK]</t></java></click></hover>
@@ -1133,6 +1364,7 @@ lands:
         revoke: <t:regular>Successfully revoked the invite for player<t:regular_value> <v:player> </t>for the whole land<t:entity_land> <v:land></t>. The player isn't added to any areas.
         success: <t:regular>Successfully removed player<t:regular_value> <v:player> </t>from the whole land<t:entity_land> <v:land></t>, except for areas which they rented/bought.
         already: <t:regular>The player<t:regular_value> <v:player> </t>isn't added to any areas of the land<t:entity_land> <v:land> </t>and hasn't received any invites.
+        partial: <t:regular>Removed player<t:regular_value> <v:player> </t>from the areas of land<t:entity_land> <v:land> </t>you manage. They're still trusted in the other areas.
       setrole:
         cant-set:
           tenant: "<t:error>You can't set the<t:error_value> <v:role> </t>role. <t:regular>It must be obtained through a rent or sell sign: <t:regular_value><v:wiki></t>"
@@ -1173,11 +1405,13 @@ lands:
             <hover:show_text:"<t:regular>Click here to deny this invite."><click:run_command:"/<v:cmd_deny>"><t:negative>✘ Deny: <t:cmd>/<v:cmd_deny> </t><java><t:click>[CLICK]</t></java></click></hover>
       unban:
         success: <t:regular>Successfully unbanned player<t:regular_value> <v:player> </t>from the land<t:entity_land> <v:land></t>.
+        not-banned: <t:error>The player<t:error_value> <v:player></t> isn't banned in the land<t:error_value> <v:land></t>.
       ban:
         success: <t:regular>Successfully banned player<t:regular_value> <v:player> </t>from the whole land<t:entity_land> <v:land></t>. They won't be able to enter any areas or teleport to the spawn.
         tenant: "<t:error>You can't ban the player<t:error_value> <v:player></t> from the whole land<t:error_value> <v:land></t>, because they're the tenant of area<t:error_value> <v:area></t>. <t:regular>Remove tenant: <t:cmd>/<v:cmd></t>"
         target: <t:error>Land<t:error_value> <v:land> </t>banned you from their whole land. <t:regular>You won't be able to enter any areas of it or teleport to the spawn.
         already: <t:regular>Player<t:regular_value> <v:player> </t>is already banned in the whole land<t:entity_land> <v:land></t>.
+        partial: <t:regular>Banned player<t:regular_value> <v:player> </t>from the areas of land<t:entity_land> <v:land> </t>you manage. They aren't banned in the other areas.
       setowner:
         target:
           max:
@@ -1202,6 +1436,7 @@ lands:
               land: <t:error>The player<t:error_value> <v:player> </t>can't own this land. <t:regular>They can only own lands with a maximum size of<t:limit> <v:max></t> chunks.
               player: <t:error>The player<t:error_value> <v:player> </t>can't own this land. <t:regular>They aren't able to claim<t:regular_value> <v:chunks></t> additional chunks, because they have only<t:regular_value> <v:chunks_left></t> chunks left.
             ownlands: <t:error>The player<t:error_value> <v:player> </t>isn't allowed to own any more lands. <t:regular>They already reached their maximum of<t:limit> <v:max> </t>own lands.
+      no-areas: <t:error>You can't do this for player<t:error_value> <v:player> </t>in any area of land<t:error_value> <v:land></t>. <t:regular>You need the permission in the area and a higher role than the player there.
     chat:
       format:
         minecraft: <noprefix><t:entity_land><v:land> </t><t:decoration>| </t><t:regular_value><v:role> </t><t:regular_value><v:player_display> </t><t:decoration>»</t><t:user_content> <v:message></t>
@@ -1260,6 +1495,7 @@ lands:
       deposit:
         success: <t:regular>You successfully put<t:cost> <v:cost> </t>in the bank of land<t:entity_land> <v:land></t>. <t:regular>New balance of the bank:<t:regular_value> <v:bank></t>
         partly: <t:error>Only deposited<t:cost> <v:cost> </t>of the provided<t:error_value> <v:input></t><t:regular>, because the bank of land<t:entity_land> <v:land> </t>reached the maximum balance of<t:limit> <v:max></t>.
+        console-all: <t:error>The console has no balance to deposit everything from. <t:regular>Please enter an amount instead.
       withdraw:
         balance: <t:error>There's not enough money in the land bank of land<t:error_value> <v:land></t>. <t:regular>There's only<t:regular_value> <v:bank> </t>available. Expected:<t:regular_value> <v:take></t>
         success: <t:regular>You successfully took<t:cost> <v:cost> </t>out of the bank of land<t:entity_land> <v:land></t>. <t:regular>New balance of bank:<t:regular_value> <v:bank></t>

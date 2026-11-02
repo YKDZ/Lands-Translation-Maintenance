@@ -103,6 +103,8 @@ translationScope:
       target: Locale/zh-CN_dialogs.yml
       definitionsSource: Locale/en-US_dialogs.yml
       fields:
+        - path: [value, confirm]
+          category: chat-string
         - path: [dialogs, "*", title]
           category: dialog-string
           scene: dialog-title

@@ -1,0 +1,3 @@
+- Improved: Commands that need a confirmation ask in a dialog on servers and clients that support it.
+- Improved: A selection started with the selection tool ends when you switch to another item.
+- Fixed: /lands admin land addrole didn't show its warning about duplicate roles.

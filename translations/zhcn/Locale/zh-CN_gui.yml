@@ -38,6 +38,7 @@ general:
       remove: <t:decoration>✖</t> <t:click>丢弃键<newline>   </t>
       label: <t:regular><v:label></t>
       desc: <t:regular><v:desc></t>
+    loading: <t:regular>...</t>
   enabled: <green>已启用</green>
   offline: <red>离线</red>
   never: <t:regular>从不</t>
@@ -49,6 +50,9 @@ general:
     rent: <t:regular_value>租用</t>
     rental: <t:regular_value>出租</t>
     sell: <t:regular_value>出售</t>
+    inactive: <t:regular_value>Inactive owners</t>
+    inactive_delete: <t:negative>Deleted on <t:time><v:date></t> if nobody buys it.
+    inactive_end: <t:regular>For sale until someone buys it.
   top:
     sorting:
       balance: 金库存款
@@ -67,6 +71,41 @@ general:
     west: 西
   wvassal: <t:negative>vassal</t>
   wnormal: <t:regular>member</t>
+  confirm:
+    buy_inactive: <t:regular>Buy the land <t:entity_land><v:land></t> for <t:cost><v:price></t>? Its members are untrusted once you bought it.
+    camp_place: "<t:regular>Place a camp here?<newline><newline>Radius: <t:regular_value><v:radius></t><newline>Time left: <t:time><v:time></t>"
+    camp_remove: <t:regular>Remove the camp <t:entity_land><v:land></t>? You get the camp item back to place it somewhere else. It keeps its time left.
+    war_surrender: <t:regular>Surrender the war against <t:entity_land><v:enemy></t>? Your side loses the war.
+  expiration:
+    delete: <t:negative>Deleted on <t:time><v:date></t>, unless the owner logs in.
+    delete_members: <t:negative>Deleted on <t:time><v:date></t>, unless the owner or a member logs in.
+    empty: <t:negative>Deleted on <t:time><v:date></t>, since it has no claims.
+    for_sale: <t:negative>For sale for <t:cost><v:price></t>, unless the owner logs in.
+    for_sale_delete: <t:negative>For sale for <t:cost><v:price></t>, deleted on <t:time><v:date></t> if nobody buys it, unless the owner logs in.
+    never: <t:positive>Doesn't expire</t>
+    online: <t:positive>Doesn't expire while the owner is online.</t>
+    protected: "<t:positive>Isn't deleted: <v:reason></t>"
+    reason:
+      bypass: the owner never expires
+      shield: expiration shield
+      war: at war
+    sell: <t:negative>Goes up for sale on <t:time><v:date></t>, unless the owner logs in.
+    transfer: <t:regular>Goes to <t:regular_value><v:player></t> on <t:time><v:date></t>, unless the owner logs in.
+  level-up:
+    reason:
+      loading: <t:regular>The requirements are being checked.
+      money: <t:error>The bank doesn't have enough money.
+      requirements: <t:error>Not all requirements are met.
+    result:
+      cancelled: <t:error>The level-up was cancelled.
+      conflict: <t:error>The level changed meanwhile. Please try again.
+      disabled: <t:error>Levels are disabled.
+      failed: <t:error>Saving failed, nothing was paid. Please try again.
+      highest_level: <t:error>This is already the highest level.
+      no_permission: <t:error>You aren't allowed to level up.
+      not_enough_money: <t:error>The bank doesn't have enough money.
+      requirements_not_met: <t:error>Not all requirements are met.
+      success: <t:positive>Leveled up.
 
 physical:
   selection:
@@ -166,8 +205,8 @@ common:
         name: <t:error_heading>冷却中
         lore:
           - <t:error>You must wait another<t:error_value> <v:time></t>
-          - before you can teleport to any
-          - land spawn again.
+          - before you can teleport to a
+          - spawn again.
       child_failure_teleport_unsafe:
         name: <t:error_heading>不安全
         lore:
@@ -791,21 +830,10 @@ gui:
     title: <t:menu_title>升级进度
     items:
       default:
-        next:
-          name: <t:regular_heading>下一级:</t><t:regular> <t:regular_value><v:level></t>
-          lore:
-            - <t:regular><v:object> <t:regular>will reach this
-            - level, once all requirements
-            - are met.
-            - ""
-            - "Attributes:"
-            - <t:regular_value><v:attributes></t>
-          material: BEACON
-          slots: 42
         current:
           name: <t:regular_heading>当前:</t><t:regular> <t:regular_value><v:level></t>
           lore:
-            - "<t:regular>Attributes:"
+            - "<t:regular>Rewards of this level:"
             - <t:regular_value><v:attributes></t>
           material: OAK_SIGN
           slots: 40
@@ -829,6 +857,42 @@ gui:
             - <v:bar><t:regular> <t:regular_value><v:progress></t>
             - <t:user_content><v:description></t>
           material: RED_STAINED_GLASS
+        level_up:
+          material: EXPERIENCE_BOTTLE
+          slots: 42
+          lore:
+            - <action:primary><label>Level up</label></action>
+            - ""
+            - <t:regular>All requirements are met.</t>
+            - "<t:regular>Cost: <t:cost><v:cost></t> <t:regular>from the bank."
+            - ""
+            - "<t:regular>Rewards:"
+            - <t:regular_value><v:attributes></t>
+          name: <t:positive_heading>Level up to <v:level>
+        level_up_locked:
+          material: BEACON
+          slots: 42
+          lore:
+            - <v:reason>
+            - "<t:regular>Cost: <t:cost><v:cost></t> <t:regular>(bank: <t:cost><v:bank></t><t:regular>)"
+            - ""
+            - "<t:regular>Rewards:"
+            - <t:regular_value><v:attributes></t>
+          name: <t:regular_heading>Next:</t><t:regular> <t:regular_value><v:level></t>
+        level_up_max:
+          material: NETHER_STAR
+          slots: 42
+          lore:
+            - <t:regular>There's no higher level.
+          name: <t:positive_heading>Highest level
+        child_failure_level_up:
+          lore:
+            - <v:reason>
+          name: <t:error_heading>Couldn't level up
+        child_success_level_up:
+          lore:
+            - <t:regular>Paid <t:cost><v:cost></t>
+          name: <t:positive_heading>Leveled up to <v:level>
   mainblock:
     title: <t:menu_title><v:level_prefix><v:land>
     items:
@@ -996,6 +1060,27 @@ gui:
           name: <t:error_heading>空间不足
           lore:
             - <t:error>There's not enough space to place it at your current location.
+        camp_remove:
+          material: skin:548d7d1e03e1af145b0125ab841285672b421265da2ab915015f9058438ba2d8
+          slots: 34
+          lore:
+            - <t:decoration>✖ </t><t:regular>Unclaim this camp and get the
+            - "   camp item back, to place it"
+            - "   somewhere else. Its time left"
+            - "   stays the same."
+          name: <t:negative_heading>Remove Camp
+        expiration:
+          material: COBWEB
+          slots: 33
+          lore:
+            - <v:status>
+          name: <t:regular_heading>Inactivity
+        expiration_camp:
+          material: CLOCK
+          slots: 33
+          lore:
+            - <t:regular>This camp is deleted in <t:time><v:time></t>.
+          name: <t:regular_heading>Time left
       patches:
         basic:
           statistics:
@@ -1529,6 +1614,12 @@ gui:
             - <t:decoration>✖ </t><t:regular>Allow this role to deposit money
             - "   into the land bank?"
             - "    <t:decoration>• </t><t:regular>Command: <t:cmd>/<v:cmd></t>"
+        entry_level_up:
+          material: EXPERIENCE_BOTTLE
+          lore:
+            - <t:decoration>✖ </t><t:regular>Allow this role to level up
+            - "   the land? The cost is paid from the land bank."
+          name: "<v:enabled_symbol> <t:entry_heading>Level Up: <v:enabled>"
   area:
     title: <t:menu_title><v:area>
     items:
@@ -2060,8 +2151,8 @@ gui:
         refresh_type:
           name: '<t:regular_heading>Type: <t:regular_value><v:type></t>'
           lore:
-            - <t:decoration>✖ </t><t:regular>Display objects to buy
-            - "   or to rent?"
+            - <t:decoration>✖ </t><t:regular>Show offers to rent, to buy,
+            - "   or lands of inactive owners?"
           material: COMPARATOR
           slots: 42
         entry_land_buy:
@@ -2098,6 +2189,15 @@ gui:
           lore:
             - <t:regular>You need to wait another<t:time> <v:time></t>
             - before you can teleport to an offer again.
+        entry_land_buy_inactive:
+          material: INHERIT
+          lore:
+            - <t:decoration>• </t><t:regular>Cost:<t:cost> <v:costs></t>
+            - "<t:decoration>• </t><t:regular>Size: <t:regular_value><v:chunks></t> chunks"
+            - <t:decoration>• </t><t:negative>Owner <t:error_value><v:owner></t> is inactive
+            - <t:decoration>• </t><v:end>
+            - <t:decoration>✖ </t><t:regular>Buy
+          name: "<t:entry_heading>Buy Land: <v:land>"
   action-confirm:
     title: <t:menu_title>确认此操作
     items:
@@ -2125,6 +2225,8 @@ gui:
         info:
           name: <t:regular_heading>确认此操作
           lore:
+            - <v:message>
+            - ""
             - <t:regular>Click <t:positive_heading>Confirm</t> to confirm or
             - <t:negative_heading>Cancel</t> to abort this action.
           material: OAK_SIGN
@@ -2235,6 +2337,12 @@ gui:
             - <t:decoration>✖ </t><t:regular>View relations.
           material: LIME_BANNER
           slots: 29
+        expiration:
+          material: COBWEB
+          slots: 17
+          lore:
+            - <v:status>
+          name: <t:regular_heading>Inactivity
   list_admin_wilderness_landflags:
     title: <t:menu_title>环境设置
   list_area_roles:

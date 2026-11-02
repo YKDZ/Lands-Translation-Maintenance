@@ -198,6 +198,15 @@ help:
       chat: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Nation chat</click></hover>
       untrust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove land from nation</click></hover>
       info: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>View information</click></hover>
+      admin:
+        main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Nation administration</click></hover>
+        nation:
+          level: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set the level of a nation</click></hover>
+          main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage a nation</click></hover>
+          shield:
+            main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage the war shield of a nation</click></hover>
+            modify: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add (+) or remove (-) war shield time</click></hover>
+            set: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set the war shield</click></hover>
     lands:
       land:
         nation: {}
