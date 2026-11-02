@@ -3081,6 +3081,44 @@ void test("角色名重复比较复用 MiniMessage 渲染与 Java 忽略大小�
   );
 });
 
+void test("角色名重复比较复现旧颜色转换后的存储值", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      roles: {
+        source: [
+          { key: "legacy-colored", name: "Legacy" },
+          { key: "minimessage-colored", name: "MiniMessage" },
+          { key: "legacy-distinct", name: "Legacy distinct" },
+          { key: "minimessage-distinct", name: "MiniMessage distinct" },
+        ],
+        target: [
+          { key: "legacy-colored", name: "&aFoo" },
+          { key: "minimessage-colored", name: "<red>foo" },
+          { key: "legacy-distinct", name: "&aBar" },
+          { key: "minimessage-distinct", name: "<red>Baz" },
+        ],
+      },
+    },
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const duplicates = checkResult(report, "lands-role-name-duplicate");
+  assert.equal(duplicates.status, "complete", JSON.stringify(duplicates));
+  assert.deepEqual(
+    duplicates.diagnostics.map(({ location }) => location.range.path),
+    [["land", "roles", "minimessage-colored", "name"]],
+  );
+  assert.equal(duplicates.diagnostics[0]?.severity, "error");
+
+  const validity = checkResult(report, "lands-role-name-validity");
+  assert.equal(validity.status, "complete", JSON.stringify(validity.issues));
+  assert.deepEqual(validity.diagnostics, []);
+});
+
 void test("角色名 9.1.1 规则不外推到较早 Lands 来源版本", async (t) => {
   const project = await createQualityProject(
     t,
