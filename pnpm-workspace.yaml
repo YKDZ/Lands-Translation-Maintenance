@@ -24,8 +24,6 @@ allowBuilds:
   esbuild: true
 
 catalog:
-  "@lands-l10n/l10n": workspace:*
-  "@lands-l10n/typescript-config": workspace:*
   "@lioni/lioni": 0.2.0
   "@types/node": ^24.13.3
   fflate: 0.8.3

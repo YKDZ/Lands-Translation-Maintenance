@@ -16,7 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "devDependencies": {
-    "@lands-l10n/l10n": "catalog:",
+    "@lands-l10n/l10n": "workspace:*",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
