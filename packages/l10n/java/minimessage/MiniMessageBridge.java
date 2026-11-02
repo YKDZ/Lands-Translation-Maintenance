@@ -1028,8 +1028,12 @@ public final class MiniMessageBridge {
           MiniMessage parser = MiniMessage.builder()
               .tags(roleNameResolver(theme))
               .build();
+          // 角色构造器先将适配输入存为纯文本；加载器比较前会再次解析该字段。
+          String stored = PlainTextComponentSerializer.plainText()
+              .serialize(parser.deserialize(message.input()))
+              .replace("\ue000", "");
           String rendered = PlainTextComponentSerializer.plainText()
-              .serialize(parser.deserialize(raw))
+              .serialize(parser.deserialize(stored))
               .replace("\ue000", "");
           renderedRoleNames.put(message.index(), rendered);
           System.out.println("P\t" + message.index() + "\tok\t" + encode(rendered) + "\t");
