@@ -66,8 +66,18 @@
       "tags": ["work:repair"]
     },
     "//#typecheck": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "packages/tooling-config/package.json",
+        "packages/tooling-config/base.json",
+        "packages/tooling-config/node.json"
+      ],
       "outputs": [],
       "tags": ["quality:light"]
     }
-  }
+  },
+  "globalDependencies": [
+    "packages/tooling-config/oxfmt.config.ts",
+    "packages/tooling-config/oxlint.config.ts"
+  ]
 }

@@ -3,12 +3,13 @@
   "tags": ["library"],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "!test/**",
         "!scripts/**",
-        "$TURBO_ROOT$/packages/typescript-config/base.json"
+        "$TURBO_ROOT$/packages/tooling-config/package.json",
+        "$TURBO_ROOT$/packages/tooling-config/base.json",
+        "$TURBO_ROOT$/packages/tooling-config/node.json"
       ],
       "outputs": ["dist/**"],
       "tags": ["quality:light"]
@@ -74,7 +75,9 @@
       "dependsOn": ["^typecheck"],
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/typescript-config/base.json"
+        "$TURBO_ROOT$/packages/tooling-config/package.json",
+        "$TURBO_ROOT$/packages/tooling-config/base.json",
+        "$TURBO_ROOT$/packages/tooling-config/node.json"
       ],
       "outputs": [],
       "tags": ["quality:light"]

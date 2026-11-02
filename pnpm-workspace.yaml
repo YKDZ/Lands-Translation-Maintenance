@@ -27,8 +27,8 @@ catalog:
   "@lioni/lioni": 0.2.0
   "@types/node": ^24.13.3
   fflate: 0.8.3
-  "oxfmt": ^0.71.0
-  "oxlint": ^1.77.0
+  "oxfmt": ^0.74.0
+  "oxlint": ^1.89.0
   "oxlint-tsgolint": ^7.0.2001
   parse5: 8.0.1
   "smol-toml": ^1.8.0

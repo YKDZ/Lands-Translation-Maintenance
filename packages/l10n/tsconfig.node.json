@@ -1,0 +1,13 @@
+{
+  "extends": "@lands-l10n/tooling-config/node.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "declarationMap": false
+  },
+  "include": [
+    "lioni.config.ts",
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts"
+  ]
+}

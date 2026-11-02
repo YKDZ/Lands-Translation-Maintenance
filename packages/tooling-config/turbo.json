@@ -2,11 +2,6 @@
   "extends": ["//"],
   "tags": ["library"],
   "tasks": {
-    "build": {
-      "dependsOn": ["^build"],
-      "inputs": [],
-      "outputs": []
-    },
     "format:check": {
       "inputs": [],
       "outputs": [],
@@ -22,12 +17,20 @@
     "lint:fix": {
       "inputs": [],
       "outputs": [],
-      "cache": false
+      "cache": false,
+      "tags": ["work:repair"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"],
+      "dependsOn": [],
       "inputs": [],
-      "outputs": []
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "lint": {
+      "dependsOn": [],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
     }
   }
 }

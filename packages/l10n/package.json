@@ -31,7 +31,7 @@
     "lint:fix": "oxlint --format=unix . --fix",
     "test": "node --conditions=source --test --test-reporter=spec --test-reporter=./scripts/node-test-count-reporter.ts --test-reporter-destination=stdout --test-reporter-destination=stderr 'test/*.test.ts'",
     "test:minimessage": "node --conditions=source --test --test-reporter=spec --test-reporter=./scripts/node-test-count-reporter.ts --test-reporter-destination=stdout --test-reporter-destination=stderr 'test/minimessage/*.test.ts'",
-    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+    "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false"
   },
   "dependencies": {
     "@lioni/lioni": "catalog:",
@@ -41,7 +41,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@lands-l10n/typescript-config": "workspace:*",
+    "@lands-l10n/tooling-config": "workspace:*",
     "@types/node": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
