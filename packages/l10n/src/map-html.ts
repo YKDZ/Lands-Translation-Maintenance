@@ -122,42 +122,6 @@ const optionalEndTags = new Set([
   "thead",
   "tr",
 ]);
-const suppliedMapVariables = new Set([
-  "land",
-  "title",
-  "owner",
-  "world",
-  "x",
-  "z",
-  "nation",
-  "chunks",
-  "chunks_max",
-  "members",
-  "members_max",
-  "balance",
-  "upkeep",
-  "upkeep_next",
-  "created_at",
-  "taxes_next",
-  "members_amount",
-  "level",
-  "public",
-  "allies",
-  "enemies",
-  "cmd",
-  "capital",
-  "level_nation",
-  "lands",
-  "lands_amount",
-  "members_amount_nation",
-  "nation_created_at",
-]);
-
-const mapVariablesByVersion = new Map([
-  ["8.0.1", suppliedMapVariables],
-  ["8.9.2", new Set([...suppliedMapVariables, "land_color"])],
-]);
-
 function walkElements(
   nodes: readonly HtmlNode[],
   visit: (element: HtmlElement) => void,
@@ -276,7 +240,7 @@ function nodeOutput(
 ): string | undefined {
   if (node.kind !== "tag") return node.visibleText;
   if (marker !== undefined) return marker;
-  // Lands 8.0.1 会将地图占位符在 HTML 属性中按字面内容保留；这是该版本的行为，与官方 MiniMessage 插入项分开处理。
+  // 地图占位符在 HTML 属性中按字面内容保留；属性解析事实与官方 MiniMessage 插入项分开处理。
   if (withinAttribute && node.name === "v") {
     return node.raw;
   }
@@ -895,7 +859,6 @@ export interface MapHtmlAnalysis {
 export function analyzeMapHtml(
   source: ParsedMiniMessageDocument,
   target: ParsedMiniMessageDocument,
-  sourceVersion: string,
 ): MapHtmlAnalysis {
   const sourceHtml = parseHtml(source);
   const targetHtml = parseHtml(target);
@@ -1054,18 +1017,11 @@ export function analyzeMapHtml(
           behavior: "HTML attribute MiniMessage variables are expanded",
         },
         {
-          sourceVersion,
           attribute: "style",
           position: positionJson(landColorStyleAttribute.position),
           behavior: "attribute placeholder remains literal",
-          resolverSuppliesVariable: isKnownMapVariable(
-            "land_color",
-            sourceVersion,
-          ),
         },
-        !isKnownMapVariable("land_color", sourceVersion)
-          ? "原文在 HTML style 属性中使用 <v:land_color>；8.0.1 未提供此值，且属性内变量不会展开"
-          : "原文在 HTML style 属性中使用 <v:land_color>；即使 8.9.2 提供此值，属性内变量仍不会展开",
+        "原文在 HTML style 属性中使用 <v:land_color>；属性内占位符按字面保留，不会像正文一样展开",
       ),
     );
   }
@@ -1109,17 +1065,6 @@ export function isMapHtmlAttributeTag(
     position + raw.length,
     attributeRanges(input),
   );
-}
-
-export function isKnownMapVariable(
-  name: string,
-  sourceVersion: string,
-): boolean {
-  return mapVariablesByVersion.get(sourceVersion)?.has(name) ?? false;
-}
-
-export function supportsMapHtmlVersion(sourceVersion: string): boolean {
-  return mapVariablesByVersion.has(sourceVersion);
 }
 
 export function mapHtmlSegments(

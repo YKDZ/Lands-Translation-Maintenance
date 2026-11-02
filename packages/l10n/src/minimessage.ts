@@ -10,11 +10,9 @@ import type { ResourceInventoryEntry as LandsResourceInventoryEntry } from "#/li
 import {
   analyzeMapHtml,
   isMapHtmlAttributeTag,
-  isKnownMapVariable,
   isMapHtmlParserTag,
   mapHtmlSegments,
   mapHtmlTagRanges,
-  supportsMapHtmlVersion,
 } from "#/map-html";
 import type {
   AdaptedMiniMessageInput,
@@ -1752,89 +1750,6 @@ function translatableTextDocuments(
   return { documents: output, incompleteFacts };
 }
 
-function appendMapVariableFindings(
-  inputs: readonly MessageInput[],
-  documents: readonly ParsedMiniMessageDocument[],
-  findings: MiniMessageFinding[],
-  unavailable: Set<string>,
-  sourceVersion: string,
-): void {
-  const mapInputs = inputs.filter(
-    (input) => input.message.format === "map-html-minimessage",
-  );
-  if (!supportsMapHtmlVersion(sourceVersion)) {
-    for (const input of mapInputs) {
-      if (input.origin !== "source") continue;
-      findings.push(
-        findingForMessage(
-          input,
-          "map-html.source-version-unsupported",
-          "地图模板的来源版本未受支持；动态变量供值无法完整核对",
-          { supportedVersions: ["8.0.1", "8.9.2"] },
-          { sourceVersion },
-        ),
-      );
-    }
-    if (mapInputs.length > 0) {
-      unavailable.add("Lands 地图模板变量供值不支持此来源版本");
-    }
-    return;
-  }
-
-  const inputByDocument = new Map(
-    mapInputs.map((input) => [`${input.message.id}\0${input.origin}`, input]),
-  );
-  for (const document of documents) {
-    if (
-      document.message.format !== "map-html-minimessage" ||
-      document.status !== "parsed"
-    ) {
-      continue;
-    }
-    const input = inputByDocument.get(
-      `${document.message.id}\0${document.origin}`,
-    );
-    if (input === undefined) continue;
-    for (const node of document.nodes) {
-      if (
-        node.kind !== "tag" ||
-        node.name !== "v" ||
-        node.closing ||
-        node.parameters[0] === undefined ||
-        isMapHtmlAttributeTag(input.input, node.position.start, node.raw)
-      ) {
-        continue;
-      }
-      const variable = node.parameters[0];
-      if (isKnownMapVariable(variable, sourceVersion)) continue;
-      const context: JsonValue = node.context.map(
-        (frame) =>
-          [
-            frame.kind,
-            frame.name,
-            frame.position.start,
-            frame.position.end,
-          ] as const,
-      );
-      findings.push(
-        findingForMessage(
-          input,
-          "map-html.variable-unknown",
-          "地图模板使用了 Lands 未提供的动态变量",
-          { state: "known map v variable" },
-          {
-            variable,
-            tag: node.raw,
-            position: { start: node.position.start, end: node.position.end },
-            documentIndex: document.documentIndex,
-            context,
-          },
-        ),
-      );
-    }
-  }
-}
-
 export async function parseMiniMessages(
   input: MiniMessageProjectionInput,
 ): Promise<MiniMessageParseProject> {
@@ -1978,13 +1893,6 @@ export async function parseMiniMessages(
       ...(input.listItems === undefined ? {} : { listItems: input.listItems }),
     });
   }
-  appendMapVariableFindings(
-    inputs,
-    documentResults,
-    mapFindings,
-    unavailable,
-    sourceVersion,
-  );
   const mapSegmentOverrides = new Map<
     ParsedMiniMessageDocument,
     readonly TranslatableTextSegment[]
@@ -2022,11 +1930,7 @@ export async function parseMiniMessages(
     ) {
       continue;
     }
-    const analysis = analyzeMapHtml(
-      sourceDocument,
-      targetDocument,
-      sourceVersion,
-    );
+    const analysis = analyzeMapHtml(sourceDocument, targetDocument);
     mapFindings.push(...analysis.findings);
     mapSegmentOverrides.set(sourceDocument, analysis.sourceSegments);
     mapSegmentOverrides.set(targetDocument, analysis.targetSegments);

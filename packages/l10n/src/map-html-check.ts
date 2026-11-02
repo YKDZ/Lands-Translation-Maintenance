@@ -48,11 +48,6 @@ function mapBasis(input: MiniMessageCheckInput): JsonValue {
             source: message.source,
             target: input.candidate.content,
           },
-    sourceVersion: findings.some(({ code }) =>
-      code.startsWith("map-html.variable-"),
-    )
-      ? dependencies.sourceVersion
-      : null,
     findings: findings.map((finding) => ({
       code: finding.code,
       origin: finding.origin,
