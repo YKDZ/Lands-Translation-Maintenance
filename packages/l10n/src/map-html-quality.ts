@@ -76,9 +76,7 @@ export function mapHtmlIssues(
       issue.message?.id === sourceKey ||
       (issue.message === undefined &&
         (issue.code === "minimessage.java-unavailable" ||
-          issue.code === "minimessage.project-input-unavailable" ||
-          (issue.code === "minimessage.projection-incomplete" &&
-            issue.reason.includes("地图模板变量供值")))),
+          issue.code === "minimessage.project-input-unavailable")),
   );
   return [...readIssues, ...selectedIssues, ...documentIssues];
 }

@@ -349,9 +349,9 @@ void describe("地图与旧格式原生 QA", () => {
     );
   });
 
-  void it("按 Lands 版本报告地图属性占位符、旧颜色限制与未支持版本", async (t) => {
+  void it("地图属性占位符按字面保留，旧颜色限制仍按版本检查", async (t) => {
     const mapProject = await createFormatProject(t, {
-      sourceVersion: "8.0.1",
+      sourceVersion: "9.1.1",
       mapDescription: '<div style="color: <v:land_color>;"><v:land></div>',
       targetMapDescription:
         '<div style="color: <v:land_color>;"><v:land></div>',
@@ -360,12 +360,21 @@ void describe("地图与旧格式原生 QA", () => {
     const mapReport = runQa(nativeMapProject.configPath);
     const mapLimits = checkResult(mapReport.report, "map-html-source-limits");
     assert.equal(mapReport.result.status, 0, mapReport.result.stderr);
-    assert.ok(
-      mapLimits.diagnostics.some(
-        ({ object }) =>
-          object.code === "map-html.source-attribute-variable-literal",
-      ),
-      JSON.stringify(mapLimits, null, 2),
+    const landColorLimit = mapLimits.diagnostics.find(
+      ({ object }) =>
+        object.code === "map-html.source-attribute-variable-literal",
+    );
+    const landColorEvidence = landColorLimit?.evidence?.find(
+      ({ role }) => role === "actual",
+    )?.value as
+      | { readonly attribute?: string; readonly behavior?: string }
+      | undefined;
+    assert.equal(mapLimits.status, "complete");
+    assert.equal(landColorLimit?.severity, "warning");
+    assert.equal(landColorEvidence?.attribute, "style");
+    assert.equal(
+      landColorEvidence?.behavior,
+      "attribute placeholder remains literal",
     );
     assert.ok(
       mapLimits.diagnostics.every(
@@ -375,32 +384,6 @@ void describe("地图与旧格式原生 QA", () => {
     assert.ok(
       mapLimits.diagnostics.every(({ severity }) => severity === "warning"),
     );
-
-    const newerMapProject = await createFormatProject(t, {
-      sourceVersion: "8.9.2",
-      mapDescription: '<div style="color: <v:land_color>;"><v:land></div>',
-      targetMapDescription:
-        '<div style="color: <v:land_color>;"><v:land></div>',
-    });
-    const newerNativeMapProject = await prepareNativeProject(
-      t,
-      newerMapProject,
-    );
-    const newerMapReport = runQa(newerNativeMapProject.configPath);
-    const newerMapLimits = checkResult(
-      newerMapReport.report,
-      "map-html-source-limits",
-    );
-    const landColorLimit = newerMapLimits.diagnostics.find(
-      ({ object }) =>
-        object.code === "map-html.source-attribute-variable-literal",
-    );
-    const landColorEvidence = landColorLimit?.evidence?.find(
-      ({ role }) => role === "actual",
-    )?.value as { readonly resolverSuppliesVariable?: boolean } | undefined;
-    assert.equal(newerMapLimits.status, "complete");
-    assert.equal(landColorLimit?.severity, "warning");
-    assert.equal(landColorEvidence?.resolverSuppliesVariable, true);
 
     for (const [sourceVersion, sourceName, targetName] of [
       ["8.0.1", "&aStone", "&a石头"],
@@ -480,35 +463,10 @@ void describe("地图与旧格式原生 QA", () => {
     );
   });
 
-  void it("原译同文仍检查地图和旧颜色格式，地图版本不明时保留不完整状态", async (t) => {
-    const knownVariables = [
-      "owner",
-      "world",
-      "x",
-      "z",
-      "level",
-      "nation",
-      "chunks",
-      "chunks_max",
-      "members",
-      "members_max",
-      "balance",
-      "upkeep",
-      "upkeep_next",
-      "created_at",
-      "taxes_next",
-    ];
-    const playerVariables = [
-      "balance_player",
-      "chunk_cost",
-      "taxes",
-      "player_chunks_used",
-      "player_chunks",
-    ];
-    const variableTemplate = `<div>${[...knownVariables, ...playerVariables]
-      .map((name) => `<v:${name}>`)
-      .join(" ")}</div>`;
+  void it("地图变量只校验原译对应，旧标题颜色格式仍按版本检查", async (t) => {
+    const variableTemplate = "<div><v:runtime_value></div>";
     const sameTextProject = await createFormatProject(t, {
+      sourceVersion: "9.1.1",
       mapDescription: variableTemplate,
       targetMapDescription: variableTemplate,
     });
@@ -518,40 +476,50 @@ void describe("地图与旧格式原生 QA", () => {
     );
     const sameTextReport = runQa(nativeSameTextProject.configPath);
     const sameTextMap = checkResult(sameTextReport.report, "map-html");
-    assert.ok(
-      sameTextMap.diagnostics.some(
-        ({ object }) => object.code === "map-html.variable-unknown",
-      ),
-      JSON.stringify(sameTextMap, null, 2),
+    const sameTextVariables = checkResult(
+      sameTextReport.report,
+      "minimessage-variable-correspondence",
     );
-    const unknownVariables = sameTextMap.diagnostics.flatMap((diagnostic) => {
-      if (diagnostic.object.code !== "map-html.variable-unknown") return [];
-      const actual = diagnostic.evidence?.find(({ role }) => role === "actual")
-        ?.value as { readonly variable?: string } | undefined;
-      return actual?.variable === undefined ? [] : [actual.variable];
-    });
-    assert.deepEqual(unknownVariables.sort(), playerVariables.sort());
+    assert.equal(sameTextMap.status, "complete", JSON.stringify(sameTextMap));
+    assert.deepEqual(sameTextMap.diagnostics, []);
+    assert.equal(
+      sameTextVariables.status,
+      "complete",
+      JSON.stringify(sameTextVariables),
+    );
+    assert.deepEqual(sameTextVariables.diagnostics, []);
 
-    const unknownMapProject = await createFormatProject(t, {
-      sourceVersion: "8.9.3",
-      mapDescription: "<div><v:land></div>",
-      targetMapDescription: "<div><v:land></div>",
+    const changedMapDescription = "<div><v:display_value></div>";
+    const mismatchProject = await createFormatProject(t, {
+      sourceVersion: "9.1.1",
+      mapDescription: variableTemplate,
+      targetMapDescription: changedMapDescription,
     });
-    const nativeUnknownMapProject = await prepareNativeProject(
+    const nativeMismatchProject = await prepareNativeProject(
       t,
-      unknownMapProject,
+      mismatchProject,
     );
-    const unknownMapReport = runQa(nativeUnknownMapProject.configPath);
-    const unknownMapLimits = checkResult(
-      unknownMapReport.report,
-      "map-html-source-limits",
+    const mismatchReport = runQa(nativeMismatchProject.configPath);
+    const mismatchMap = checkResult(mismatchReport.report, "map-html");
+    const mismatchVariables = checkResult(
+      mismatchReport.report,
+      "minimessage-variable-correspondence",
     );
-    assert.equal(unknownMapLimits.status, "incomplete");
-    assert.ok(
-      unknownMapLimits.diagnostics.some(
-        ({ object }) => object.code === "map-html.source-version-unsupported",
-      ),
-      JSON.stringify(unknownMapLimits, null, 2),
+    const variableMismatch = mismatchVariables.diagnostics.find(
+      ({ object }) => object.code === "minimessage.variable-name-mismatch",
+    );
+    const expectedVariable = variableMismatch?.evidence?.find(
+      ({ role }) => role === "expected",
+    )?.value as { readonly name?: string } | undefined;
+    const actualVariable = variableMismatch?.evidence?.find(
+      ({ role }) => role === "actual",
+    )?.value as { readonly name?: string } | undefined;
+    assert.equal(mismatchMap.status, "complete", JSON.stringify(mismatchMap));
+    assert.equal(expectedVariable?.name, "runtime_value");
+    assert.equal(actualVariable?.name, "display_value");
+    assert.equal(
+      variableMismatch?.location.range.start,
+      changedMapDescription.indexOf("<v:display_value>"),
     );
 
     const sameColorProject = await createGuiProject(t, {

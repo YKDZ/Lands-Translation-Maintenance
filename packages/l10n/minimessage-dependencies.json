@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "javaRelease": 17,
+  "javaRelease": 25,
   "artifacts": [
     {
       "group": "net.kyori",
