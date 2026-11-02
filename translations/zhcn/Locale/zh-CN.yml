@@ -178,18 +178,18 @@ general:
         state: 状态
         visitor: 访客
         duration: 持续时间
-        backup: backup
-        message: message
-  player-load-failed: <t:error>Your Lands data couldn't be loaded.</t> <t:regular>Please rejoin. If this keeps happening, tell an administrator.
+        backup: 备份
+        message: 消息
+  player-load-failed: <t:error>你的 Lands 数据无法被加载.</t> <t:regular>请重新登入. 如果这持续发生, 联系管理员.
 
 help:
   help:
     root:
-      header: <noprefix><hover:show_text:"<t:regular>Click here to navigate to the previous page."><click:run_command:"/<v:cmd> <v:previous>"><t:decoration><b>━━<!b><t:cmd><b>«<!b></t><t:decoration><b>━</click></hover> <!b><t:prefix>Lands Commands </t><t:regular>Page<t:regular_value> <v:page> </t><t:decoration>/</t><t:regular_value> <v:pages></t> <hover:show_text:"<t:regular>Click here to go to the next page."><click:run_command:"/<v:cmd> <v:next>"><t:decoration><b>━<!b><t:cmd><b>»<!b></t><t:decoration><b>━━</click></hover>
+      header: <noprefix><hover:show_text:"<t:regular>点此翻到上一页."><click:run_command:"/<v:cmd> <v:previous>"><t:decoration><b>━━<!b><t:cmd><b>«<!b></t><t:decoration><b>━</click></hover> <!b><t:prefix>Lands Commands </t><t:regular>Page<t:regular_value> <v:page> </t><t:decoration>/</t><t:regular_value> <v:pages></t> <hover:show_text:"<t:regular>Click here to go to the next page."><click:run_command:"/<v:cmd> <v:next>"><t:decoration><b>━<!b><t:cmd><b>»<!b></t><t:decoration><b>━━</click></hover>
       footer: |
         <noprefix>
-        <java><t:regular>Click on the arrows below to navigate.</java>
-        <hover:show_text:"<t:regular>Click here to navigate to the previous page."><click:run_command:"/<v:cmd> <v:previous>"><t:decoration><b>━━<!b><t:cmd><b>«<!b></t><t:decoration><b>━</click></hover> <!b><t:prefix>Lands Commands </t><t:regular>Page<t:regular_value> <v:page> </t><t:decoration>/</t><t:regular_value> <v:pages></t> <hover:show_text:"<t:regular>Click here to go to the next page."><click:run_command:"/<v:cmd> <v:next>"><t:decoration><b>━<!b><t:cmd><b>»<!b></t><t:decoration><b>━━</click></hover>
+        <java><t:regular>点击下方箭头来翻页.</java>
+        <hover:show_text:"<t:regular>点此翻到下一页."><click:run_command:"/<v:cmd> <v:previous>"><t:decoration><b>━━<!b><t:cmd><b>«<!b></t><t:decoration><b>━</click></hover> <!b><t:prefix>Lands Commands </t><t:regular>Page<t:regular_value> <v:page> </t><t:decoration>/</t><t:regular_value> <v:pages></t> <hover:show_text:"<t:regular>Click here to go to the next page."><click:run_command:"/<v:cmd> <v:next>"><t:decoration><b>━<!b><t:cmd><b>»<!b></t><t:decoration><b>━━</click></hover>
     sub:
       unknown: |
         <t:error>子命令<t:error_value> <v:command> </t>不存在.
