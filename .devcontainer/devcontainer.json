@@ -11,7 +11,11 @@
     }
   },
   "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/java:1": {
+      "jdkDistro": "tem",
+      "version": "25"
+    }
   },
   "mounts": [
     {
