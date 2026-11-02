@@ -64,6 +64,11 @@
       "cache": false,
       "tags": ["work:repair"]
     },
+    "//#l10n:submit": {
+      "cache": false,
+      "outputs": [],
+      "tags": ["work:on-demand"]
+    },
     "//#typecheck": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -75,6 +80,10 @@
       "tags": ["quality:light"]
     },
     "//#test:task-gates": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#test:l10n-submit": {
       "outputs": [],
       "tags": ["quality:light"]
     }
