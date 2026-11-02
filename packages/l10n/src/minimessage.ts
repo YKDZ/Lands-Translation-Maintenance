@@ -24,6 +24,8 @@ import type {
   MiniMessageParseProject,
   MiniMessagePosition,
   MiniMessageProjectionInput,
+  MiniMessageRoleNameDuplicate,
+  MiniMessageRoleNameProjection,
   MiniMessageSourceNode,
   MiniMessageSurface,
   MiniMessageTagNode,
@@ -62,6 +64,7 @@ interface MessageInput {
     readonly expected: string;
     readonly actual: string;
   }[];
+  readonly roleNameTarget: boolean;
   readonly range: MiniMessagePosition;
 }
 
@@ -94,6 +97,26 @@ interface JavaMessageResult {
   readonly end: number;
 }
 
+interface JavaRoleNameValidationResult {
+  readonly index: number;
+  readonly status: "ok" | "invalid" | "failed";
+  readonly plainText?: string;
+  readonly rule?: string;
+  readonly reason?: string;
+}
+
+interface JavaRoleNameRenderingResult {
+  readonly index: number;
+  readonly status: "ok" | "invalid" | "failed";
+  readonly plainText?: string;
+  readonly reason?: string;
+}
+
+interface JavaRoleNameDuplicate {
+  readonly firstIndex: number;
+  readonly secondIndex: number;
+}
+
 interface JavaUnresolvedTag {
   readonly messageIndex: number;
   readonly documentIndex: number;
@@ -116,6 +139,12 @@ interface JavaSourceDocument {
 interface JavaParseResult {
   readonly themes: ReadonlyMap<number, JavaThemeResult>;
   readonly messages: ReadonlyMap<number, JavaMessageResult>;
+  readonly roleNameValidations: ReadonlyMap<
+    number,
+    JavaRoleNameValidationResult
+  >;
+  readonly roleNameRenderings: ReadonlyMap<number, JavaRoleNameRenderingResult>;
+  readonly roleNameDuplicates: readonly JavaRoleNameDuplicate[];
   readonly documents: readonly JavaSourceDocument[];
   readonly unresolved: readonly JavaUnresolvedTag[];
   readonly warnings: readonly {
@@ -575,6 +604,14 @@ export function usesMiniMessage(message: MiniMessageInputMessage): boolean {
   );
 }
 
+function javaTrimBounds(input: string): MiniMessagePosition {
+  let start = 0;
+  let end = input.length;
+  while (start < end && input.charCodeAt(start) <= 0x20) start += 1;
+  while (end > start && input.charCodeAt(end - 1) <= 0x20) end -= 1;
+  return { start, end };
+}
+
 function messagesToParseInputs(
   messages: readonly MiniMessageInputMessage[],
   resources: readonly LandsResourceInventoryEntry[],
@@ -595,19 +632,41 @@ function messagesToParseInputs(
     input: string,
     listItems?: readonly MiniMessageListItemRange[],
   ): void {
-    // 保留空文档以便原译配对；官方解析器只处理非空内容。
+    // Java String.trim 只去除 <= U+0020 的首尾 UTF-16 单元，不能用 JS trim 替代。
+    // 空文档用于原译配对；角色名仍交给官方解析器确认空白语义。
     const isLegacyColor = message.format?.includes("legacy-color") ?? false;
+    const isRoleName = message.scene === "role-name";
+    const trimmed = isRoleName
+      ? javaTrimBounds(input)
+      : { start: 0, end: input.length };
+    const parserInput = input.slice(trimmed.start, trimmed.end);
     const legacy =
-      isLegacyColor && input !== ""
-        ? adaptLegacyMiniMessageInput(input, sourceVersion)
+      isLegacyColor && parserInput !== ""
+        ? adaptLegacyMiniMessageInput(parserInput, sourceVersion)
         : undefined;
+    const adaptedLegacy =
+      legacy === undefined
+        ? undefined
+        : {
+            ...legacy,
+            sourceOffsets: legacy.sourceOffsets.map(
+              (offset) => offset + trimmed.start,
+            ),
+            issues: legacy.issues.map((issue) => ({
+              ...issue,
+              position: {
+                start: issue.position.start + trimmed.start,
+                end: issue.position.end + trimmed.start,
+              },
+            })),
+          };
     const adapted =
-      legacy ??
+      adaptedLegacy ??
       ({
-        input,
+        input: parserInput,
         sourceOffsets: Array.from(
-          { length: input.length + 1 },
-          (_, index) => index,
+          { length: parserInput.length + 1 },
+          (_, index) => index + trimmed.start,
         ),
         exact: true,
       } satisfies AdaptedMiniMessageInput);
@@ -622,8 +681,9 @@ function messagesToParseInputs(
       ...(listItems === undefined ? {} : { listItems }),
       adapted,
       legacyAdapterUnsupported:
-        isLegacyColor && input !== "" && legacy === undefined,
-      legacyIssues: legacy?.issues ?? [],
+        isLegacyColor && parserInput !== "" && legacy === undefined,
+      legacyIssues: adaptedLegacy?.issues ?? [],
+      roleNameTarget: isRoleName && origin === "target",
       range: { start: 0, end: input.length },
     });
     nextIndex += 1;
@@ -766,6 +826,9 @@ function javaUnavailable(reason: string): JavaParseResult {
   return {
     themes: new Map(),
     messages: new Map(),
+    roleNameValidations: new Map(),
+    roleNameRenderings: new Map(),
+    roleNameDuplicates: [],
     documents: [],
     unresolved: [],
     warnings: [],
@@ -863,6 +926,7 @@ async function runOfficialParser(
           input.message.format === "map-html-minimessage" ||
             input.message.format === "legacy-variable-minimessage",
         ),
+        String(input.roleNameTarget),
       ].join("\t"),
     );
   }
@@ -898,6 +962,9 @@ async function runOfficialParser(
 
   const themes = new Map<number, JavaThemeResult>();
   const messages = new Map<number, JavaMessageResult>();
+  const roleNameValidations = new Map<number, JavaRoleNameValidationResult>();
+  const roleNameRenderings = new Map<number, JavaRoleNameRenderingResult>();
+  const roleNameDuplicates: JavaRoleNameDuplicate[] = [];
   const documentMetadata = new Map<string, Omit<JavaSourceDocument, "nodes">>();
   const nodesByDocument = new Map<string, MiniMessageSourceNode[]>();
   const unresolved: JavaUnresolvedTag[] = [];
@@ -943,6 +1010,53 @@ async function runOfficialParser(
         start: Number(fields[4]),
         end: Number(fields[5]),
       });
+    } else if (fields[0] === "R" && fields.length === 6) {
+      if (
+        fields[2] !== "ok" &&
+        fields[2] !== "invalid" &&
+        fields[2] !== "failed"
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回未知角色名验证状态；完整检查未完成",
+        );
+      }
+      const index = Number(fields[1]);
+      roleNameValidations.set(index, {
+        index,
+        status: fields[2],
+        ...(fields[2] === "ok" ? { plainText: decode(fields[3]!) } : {}),
+        ...(fields[4] === "" ? {} : { rule: fields[4] }),
+        ...(fields[5] === "" ? {} : { reason: decode(fields[5]!) }),
+      });
+    } else if (fields[0] === "P" && fields.length === 5) {
+      if (
+        fields[2] !== "ok" &&
+        fields[2] !== "invalid" &&
+        fields[2] !== "failed"
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回未知角色名渲染状态；完整检查未完成",
+        );
+      }
+      const index = Number(fields[1]);
+      roleNameRenderings.set(index, {
+        index,
+        status: fields[2],
+        ...(fields[2] === "ok" ? { plainText: decode(fields[3]!) } : {}),
+        ...(fields[4] === "" ? {} : { reason: decode(fields[4]!) }),
+      });
+    } else if (fields[0] === "X" && fields.length === 3) {
+      const firstIndex = Number(fields[1]);
+      const secondIndex = Number(fields[2]);
+      if (
+        !Number.isSafeInteger(firstIndex) ||
+        !Number.isSafeInteger(secondIndex)
+      ) {
+        return javaUnavailable(
+          "官方 MiniMessage 辅助程序返回无效角色名重复关系；完整检查未完成",
+        );
+      }
+      roleNameDuplicates.push({ firstIndex, secondIndex });
     } else if (fields[0] === "D" && fields.length >= 7) {
       const messageIndex = Number(fields[1]);
       const documentIndex = Number(fields[2]);
@@ -1125,7 +1239,16 @@ async function runOfficialParser(
     ...document,
     nodes: nodesByDocument.get(key) ?? [],
   }));
-  return { themes, messages, documents, unresolved, warnings };
+  return {
+    themes,
+    messages,
+    roleNameValidations,
+    roleNameRenderings,
+    roleNameDuplicates,
+    documents,
+    unresolved,
+    warnings,
+  };
 }
 
 function findingForMessage(
@@ -1762,7 +1885,9 @@ export async function parseMiniMessages(
   const { messages, resources, sourceVersion, theme: themeInput } = input;
   const theme = parseTheme(themeInput.theme);
   const inputs = messagesToParseInputs(messages, resources, sourceVersion);
-  const parserInputs = inputs.filter(({ input: value }) => value !== "");
+  const parserInputs = inputs.filter(
+    ({ input: value, roleNameTarget }) => value !== "" || roleNameTarget,
+  );
   const java = await runOfficialParser(theme.definitions, parserInputs);
   const findings = [...theme.findings];
   const mapFindings: MiniMessageFinding[] = [];
@@ -1968,6 +2093,68 @@ export async function parseMiniMessages(
     mapSegmentOverrides,
   );
   incompleteFacts.push(...translatableText.incompleteFacts);
+  const roleNameInputs = inputs.filter(({ roleNameTarget }) => roleNameTarget);
+  const roleNames: MiniMessageRoleNameProjection[] = roleNameInputs.map(
+    (input) => {
+      const validation = java.roleNameValidations.get(input.index);
+      const rendering = java.roleNameRenderings.get(input.index);
+      return {
+        message: input.message,
+        validation:
+          validation === undefined
+            ? {
+                status: "unavailable",
+                reason: "官方 MiniMessage 辅助程序未返回角色名固定校验结果",
+              }
+            : validation.status !== "ok"
+              ? {
+                  status: "unavailable",
+                  ...(validation.reason === undefined
+                    ? {}
+                    : { reason: validation.reason }),
+                }
+              : {
+                  status: validation.rule === "" ? "valid" : "invalid",
+                  ...(validation.plainText === undefined
+                    ? {}
+                    : { plainText: validation.plainText }),
+                  ...(validation.rule === undefined
+                    ? {}
+                    : { rule: validation.rule }),
+                },
+        rendering:
+          rendering === undefined
+            ? {
+                status: "unavailable",
+                reason: "官方 MiniMessage 辅助程序未返回角色名渲染结果",
+              }
+            : rendering.status !== "ok"
+              ? {
+                  status: "unavailable",
+                  ...(rendering.reason === undefined
+                    ? {}
+                    : { reason: rendering.reason }),
+                }
+              : {
+                  status: "parsed",
+                  ...(rendering.plainText === undefined
+                    ? {}
+                    : { plainText: rendering.plainText }),
+                },
+      };
+    },
+  );
+  const roleNamesByIndex = new Map(
+    roleNameInputs.map((input, index) => [input.index, roleNames[index]!]),
+  );
+  const roleNameDuplicates: MiniMessageRoleNameDuplicate[] = [];
+  for (const duplicate of java.roleNameDuplicates) {
+    const first = roleNamesByIndex.get(duplicate.firstIndex);
+    const second = roleNamesByIndex.get(duplicate.secondIndex);
+    if (first !== undefined && second !== undefined) {
+      roleNameDuplicates.push({ first, second });
+    }
+  }
   return {
     sourceVersion,
     documents: documentResults,
@@ -1980,5 +2167,7 @@ export async function parseMiniMessages(
     mapFindings,
     incompleteFacts,
     unavailableCapabilities: [...unavailable].sort(),
+    roleNames,
+    roleNameDuplicates,
   };
 }

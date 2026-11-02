@@ -197,6 +197,26 @@ export interface MiniMessageIncompleteFact {
   readonly reason: string;
 }
 
+export interface MiniMessageRoleNameProjection {
+  readonly message: MiniMessageInputMessage;
+  readonly validation: {
+    readonly status: "valid" | "invalid" | "unavailable";
+    readonly plainText?: string;
+    readonly rule?: string;
+    readonly reason?: string;
+  };
+  readonly rendering: {
+    readonly status: "parsed" | "unavailable";
+    readonly plainText?: string;
+    readonly reason?: string;
+  };
+}
+
+export interface MiniMessageRoleNameDuplicate {
+  readonly first: MiniMessageRoleNameProjection;
+  readonly second: MiniMessageRoleNameProjection;
+}
+
 export interface MiniMessageParseProject {
   readonly sourceVersion: string;
   readonly documents: readonly ParsedMiniMessageDocument[];
@@ -209,6 +229,8 @@ export interface MiniMessageParseProject {
   readonly mapFindings: readonly MiniMessageFinding[];
   readonly incompleteFacts: readonly MiniMessageIncompleteFact[];
   readonly unavailableCapabilities: readonly string[];
+  readonly roleNames: readonly MiniMessageRoleNameProjection[];
+  readonly roleNameDuplicates: readonly MiniMessageRoleNameDuplicate[];
 }
 
 export interface MiniMessageThemeInput {

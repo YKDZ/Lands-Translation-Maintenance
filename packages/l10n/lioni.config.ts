@@ -4,6 +4,8 @@ import {
   loadTermbaseYaml,
 } from "@lioni/lioni/node";
 
+import { landsRoleNameDuplicateCheck } from "#/lands-role-name-duplicate-check";
+import { landsRoleNameValidityCheck } from "#/lands-role-name-validity-check";
 import { landsStructureConsistencyCheck } from "#/lands-structure-consistency-check";
 import { legacyFormatCheck } from "#/legacy-format-check";
 import { legacyVariableCheck } from "#/legacy-variable-check";
@@ -55,6 +57,8 @@ export function createLandsConfig(entryUrl: string | URL) {
         landsTerminologyCheck,
         miniMessagePunctuationCheck,
         miniMessageHonorificCheck,
+        landsRoleNameValidityCheck,
+        landsRoleNameDuplicateCheck,
         miniMessageVariableCorrespondenceCheck,
         miniMessageClickBehaviorCheck,
         miniMessageInteractionDistributionCheck,

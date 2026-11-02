@@ -140,6 +140,10 @@ interface QualityProjectOptions {
     readonly target: string;
   }[];
   readonly mappedExtraChatKeys?: readonly string[];
+  readonly roles?: {
+    readonly source: readonly { readonly key: string; readonly name: string }[];
+    readonly target: readonly { readonly key: string; readonly name: string }[];
+  };
 }
 
 function landsJar(
@@ -153,6 +157,7 @@ function landsJar(
   nestedStructure = false,
   chatList: QualityProjectOptions["chatList"],
   dialogChat: QualityProjectOptions["dialogChat"],
+  roles: QualityProjectOptions["roles"],
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
@@ -222,6 +227,21 @@ function landsJar(
       ].join("\n"),
     );
   }
+  if (roles !== undefined) {
+    const roleYaml = (
+      entries: readonly { readonly key: string; readonly name: string }[],
+    ): string =>
+      [
+        "land:",
+        "  roles:",
+        ...entries.flatMap(({ key, name }) => [
+          `    ${JSON.stringify(key)}:`,
+          `      name: ${JSON.stringify(name)}`,
+        ]),
+        "",
+      ].join("\n");
+    files["Locale/en-US_roles.yml"] = strToU8(roleYaml(roles.source));
+  }
   return zipSync(files);
 }
 
@@ -253,6 +273,9 @@ async function createQualityProject(
     ...(options.dialogChat === undefined
       ? []
       : ["  - path: Locale/en-US_dialogs.yml", "    purpose: dialog-language"]),
+    ...(options.roles === undefined
+      ? []
+      : ["  - path: Locale/en-US_roles.yml", "    purpose: configuration"]),
   ];
   const mappings = [
     "    - source: Locale/en-US_gui.yml",
@@ -304,6 +327,17 @@ async function createQualityProject(
           '        - path: [dialogs, "*", bodies, "*", item, lore]',
           "          category: gui-lore",
           "          scene: gui-item-lore",
+        ]),
+    ...(options.roles === undefined
+      ? []
+      : [
+          "    - source: Locale/en-US_roles.yml",
+          "      target: Locale/zh-CN_roles.yml",
+          "      definitionsSource: Locale/en-US_roles.yml",
+          "      fields:",
+          '        - path: [land, roles, "*", name]',
+          "          category: configuration-string",
+          "          scene: role-name",
         ]),
   ];
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
@@ -430,6 +464,24 @@ async function createQualityProject(
       ].join("\n"),
     );
   }
+  if (options.roles !== undefined) {
+    const roleYaml = (
+      entries: readonly { readonly key: string; readonly name: string }[],
+    ): string =>
+      [
+        "land:",
+        "  roles:",
+        ...entries.flatMap(({ key, name }) => [
+          `    ${JSON.stringify(key)}:`,
+          `      name: ${JSON.stringify(name)}`,
+        ]),
+        "",
+      ].join("\n");
+    await writeFile(
+      join(directory, "Locale/zh-CN_roles.yml"),
+      roleYaml(options.roles.target),
+    );
+  }
   const configPath = join(directory, ".lioni/lioni.config.ts");
   await writeFile(
     configPath,
@@ -458,6 +510,7 @@ async function createQualityProject(
       options.nestedStructure,
       options.chatList,
       options.dialogChat,
+      options.roles,
     ),
   );
   const prepared = spawnSync(
@@ -2795,4 +2848,181 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
       "not-verified",
     );
   }
+});
+
+void test("Lands 9.1.1 角色名按固定规则校验并按渲染文本检查重复", async (t) => {
+  const roleEntries = [
+    { key: "valid", name: "Owner" },
+    { key: "starred", name: "Starred" },
+    { key: "empty", name: "Empty" },
+    { key: "blank", name: "Blank" },
+    { key: "space", name: "Space" },
+    { key: "punctuation", name: "Punctuation" },
+    { key: "reserved-here", name: "Reserved here" },
+    { key: "reserved-all", name: "Reserved all" },
+    { key: "residual-tag", name: "Residual tag" },
+    { key: "supplementary", name: "Supplementary" },
+    { key: "trimmed-control", name: "Trimmed control" },
+    { key: "unicode-space", name: "Unicode space" },
+  ];
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      roles: {
+        source: roleEntries,
+        target: [
+          { key: "valid", name: "&a&l拥有者" },
+          { key: "starred", name: "*管理员_2-%'.!?" },
+          { key: "empty", name: "" },
+          { key: "blank", name: "  " },
+          { key: "space", name: "队伍 管理员" },
+          { key: "punctuation", name: "管理员/访客" },
+          { key: "reserved-here", name: "HERE" },
+          { key: "reserved-all", name: "all" },
+          {
+            key: "residual-tag",
+            name: "<click:run_command:'/x'>管理</click>",
+          },
+          { key: "supplementary", name: "𐐀" },
+          { key: "trimmed-control", name: "\u0000管理员\u0000" },
+          { key: "unicode-space", name: "\u00a0管理员" },
+        ],
+      },
+    },
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const validity = checkResult(report, "lands-role-name-validity");
+  const validityByKey = new Map(
+    validity.diagnostics.map(({ location, object }) => [
+      JSON.stringify(location.range.path),
+      object.code,
+    ]),
+  );
+  assert.equal(validity.status, "complete", JSON.stringify(validity.issues));
+  const rolePath = (key: string): string =>
+    JSON.stringify(["land", "roles", key, "name"]);
+  assert.equal(validityByKey.get(rolePath("valid")), undefined);
+  assert.equal(validityByKey.get(rolePath("starred")), undefined);
+  assert.equal(validityByKey.get(rolePath("empty")), "lands-role-name.blank");
+  assert.equal(validityByKey.get(rolePath("blank")), "lands-role-name.blank");
+  assert.equal(validityByKey.get(rolePath("space")), "lands-role-name.space");
+  assert.equal(
+    validityByKey.get(rolePath("punctuation")),
+    "lands-role-name.character",
+  );
+  assert.equal(
+    validityByKey.get(rolePath("reserved-here")),
+    "lands-role-name.reserved",
+  );
+  assert.equal(
+    validityByKey.get(rolePath("reserved-all")),
+    "lands-role-name.reserved",
+  );
+  assert.equal(
+    validityByKey.get(rolePath("residual-tag")),
+    "lands-role-name.markup",
+  );
+  assert.equal(
+    validityByKey.get(rolePath("supplementary")),
+    "lands-role-name.character",
+  );
+  assert.equal(validityByKey.get(rolePath("trimmed-control")), undefined);
+  assert.equal(
+    validityByKey.get(rolePath("unicode-space")),
+    "lands-role-name.character",
+  );
+});
+
+void test("角色名重复比较复用 MiniMessage 渲染与 Java 忽略大小写语义", async (t) => {
+  const roleEntries = [
+    { key: "format-red", name: "Red format" },
+    { key: "format-blue", name: "Blue format" },
+    { key: "turkish-i", name: "Turkish I" },
+    { key: "turkish-dotless-i", name: "Turkish dotless I" },
+    { key: "sigma", name: "Sigma" },
+    { key: "final-sigma", name: "Final sigma" },
+    { key: "deseret-upper", name: "Deseret upper" },
+    { key: "deseret-lower", name: "Deseret lower" },
+  ];
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      roles: {
+        source: roleEntries,
+        target: [
+          { key: "format-red", name: "<red>重复名称</red>" },
+          { key: "format-blue", name: "<blue>重复名称</blue>" },
+          { key: "turkish-i", name: "I" },
+          { key: "turkish-dotless-i", name: "ı" },
+          { key: "sigma", name: "Σ" },
+          { key: "final-sigma", name: "ς" },
+          { key: "deseret-upper", name: "𐐀" },
+          { key: "deseret-lower", name: "𐐨" },
+        ],
+      },
+    },
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const duplicates = checkResult(report, "lands-role-name-duplicate");
+  const duplicatePaths = new Set(
+    duplicates.diagnostics.map(({ location }) =>
+      JSON.stringify(location.range.path),
+    ),
+  );
+  const rolePath = (key: string): string =>
+    JSON.stringify(["land", "roles", key, "name"]);
+  const hasDuplicate = (first: string, second: string): boolean =>
+    duplicatePaths.has(rolePath(first)) || duplicatePaths.has(rolePath(second));
+  assert.equal(duplicates.status, "complete", JSON.stringify(duplicates));
+  assert.ok(hasDuplicate("format-red", "format-blue"));
+  assert.ok(hasDuplicate("turkish-i", "turkish-dotless-i"));
+  assert.ok(hasDuplicate("sigma", "final-sigma"));
+  assert.ok(!duplicatePaths.has(rolePath("deseret-lower")));
+  const validity = checkResult(report, "lands-role-name-validity");
+  assert.ok(
+    !validity.diagnostics.some(({ location }) =>
+      ["format-red", "format-blue"].some(
+        (key) => JSON.stringify(location.range.path) === rolePath(key),
+      ),
+    ),
+  );
+  assert.ok(
+    duplicates.executions.some(
+      ({ sourceKey, status }) =>
+        sourceKey.includes("en-US_gui.yml") && status === "not-applicable",
+    ),
+  );
+});
+
+void test("角色名 9.1.1 规则不外推到较早 Lands 来源版本", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "8.9.2",
+      roles: {
+        source: [{ key: "owner", name: "Owner" }],
+        target: [{ key: "owner", name: "拥有者" }],
+      },
+    },
+  );
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  assert.equal(
+    checkResult(report, "lands-role-name-validity").status,
+    "not-applicable",
+  );
+  assert.equal(
+    checkResult(report, "lands-role-name-duplicate").status,
+    "not-applicable",
+  );
 });
