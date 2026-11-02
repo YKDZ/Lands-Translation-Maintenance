@@ -29,7 +29,6 @@ function sourceLimitBasis(input: MiniMessageCheckInput): JsonValue {
     (candidate) => candidate.id === input.candidate.sourceKey,
   );
   return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
     message:
       message === undefined
         ? null
