@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 import type { ComparisonBaselineStore, FrameworkConfig } from "@lioni/lioni";
-import { readFacts, update } from "@lioni/lioni";
+import { previewUpdate, readFacts, update } from "@lioni/lioni";
 import { createFileComparisonBaselineStore } from "@lioni/lioni/node";
 import { strToU8, zipSync } from "fflate";
 import { parseDocument } from "yaml";
@@ -216,9 +216,9 @@ function landsJarWithDialog(
   });
 }
 
-function landsJarWithLevels(levels: string): Uint8Array {
+function landsJarWithLevels(levels: string, version = "8.9.2"): Uint8Array {
   return zipSync({
-    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "plugin.yml": strToU8(`name: Lands\nversion: ${version}\n`),
     "levels.yml": strToU8(levels),
   });
 }
@@ -243,6 +243,9 @@ async function createLevelsProject(directory: string): Promise<void> {
       "      definitionsSource: levels.yml",
       "      fields:",
       '        - path: [land, levels, "*", name]',
+      "          category: configuration-string",
+      "          scene: level-title",
+      '        - path: [nation, levels, "*", name]',
       "          category: configuration-string",
       "          scene: level-title",
       '        - path: [land, levels, "*", attributes, "*", description]',
@@ -408,7 +411,6 @@ void test("原生 update 回填变化与缺失消息并保留未变中文及 YAM
     "--output-format",
     "structured",
   ]);
-
   const targetText = await readFile(targetPath, "utf8");
   const target = parseDocument(targetText).toJS() as {
     readonly messages: Record<string, unknown>;
@@ -1347,6 +1349,724 @@ void test("旧等级结构删除后清理来源已无的空映射并保留自定
   assert.equal(levels["2"]?.requirements, undefined);
   assert.equal(Object.hasOwn(levels, "3"), false);
   assert.equal(levels.borough?.name, "Borough");
+});
+
+void test("Lands 9.1.1 首次具名等级迁移保留来源顺序与自定义内容", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-named-level-order-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLevelsProject(project);
+
+  const landOrder = [
+    "settlement",
+    "hamlet",
+    "village",
+    "town",
+    "borough",
+    "city",
+    "metropolis",
+    "province",
+    "duchy",
+    "kingdom",
+  ];
+  const nationOrder = [
+    "federation",
+    "alliance",
+    "nation",
+    "empire",
+    "dominion",
+  ];
+  const initialSource = [
+    "land:",
+    "  levels:",
+    '    "1":',
+    "      name: First land",
+    "      cost: 0",
+    '    "2":',
+    "      name: Second land",
+    "      cost: 500",
+    "nation:",
+    "  levels:",
+    '    "1":',
+    "      name: First nation",
+    "      cost: 0",
+    '    "2":',
+    "      name: Second nation",
+    "      cost: 500",
+    "",
+  ].join("\n");
+  const currentSource = [
+    "land:",
+    "  levels:",
+    "    settlement:",
+    "      cost: 0",
+    "    hamlet:",
+    "      cost: 1000",
+    "    village:",
+    "      cost: 2000",
+    "    town:",
+    "      cost: 3000",
+    "    borough:",
+    "      cost: 4000",
+    "    city:",
+    "      cost: 5000",
+    "    metropolis:",
+    "      cost: 6000",
+    "    province:",
+    "      cost: 7000",
+    "    duchy:",
+    "      cost: 8000",
+    "    kingdom:",
+    "      cost: 9000",
+    "nation:",
+    "  levels:",
+    "    federation:",
+    "      cost: 0",
+    "    alliance:",
+    "      cost: 10000",
+    "    nation:",
+    "      cost: 20000",
+    "    empire:",
+    "      cost: 30000",
+    "    dominion:",
+    "      cost: 40000",
+    "",
+  ].join("\n");
+  const source = parseDocument(currentSource).toJS() as {
+    readonly land: { readonly levels: Record<string, unknown> };
+    readonly nation: { readonly levels: Record<string, unknown> };
+  };
+  assert.deepEqual(
+    {
+      land: Object.keys(source.land.levels),
+      nation: Object.keys(source.nation.levels),
+    },
+    { land: landOrder, nation: nationOrder },
+  );
+
+  await writeFile(
+    join(project, "levels.yml"),
+    [
+      "land:",
+      "  customSetting: land-owner-setting",
+      "  levels:",
+      '    "1":',
+      "      name: 一级",
+      "      cost: 0",
+      '    "2":',
+      "      name: 二级",
+      "      cost: 500",
+      "nation:",
+      "  customSetting: nation-owner-setting",
+      "  levels:",
+      '    "1":',
+      "      name: 一级",
+      "      cost: 0",
+      '    "2":',
+      "      name: 二级",
+      "      cost: 500",
+      "customRoot: keep",
+      "",
+    ].join("\n"),
+  );
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial-numeric-levels.jar");
+  await writeFile(initialJar, landsJarWithLevels(initialSource, "8.9.2"));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const currentJar = join(project, "Lands-current-named-levels.jar");
+  await writeFile(currentJar, landsJarWithLevels(currentSource, "9.1.1"));
+  await prepareSource(configPath, currentJar, "9.1.1");
+  await rm(currentJar);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+
+  const target = parseDocument(
+    await readFile(join(project, "levels.yml"), "utf8"),
+  ).toJS() as {
+    readonly land: {
+      readonly customSetting: string;
+      readonly levels: Record<string, { readonly cost?: number }>;
+    };
+    readonly nation: {
+      readonly customSetting: string;
+      readonly levels: Record<string, { readonly cost?: number }>;
+    };
+    readonly customRoot: string;
+  };
+  assert.equal(target.land.customSetting, "land-owner-setting");
+  assert.equal(target.nation.customSetting, "nation-owner-setting");
+  assert.equal(target.land.levels.hamlet?.cost, 1000);
+  assert.equal(target.nation.levels.alliance?.cost, 10000);
+  assert.equal(target.customRoot, "keep");
+  assert.deepEqual(
+    {
+      land: Object.keys(target.land.levels),
+      nation: Object.keys(target.nation.levels),
+    },
+    { land: landOrder, nation: nationOrder },
+  );
+});
+
+void test("普通等级结构值更新保留既有国家等级顺序并推进基线", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-retained-nation-order-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLevelsProject(project);
+
+  const projectConfigurationPath = join(project, ".lioni/project.yml");
+  const projectConfiguration = await readFile(projectConfigurationPath, "utf8");
+  const landFieldsOnly = projectConfiguration.replace(
+    /        - path: \[nation, levels, "\*", name\]\n          category: configuration-string\n          scene: level-title\n/u,
+    "",
+  );
+  assert.notEqual(landFieldsOnly, projectConfiguration);
+  await writeFile(projectConfigurationPath, landFieldsOnly);
+
+  const sourceForCost = (federationCost: number) =>
+    [
+      "land:",
+      "  levels:",
+      "    alpha:",
+      "      name: Alpha",
+      "      cost: 1",
+      "nation:",
+      "  levels:",
+      "    federation:",
+      `      cost: ${federationCost}`,
+      "    alliance:",
+      "      cost: 20",
+      "",
+    ].join("\n");
+  const targetPath = join(project, "levels.yml");
+  await writeFile(
+    targetPath,
+    [
+      "land:",
+      "  levels:",
+      "    alpha:",
+      "      name: Alpha",
+      "      cost: 1",
+      "nation:",
+      "  customSetting: 用户设置",
+      "  levels: # 保留等级映射注释",
+      "    federation: # 保留联邦注释",
+      "      cost: 10 # 保留费用注释",
+      "    customLevel: # 保留自定义槽位",
+      "      cost: 30",
+      "    alliance:",
+      "      cost: 20",
+      "",
+    ].join("\n"),
+  );
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const initialJar = join(project, "Lands-order-initial.jar");
+  await writeFile(initialJar, landsJarWithLevels(sourceForCost(10), "9.1.1"));
+  await prepareSource(configPath, initialJar, "9.1.1");
+  await rm(initialJar);
+
+  const config = createLandsConfig(pathToFileURL(configPath));
+  const baselineStore = createFileComparisonBaselineStore(
+    baselinePath,
+  ) as unknown as BaselineStoreFor<typeof config>;
+  const initialUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(initialUpdate.status, "completed");
+  assert.equal(initialUpdate.baseline?.outcome, "saved");
+
+  const changedJar = join(project, "Lands-order-cost-change.jar");
+  await writeFile(changedJar, landsJarWithLevels(sourceForCost(11), "9.1.2"));
+  await prepareSource(configPath, changedJar, "9.1.2");
+  await rm(changedJar);
+
+  const preview = await previewUpdate(config, baselineStore);
+  assert.equal(
+    preview.items.find(
+      (item) => item.sourceKey === 'structure:levels.yml:["nation"]',
+    )?.action,
+    "write",
+  );
+  assert.equal(
+    preview.items.find(
+      (item) =>
+        item.sourceKey === 'structure-order:levels.yml:["nation","levels"]',
+    )?.action,
+    "retain",
+  );
+
+  const updateResult = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(updateResult.status, "completed");
+  assert.equal(updateResult.baseline?.outcome, "saved");
+
+  const target = parseDocument(await readFile(targetPath, "utf8")).toJS() as {
+    readonly nation: {
+      readonly customSetting: string;
+      readonly levels: Record<string, { readonly cost?: number }>;
+    };
+  };
+  assert.deepEqual(Object.keys(target.nation.levels), [
+    "federation",
+    "customLevel",
+    "alliance",
+  ]);
+  assert.equal(target.nation.levels.federation?.cost, 11);
+  assert.equal(target.nation.levels.customLevel?.cost, 30);
+  assert.equal(target.nation.customSetting, "用户设置");
+  const targetText = await readFile(targetPath, "utf8");
+  assert.match(targetText, /# 保留等级映射注释/u);
+  assert.match(targetText, /# 保留联邦注释/u);
+  assert.match(targetText, /# 保留费用注释/u);
+  assert.match(targetText, /# 保留自定义槽位/u);
+
+  const reread = await readFacts(config);
+  const nationOrder = reread.translations.records.find(
+    (record) => record.identity.key === 'order:["nation","levels"]',
+  );
+  assert.ok(nationOrder?.bodyAvailability === "available");
+  assert.equal(nationOrder.translation.role, "structure");
+  assert.deepEqual(nationOrder.content, ["federation", "alliance"]);
+
+  const repeatedUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(repeatedUpdate.status, "completed");
+  assert.ok(
+    repeatedUpdate.results.every(({ status }) => status === "retained"),
+  );
+});
+
+void test("等级顺序以公开结构事实回读，支持顺序变更、手工修复与失败闭环", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-level-order-sdk-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLevelsProject(project);
+
+  const initialSource = [
+    "land:",
+    "  levels:",
+    "    alpha:",
+    '      name: "Alpha"',
+    "      cost: 1",
+    "    beta:",
+    '      name: "Beta"',
+    "      cost: 2",
+    "    gamma:",
+    '      name: "Gamma"',
+    "      cost: 3",
+    "nation:",
+    "  levels:",
+    "    federation:",
+    '      name: "Federation"',
+    "      cost: 10",
+    "    alliance:",
+    '      name: "Alliance"',
+    "      cost: 20",
+    "",
+  ].join("\n");
+  const sourceWithReorderedLand = [
+    "land:",
+    "  levels:",
+    "    gamma:",
+    '      name: "Gamma"',
+    "      cost: 3",
+    "    alpha:",
+    '      name: "Alpha"',
+    "      cost: 1",
+    "    beta:",
+    '      name: "Beta"',
+    "      cost: 2",
+    "nation:",
+    "  levels:",
+    "    federation:",
+    '      name: "Federation"',
+    "      cost: 10",
+    "    alliance:",
+    '      name: "Alliance"',
+    "      cost: 20",
+    "",
+  ].join("\n");
+  const sourceWithFinalLandOrder = [
+    "land:",
+    "  levels:",
+    "    beta:",
+    '      name: "Beta"',
+    "      cost: 2",
+    "    gamma:",
+    '      name: "Gamma"',
+    "      cost: 3",
+    "    alpha:",
+    '      name: "Alpha"',
+    "      cost: 1",
+    "nation:",
+    "  levels:",
+    "    federation:",
+    '      name: "Federation"',
+    "      cost: 10",
+    "    alliance:",
+    '      name: "Alliance"',
+    "      cost: 20",
+    "",
+  ].join("\n");
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const baselinePath = join(project, ".lioni/lioni.baseline.json");
+  const targetPath = join(project, "levels.yml");
+  await writeFile(
+    targetPath,
+    [
+      "land:",
+      "  customSetting: land-owner-setting",
+      "  levels:",
+      "    beta:",
+      "      name: 二级",
+      "      cost: 2",
+      "      customSetting: keep-beta-field",
+      "    customMiddle: # 自定义槽位注释",
+      "      note: keep-level",
+      "    alpha:",
+      "      name: 一级",
+      "      cost: 1",
+      "    gamma:",
+      "      name: 三级",
+      "      cost: 3",
+      "nation:",
+      "  levels:",
+      "    alliance:",
+      "      name: 联盟",
+      "      cost: 20",
+      "    federation:",
+      "      name: 联邦",
+      "      cost: 10",
+      "customRoot: keep-root",
+      "",
+    ].join("\n"),
+  );
+  const initialJar = join(project, "Lands-order-initial.jar");
+  await writeFile(initialJar, landsJarWithLevels(initialSource, "9.1.1"));
+  await prepareSource(configPath, initialJar, "9.1.1");
+  await rm(initialJar);
+
+  const config = createLandsConfig(pathToFileURL(configPath));
+  const baselineStore = createFileComparisonBaselineStore(
+    baselinePath,
+  ) as unknown as BaselineStoreFor<typeof config>;
+  const initialUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(initialUpdate.status, "completed");
+
+  const initialTargetText = await readFile(targetPath, "utf8");
+  const initialTarget = parseDocument(initialTargetText).toJS() as {
+    readonly land: {
+      readonly customSetting: string;
+      readonly levels: Record<string, Record<string, unknown>>;
+    };
+    readonly nation: {
+      readonly levels: Record<string, Record<string, unknown>>;
+    };
+    readonly customRoot: string;
+  };
+  assert.deepEqual(Object.keys(initialTarget.land.levels), [
+    "alpha",
+    "customMiddle",
+    "beta",
+    "gamma",
+  ]);
+  assert.deepEqual(Object.keys(initialTarget.nation.levels), [
+    "federation",
+    "alliance",
+  ]);
+  assert.equal(initialTarget.land.levels.beta?.name, "二级");
+  assert.equal(
+    initialTarget.land.levels.beta?.customSetting,
+    "keep-beta-field",
+  );
+  assert.deepEqual(initialTarget.land.levels.customMiddle, {
+    note: "keep-level",
+  });
+  assert.equal(initialTarget.land.customSetting, "land-owner-setting");
+  assert.equal(initialTarget.customRoot, "keep-root");
+  assert.match(initialTargetText, /# 自定义槽位注释/u);
+
+  const manualOrderTarget = [
+    "land:",
+    "  customSetting: land-owner-setting",
+    "  levels:",
+    "    beta:",
+    "      name: 二级",
+    "      cost: 2",
+    "      customSetting: keep-beta-field",
+    "    customMiddle: # 自定义槽位注释",
+    "      note: keep-level",
+    "    alpha:",
+    "      name: 一级",
+    "      cost: 1",
+    "    gamma:",
+    "      name: 三级",
+    "      cost: 3",
+    "nation:",
+    "  levels:",
+    "    alliance:",
+    "      name: 联盟",
+    "      cost: 20",
+    "    federation:",
+    "      name: 联邦",
+    "      cost: 10",
+    "customRoot: keep-root",
+    "",
+  ].join("\n");
+  await writeFile(targetPath, manualOrderTarget);
+  const manualOrderPreview = await previewUpdate(config, baselineStore);
+  assert.deepEqual(
+    manualOrderPreview.items
+      .filter(
+        (item) =>
+          item.action === "write" &&
+          item.sourceKey?.startsWith("structure-order:"),
+      )
+      .map((item) => item.sourceKey),
+    [
+      'structure-order:levels.yml:["land","levels"]',
+      'structure-order:levels.yml:["nation","levels"]',
+    ],
+  );
+  const manualOrderRepair = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(manualOrderRepair.status, "completed");
+  assert.deepEqual(
+    Object.keys(
+      (
+        parseDocument(await readFile(targetPath, "utf8")).toJS() as {
+          readonly land: { readonly levels: Record<string, unknown> };
+        }
+      ).land.levels,
+    ),
+    ["alpha", "customMiddle", "beta", "gamma"],
+  );
+
+  const reorderedJar = join(project, "Lands-order-reordered.jar");
+  await writeFile(
+    reorderedJar,
+    landsJarWithLevels(sourceWithReorderedLand, "9.1.2"),
+  );
+  await prepareSource(configPath, reorderedJar, "9.1.2");
+  await rm(reorderedJar);
+  const sourceOrderPreview = await previewUpdate(config, baselineStore);
+  assert.deepEqual(
+    sourceOrderPreview.items
+      .filter(
+        (item) =>
+          item.action === "write" &&
+          item.sourceKey?.startsWith("structure-order:"),
+      )
+      .map((item) => item.sourceKey),
+    ['structure-order:levels.yml:["land","levels"]'],
+  );
+  const sourceOrderUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(sourceOrderUpdate.status, "completed");
+  const reorderedTarget = parseDocument(
+    await readFile(targetPath, "utf8"),
+  ).toJS() as {
+    readonly land: { readonly levels: Record<string, Record<string, unknown>> };
+  };
+  assert.deepEqual(Object.keys(reorderedTarget.land.levels), [
+    "gamma",
+    "customMiddle",
+    "alpha",
+    "beta",
+  ]);
+  assert.equal(reorderedTarget.land.levels.beta?.name, "二级");
+  assert.equal(
+    reorderedTarget.land.levels.beta?.customSetting,
+    "keep-beta-field",
+  );
+
+  const finalOrderJar = join(project, "Lands-order-final.jar");
+  await writeFile(
+    finalOrderJar,
+    landsJarWithLevels(sourceWithFinalLandOrder, "9.1.3"),
+  );
+  await prepareSource(configPath, finalOrderJar, "9.1.3");
+  await rm(finalOrderJar);
+  const finalOrderPreview = await previewUpdate(config, baselineStore);
+  assert.ok(
+    finalOrderPreview.items.some(
+      (item) =>
+        item.action === "write" &&
+        item.sourceKey === 'structure-order:levels.yml:["land","levels"]',
+    ),
+  );
+  const baselineBeforeIgnoredWrite = await readFile(baselinePath);
+  const targetBeforeIgnoredWrite = await readFile(targetPath);
+  const adapter = config.translationWriteback;
+  assert.ok(adapter?.writeBatch);
+  const writeBatch = adapter.writeBatch;
+  const ignoresOrderConfig: typeof config = {
+    ...config,
+    translationWriteback: {
+      ...adapter,
+      writeBatch: async ({ requests }) =>
+        writeBatch({
+          requests: requests.filter(
+            ({ request }) =>
+              !request.expectedSource?.key.startsWith("structure-order:"),
+          ),
+        }),
+    },
+  };
+  const ignoredOrderResult = await update(ignoresOrderConfig, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(ignoredOrderResult.status, "failed");
+  assert.ok(
+    ignoredOrderResult.results.some(
+      ({ request, status }) =>
+        request?.expectedSource?.key.startsWith("structure-order:") &&
+        status === "writeUnconfirmed",
+    ),
+  );
+  assert.equal(ignoredOrderResult.baseline?.outcome, "notAdvanced");
+  assert.deepEqual(await readFile(baselinePath), baselineBeforeIgnoredWrite);
+  assert.deepEqual(await readFile(targetPath), targetBeforeIgnoredWrite);
+
+  const finalOrderUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(finalOrderUpdate.status, "completed");
+  const idempotentTarget = await readFile(targetPath);
+  const idempotentBaseline = await readFile(baselinePath);
+  const repeatedUpdate = await update(config, baselineStore, {
+    recordBaseline: true,
+  });
+  assert.equal(repeatedUpdate.status, "completed");
+  assert.ok(
+    repeatedUpdate.results.every(({ status }) => status === "retained"),
+  );
+  assert.deepEqual(await readFile(targetPath), idempotentTarget);
+  assert.deepEqual(await readFile(baselinePath), idempotentBaseline);
+
+  const projectConfigurationPath = join(project, ".lioni/project.yml");
+  const projectConfiguration = await readFile(projectConfigurationPath, "utf8");
+  assert.match(projectConfiguration, /path: \[land, levels/u);
+  const configurationWithoutLandFields = projectConfiguration.replace(
+    /        - path: \[land,[^\n]+\]\n          category: [^\n]+\n          scene: [^\n]+\n/gu,
+    "",
+  );
+  assert.doesNotMatch(configurationWithoutLandFields, /path: \[land,/u);
+  await writeFile(projectConfigurationPath, configurationWithoutLandFields);
+  const configWithoutOrderManagement = createLandsConfig(
+    pathToFileURL(configPath),
+  );
+  const removedOrderPreview = await previewUpdate(
+    configWithoutOrderManagement,
+    baselineStore,
+  );
+  assert.equal(
+    removedOrderPreview.items.some(
+      (item) =>
+        item.action === "delete" &&
+        item.target?.key === 'order:["land","levels"]',
+    ),
+    false,
+  );
+  const removedOrderUpdate = await update(
+    configWithoutOrderManagement,
+    baselineStore,
+    { recordBaseline: true },
+  );
+  assert.equal(removedOrderUpdate.status, "completed");
+  const retainedMapping = parseDocument(
+    await readFile(targetPath, "utf8"),
+  ).toJS() as { readonly land: { readonly levels: Record<string, unknown> } };
+  assert.ok(Object.hasOwn(retainedMapping.land, "levels"));
+  assert.ok(Object.hasOwn(retainedMapping.land.levels, "alpha"));
+});
+
+void test("等级顺序事实只从来源中实际存在的等级映射读取", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-level-order-scope-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLevelsProject(project);
+  const source = [
+    "land:",
+    "  levels:",
+    "    alpha:",
+    "      cost: 1",
+    "nation:",
+    "  customSetting: keep",
+    "",
+  ].join("\n");
+  const jar = join(project, "Lands-order-scope.jar");
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  await writeFile(jar, landsJarWithLevels(source, "9.1.1"));
+  await prepareSource(configPath, jar, "9.1.1");
+  await rm(jar);
+
+  const facts = await readFacts(createLandsConfig(pathToFileURL(configPath)));
+  assert.deepEqual(
+    facts.source.units
+      .filter(
+        ({ unit }) =>
+          unit.context.role === "structure" &&
+          "structureKind" in unit.context &&
+          unit.context.structureKind === "mapping-order",
+      )
+      .map(({ unit }) =>
+        unit.context.role === "structure" ? unit.context.path : [],
+      ),
+    [["land", "levels"]],
+  );
+
+  const emptyLevelsJar = join(project, "Lands-order-empty-levels.jar");
+  await writeFile(
+    emptyLevelsJar,
+    landsJarWithLevels(
+      [
+        "land:",
+        "  levels:",
+        "    alpha:",
+        "      cost: 1",
+        "nation:",
+        "  customSetting: keep",
+        "  levels: {}",
+        "",
+      ].join("\n"),
+      "9.1.2",
+    ),
+  );
+  await prepareSource(configPath, emptyLevelsJar, "9.1.2");
+  await rm(emptyLevelsJar);
+  const emptyMapFacts = await readFacts(
+    createLandsConfig(pathToFileURL(configPath)),
+  );
+  const emptyNationOrder = emptyMapFacts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "structure" &&
+      "structureKind" in unit.context &&
+      unit.context.structureKind === "mapping-order" &&
+      unit.context.path.join(".") === "nation.levels",
+  );
+  assert.deepEqual(emptyNationOrder?.unit.source, []);
 });
 
 void test("混合配置按声明路径保留译文并更新结构字段与用户自定义键", async (t) => {
