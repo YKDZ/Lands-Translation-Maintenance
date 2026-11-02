@@ -49,8 +49,14 @@ function structureBasis(input: MiniMessageCheckInput): JsonValue {
       definitionsSource === source.context.sourceFile &&
       targetFile === source.context.targetFile,
   );
+  const sourceStructureKind =
+    "structureKind" in source.context
+      ? source.context.structureKind
+      : undefined;
   const entry = mapping?.structures.find(
-    ({ path }) => canonicalJson(path) === canonicalJson(source.context.path),
+    ({ path, structureKind }) =>
+      canonicalJson(path) === canonicalJson(source.context.path) &&
+      sourceStructureKind === structureKind,
   );
   const association = input.facts.associations.find(
     ({ sourceKey, language }) =>
@@ -232,7 +238,11 @@ export const landsStructureConsistencyCheck = defineQualityCheck<
       );
     }
     const entry = mapping.structures.find(
-      ({ path }) => canonicalJson(path) === canonicalJson(source.context.path),
+      ({ path, structureKind }) =>
+        canonicalJson(path) === canonicalJson(source.context.path) &&
+        ("structureKind" in source.context
+          ? source.context.structureKind === structureKind
+          : structureKind === undefined),
     );
     if (entry === undefined || entry.actual.status !== "present") {
       return outcome(

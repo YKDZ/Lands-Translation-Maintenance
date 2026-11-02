@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { SourceRead, TranslationRead, SourceUnitFact } from "@lioni/lioni";
+import type { Document } from "yaml";
 import { z } from "zod";
 
 import { formatForScene } from "#/field-metadata";
@@ -32,7 +33,7 @@ import {
 } from "#/lioni/source-input";
 import { captureMiniMessageTheme } from "#/minimessage-theme";
 import { canonicalJson, compareText } from "#/value";
-import { parseYaml } from "#/yaml-data";
+import { parseYaml, readYamlMappingKeys } from "#/yaml-data";
 
 const lioniJsonSchema = z.json();
 type LioniJson = z.infer<typeof lioniJsonSchema>;
@@ -55,19 +56,35 @@ const messageUnitSchema = z
   })
   .strict();
 
-const structureUnitSchema = z
-  .object({
-    source: lioniJsonSchema,
-    context: z
-      .object({
-        role: z.literal("structure"),
-        sourceFile: z.string(),
-        targetFile: z.string(),
-        path: z.array(z.string()),
-      })
-      .strict(),
-  })
-  .strict();
+const structureUnitSchema = z.union([
+  z
+    .object({
+      source: lioniJsonSchema,
+      context: z
+        .object({
+          role: z.literal("structure"),
+          sourceFile: z.string(),
+          targetFile: z.string(),
+          path: z.array(z.string()),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      source: lioniJsonSchema,
+      context: z
+        .object({
+          role: z.literal("structure"),
+          sourceFile: z.string(),
+          targetFile: z.string(),
+          path: z.array(z.string()),
+          structureKind: z.literal("mapping-order"),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
 
 const unitSchema = z.union([messageUnitSchema, structureUnitSchema]);
 
@@ -82,15 +99,27 @@ const messageTranslationSchema = z
   })
   .strict();
 
-const structureTranslationSchema = z
-  .object({
-    role: z.literal("structure"),
-    sourceFile: z.string(),
-    targetFile: z.string(),
-    path: z.array(z.string()),
-    content: lioniJsonSchema,
-  })
-  .strict();
+const structureTranslationSchema = z.union([
+  z
+    .object({
+      role: z.literal("structure"),
+      sourceFile: z.string(),
+      targetFile: z.string(),
+      path: z.array(z.string()),
+      content: lioniJsonSchema,
+    })
+    .strict(),
+  z
+    .object({
+      role: z.literal("structure"),
+      sourceFile: z.string(),
+      targetFile: z.string(),
+      path: z.array(z.string()),
+      structureKind: z.literal("mapping-order"),
+      content: lioniJsonSchema,
+    })
+    .strict(),
+]);
 
 const translationSchema = z.union([
   messageTranslationSchema,
@@ -108,15 +137,27 @@ const unavailableMessageSchema = z
   })
   .strict();
 
-const unavailableStructureSchema = z
-  .object({
-    role: z.literal("structure"),
-    sourceFile: z.string(),
-    targetFile: z.string(),
-    path: z.array(z.string()),
-    raw: lioniJsonSchema,
-  })
-  .strict();
+const unavailableStructureSchema = z.union([
+  z
+    .object({
+      role: z.literal("structure"),
+      sourceFile: z.string(),
+      targetFile: z.string(),
+      path: z.array(z.string()),
+      raw: lioniJsonSchema,
+    })
+    .strict(),
+  z
+    .object({
+      role: z.literal("structure"),
+      sourceFile: z.string(),
+      targetFile: z.string(),
+      path: z.array(z.string()),
+      structureKind: z.literal("mapping-order"),
+      raw: lioniJsonSchema,
+    })
+    .strict(),
+]);
 
 const unavailableTranslationSchema = z.union([
   unavailableMessageSchema,
@@ -148,6 +189,7 @@ type PathValue =
 interface ReadResourceResult {
   readonly status: "available" | "missing" | "unavailable";
   readonly value?: JsonValue;
+  readonly document?: Document;
   readonly error?: string;
 }
 
@@ -382,7 +424,11 @@ function parseResource(bytes: Uint8Array, path: string): ReadResourceResult {
       error: parsed.issues.map(({ reason }) => reason).join("；"),
     };
   }
-  return { status: "available", value: parsed.parsed.value };
+  return {
+    status: "available",
+    value: parsed.parsed.value,
+    document: parsed.parsed.document,
+  };
 }
 
 function fieldUnits(
@@ -455,6 +501,27 @@ function fieldUnits(
 type LandsMapping =
   LandsProjectConfiguration["translationScope"]["mappings"][number];
 
+function isMappingOrderContext(
+  context: LandsUnit["context"],
+): context is Extract<
+  LandsUnit["context"],
+  { structureKind: "mapping-order" }
+> {
+  return (
+    "structureKind" in context && context.structureKind === "mapping-order"
+  );
+}
+
+function isMappingOrderTranslation(
+  translation: LandsTranslation | UnavailableTranslation,
+): boolean {
+  return (
+    translation.role === "structure" &&
+    "structureKind" in translation &&
+    translation.structureKind === "mapping-order"
+  );
+}
+
 type TranslationPathRelation = "outside" | "ancestor" | "selected";
 
 function translationPathRelation(
@@ -482,6 +549,20 @@ function translationPathRelation(
     else return "selected";
   }
   return hasAncestor ? "ancestor" : "outside";
+}
+
+function mappingOrderPaths(
+  mapping: LandsMapping,
+): readonly (readonly string[])[] {
+  if (mapping.definitionsSource !== "levels.yml") return [];
+  return (
+    [
+      ["land", "levels"],
+      ["nation", "levels"],
+    ] as const
+  ).filter(
+    (path) => translationPathRelation(path, mapping.fields) !== "selected",
+  );
 }
 
 function collectStructuralFields(
@@ -529,6 +610,7 @@ function collectStructuralFields(
 function structureUnits(
   mapping: LandsMapping,
   root: JsonValue,
+  document: Document,
 ): {
   readonly records: readonly {
     readonly key: string;
@@ -540,21 +622,49 @@ function structureUnits(
   const sourceFile = mapping.definitionsSource;
   if (sourceFile === undefined) return { records: [], issues: [] };
   const collected = collectStructuralFields(root, mapping.fields, sourceFile);
-  return {
-    records: collected.entries.map(({ path, value }) => ({
-      key: `structure:${sourceFile}:${canonicalJson(path)}`,
+  const issues = [...collected.issues];
+  const records: {
+    readonly key: string;
+    readonly value: LandsUnit;
+    readonly bodyAvailability: "available";
+  }[] = collected.entries.map(({ path, value }) => ({
+    key: `structure:${sourceFile}:${canonicalJson(path)}`,
+    value: {
+      source: toLioniJson(value),
+      context: {
+        role: "structure" as const,
+        sourceFile,
+        targetFile: mapping.target,
+        path: [...path],
+      },
+    },
+    bodyAvailability: "available" as const,
+  }));
+  for (const path of mappingOrderPaths(mapping)) {
+    const ordered = readYamlMappingKeys(document, path);
+    if (ordered.status === "missing") continue;
+    if (ordered.status === "unavailable") {
+      issues.push(`${sourceFile}:${path.join(".")} 无法读取映射键序`);
+      continue;
+    }
+    records.push({
+      key: `structure-order:${sourceFile}:${canonicalJson(path)}`,
       value: {
-        source: toLioniJson(value),
+        source: [...ordered.keys],
         context: {
-          role: "structure",
+          role: "structure" as const,
+          structureKind: "mapping-order" as const,
           sourceFile,
           targetFile: mapping.target,
           path: [...path],
         },
       },
-      bodyAvailability: "available",
-    })),
-    issues: collected.issues,
+      bodyAvailability: "available" as const,
+    });
+  }
+  return {
+    records,
+    issues,
   };
 }
 
@@ -697,7 +807,11 @@ async function readSource(
       records.push(...collected.records);
     }
     for (const mapping of structureMappings) {
-      const collected = structureUnits(mapping, parsed.value!);
+      const collected = structureUnits(
+        mapping,
+        parsed.value!,
+        parsed.document!,
+      );
       issues.push(...collected.issues);
       records.push(...collected.records);
     }
@@ -715,12 +829,14 @@ async function readSource(
 function structureEntries(
   mapping: LandsMapping,
   definitions: JsonValue,
+  definitionDocument: Document,
   target: ReadResourceResult,
 ): {
   readonly entries: readonly {
     readonly path: readonly string[];
     readonly expected: JsonValue;
     readonly actual: PathValue;
+    readonly structureKind?: "mapping-order";
   }[];
   readonly issues: readonly string[];
 } {
@@ -730,18 +846,63 @@ function structureEntries(
     mapping.fields,
     mapping.definitionsSource ?? mapping.source,
   );
-  return {
-    entries: structures.entries.map(({ path, value }) => ({
+  const entries: {
+    readonly path: readonly string[];
+    readonly expected: JsonValue;
+    readonly actual: PathValue;
+    readonly structureKind?: "mapping-order";
+  }[] = structures.entries.map(({ path, value }) => ({
+    path,
+    expected: value,
+    actual:
+      target.status === "available"
+        ? readPath(target.value!, path)
+        : target.status === "missing"
+          ? { status: "missing" as const }
+          : { status: "unavailable" as const, error: target.error! },
+  }));
+  const issues = [...structures.issues];
+  for (const path of mappingOrderPaths(mapping)) {
+    const sourceOrder = readYamlMappingKeys(definitionDocument, path);
+    if (sourceOrder.status === "missing") continue;
+    if (sourceOrder.status === "unavailable") {
+      issues.push(
+        `${mapping.definitionsSource}:${path.join(".")} 无法读取映射键序`,
+      );
+      continue;
+    }
+    let actual: PathValue;
+    if (target.status === "missing") {
+      actual = { status: "missing" };
+    } else if (target.status === "unavailable") {
+      actual = { status: "unavailable", error: target.error! };
+    } else {
+      const targetOrder = readYamlMappingKeys(
+        target.document!,
+        path,
+        new Set(sourceOrder.keys),
+      );
+      actual =
+        targetOrder.status === "unavailable"
+          ? {
+              status: "unavailable",
+              error: `${mapping.target}:${path.join(".")} 无法读取映射键序`,
+            }
+          : {
+              status: "present",
+              value: targetOrder.status === "missing" ? [] : targetOrder.keys,
+            };
+    }
+    entries.push({
       path,
-      expected: value,
-      actual:
-        target.status === "available"
-          ? readPath(target.value!, path)
-          : target.status === "missing"
-            ? { status: "missing" as const }
-            : { status: "unavailable" as const, error: target.error! },
-    })),
-    issues: structures.issues,
+      structureKind: "mapping-order",
+      expected: [...sourceOrder.keys],
+      actual,
+    });
+  }
+  return {
+    entries,
+    issues,
   };
 }
 
@@ -798,7 +959,11 @@ function mappingDefinitions(
   snapshot: LandsSourceSnapshot,
 ):
   | { readonly status: "not-configured" }
-  | { readonly status: "available"; readonly value: JsonValue }
+  | {
+      readonly status: "available";
+      readonly value: JsonValue;
+      readonly document: Document;
+    }
   | { readonly status: "unavailable"; readonly error: string } {
   const source = mapping.definitionsSource;
   if (source === undefined) return { status: "not-configured" };
@@ -816,7 +981,11 @@ function mappingDefinitions(
       error: parsed.error ?? `${source} 无法读取`,
     };
   }
-  return { status: "available", value: parsed.value! };
+  return {
+    status: "available",
+    value: parsed.value!,
+    document: parsed.document!,
+  };
 }
 
 function mappingStructures(
@@ -830,7 +999,12 @@ function mappingStructures(
   if (definition.status === "unavailable") {
     issues.push(definition.error);
   } else if (definition.status === "available") {
-    const projection = structureEntries(mapping, definition.value, target);
+    const projection = structureEntries(
+      mapping,
+      definition.value,
+      definition.document,
+      target,
+    );
     issues.push(...projection.issues);
     structures = projection.entries;
   }
@@ -1055,6 +1229,51 @@ async function readTranslations(
             bodyAvailability: "available",
           });
         }
+
+        const orderUnits = mappedUnits.filter(
+          ({ unit }) =>
+            unit.context.role === "structure" &&
+            isMappingOrderContext(unit.context),
+        );
+        for (const { unit } of orderUnits) {
+          if (
+            unit.context.role !== "structure" ||
+            !isMappingOrderContext(unit.context) ||
+            !Array.isArray(unit.source) ||
+            !unit.source.every((key) => typeof key === "string")
+          ) {
+            continue;
+          }
+          const order = readYamlMappingKeys(
+            target.document!,
+            unit.context.path,
+            new Set(unit.source),
+          );
+          const base = {
+            role: "structure" as const,
+            structureKind: "mapping-order" as const,
+            sourceFile: mapping.definitionsSource,
+            targetFile: mapping.target,
+            path: [...unit.context.path],
+          };
+          if (order.status === "unavailable") {
+            structureGroup.issues.push(
+              `${mapping.target}:${unit.context.path.join(".")} 无法读取映射键序`,
+            );
+            structureGroup.records.push({
+              value: { ...base, raw: null },
+              bodyAvailability: "unavailable",
+            });
+            continue;
+          }
+          structureGroup.records.push({
+            value: {
+              ...base,
+              content: order.status === "missing" ? [] : [...order.keys],
+            },
+            bodyAvailability: "available",
+          });
+        }
       }
     }
 
@@ -1126,7 +1345,9 @@ export function landsFactAdapters(entryUrl: string | URL) {
       read: () => readSource(paths),
     },
     keyOf: (unit: LandsUnit) =>
-      `${unit.context.role === "structure" ? "structure:" : ""}${unit.context.sourceFile}:${canonicalJson(unit.context.path)}`,
+      unit.context.role === "structure" && isMappingOrderContext(unit.context)
+        ? `structure-order:${unit.context.sourceFile}:${canonicalJson(unit.context.path)}`
+        : `${unit.context.role === "structure" ? "structure:" : ""}${unit.context.sourceFile}:${canonicalJson(unit.context.path)}`,
     translations: {
       languages: ["zh-CN"],
       schema: translationSchema,
@@ -1135,7 +1356,9 @@ export function landsFactAdapters(entryUrl: string | URL) {
       contentOf: (translation: LandsTranslation) => translation.content,
       keyOf: (translation: LandsTranslation | UnavailableTranslation) => ({
         namespace: translation.targetFile,
-        key: canonicalJson(translation.path),
+        key: isMappingOrderTranslation(translation)
+          ? `order:${canonicalJson(translation.path)}`
+          : canonicalJson(translation.path),
       }),
       matches: (
         unit: LandsUnit,
@@ -1143,6 +1366,12 @@ export function landsFactAdapters(entryUrl: string | URL) {
       ) =>
         unit.context.role === translation.role &&
         unit.context.sourceFile === translation.sourceFile &&
+        (unit.context.role !== "structure" ||
+          translation.role !== "structure" ||
+          (isMappingOrderContext(unit.context) &&
+            isMappingOrderTranslation(translation)) ||
+          (!isMappingOrderContext(unit.context) &&
+            !isMappingOrderTranslation(translation))) &&
         canonicalJson(unit.context.path) === canonicalJson(translation.path),
       read: (
         language: string,

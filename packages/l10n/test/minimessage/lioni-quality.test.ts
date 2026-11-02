@@ -144,6 +144,7 @@ interface QualityProjectOptions {
     readonly source: readonly { readonly key: string; readonly name: string }[];
     readonly target: readonly { readonly key: string; readonly name: string }[];
   };
+  readonly levels?: { readonly source: string; readonly target: string };
 }
 
 function landsJar(
@@ -158,6 +159,7 @@ function landsJar(
   chatList: QualityProjectOptions["chatList"],
   dialogChat: QualityProjectOptions["dialogChat"],
   roles: QualityProjectOptions["roles"],
+  levels?: string,
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
@@ -242,6 +244,7 @@ function landsJar(
       ].join("\n");
     files["Locale/en-US_roles.yml"] = strToU8(roleYaml(roles.source));
   }
+  if (levels !== undefined) files["levels.yml"] = strToU8(levels);
   return zipSync(files);
 }
 
@@ -276,6 +279,9 @@ async function createQualityProject(
     ...(options.roles === undefined
       ? []
       : ["  - path: Locale/en-US_roles.yml", "    purpose: configuration"]),
+    ...(options.levels === undefined
+      ? []
+      : ["  - path: levels.yml", "    purpose: configuration"]),
   ];
   const mappings = [
     "    - source: Locale/en-US_gui.yml",
@@ -338,6 +344,17 @@ async function createQualityProject(
           '        - path: [land, roles, "*", name]',
           "          category: configuration-string",
           "          scene: role-name",
+        ]),
+    ...(options.levels === undefined
+      ? []
+      : [
+          "    - source: levels.yml",
+          "      target: levels.yml",
+          "      definitionsSource: levels.yml",
+          "      fields:",
+          '        - path: [land, levels, "*", name]',
+          "          category: configuration-string",
+          "          scene: level-title",
         ]),
   ];
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
@@ -511,6 +528,7 @@ async function createQualityProject(
       options.chatList,
       options.dialogChat,
       options.roles,
+      options.levels?.source,
     ),
   );
   const prepared = spawnSync(
@@ -527,6 +545,9 @@ async function createQualityProject(
   );
   assert.equal(prepared.status, 0, prepared.stderr);
   await rm(jarPath);
+  if (options.levels !== undefined) {
+    await writeFile(join(directory, "levels.yml"), options.levels.target);
+  }
   return { directory, configPath };
 }
 
@@ -1152,6 +1173,64 @@ void test("结构一致性 QA 只读检查受管值并允许自定义字段", as
     "confirm",
     "material",
   ]);
+  assert.deepEqual(await readFile(targetPath), before);
+});
+
+void test("结构 QA 核对 levels.yml 中来源管理的等级顺序", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      levels: {
+        source: [
+          "land:",
+          "  levels:",
+          "    alpha:",
+          '      name: "Alpha"',
+          "      cost: 1",
+          "    beta:",
+          '      name: "Beta"',
+          "      cost: 2",
+          "",
+        ].join("\n"),
+        target: [
+          "land:",
+          "  levels:",
+          "    beta:",
+          "      name: 二级",
+          "      cost: 2",
+          "    pluginLevel:",
+          "      note: 保留自定义等级",
+          "    alpha:",
+          "      name: 一级",
+          "      cost: 1",
+          "",
+        ].join("\n"),
+      },
+    },
+  );
+  const targetPath = join(project.directory, "levels.yml");
+  const before = await readFile(targetPath);
+  const report = qualityReport(runLioni(["qa", project.configPath])).report;
+  const structures = checkResult(report, "lands-structure-consistency");
+  const mismatch = structures.diagnostics.find(
+    ({ object }) =>
+      object.key === 'structure-order:levels.yml:["land","levels"]' &&
+      object.code === "lands.structure-mismatch",
+  );
+
+  assert.equal(structures.status, "complete");
+  assert.ok(mismatch, JSON.stringify(structures, null, 2));
+  assert.deepEqual(mismatch.location.range.path, ["land", "levels"]);
+  assert.deepEqual(
+    mismatch.evidence.map(({ role, value }) => ({ role, value })),
+    [
+      { role: "expected", value: ["alpha", "beta"] },
+      { role: "actual", value: ["beta", "alpha"] },
+    ],
+  );
   assert.deepEqual(await readFile(targetPath), before);
 });
 

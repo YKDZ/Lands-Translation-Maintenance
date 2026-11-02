@@ -13,16 +13,23 @@ import type { JsonValue } from "#/json-value";
 import { parseLandsProjectConfiguration } from "#/lioni/project-configuration";
 import type { LandsProjectPaths } from "#/lioni/project-paths";
 import { readLandsSourceSnapshot } from "#/lioni/source-input";
-import { isYamlDocumentRootMap, parseYaml, setDocumentPath } from "#/yaml-data";
+import {
+  isYamlDocumentRootMap,
+  parseYaml,
+  reorderYamlMapping,
+  setDocumentPath,
+} from "#/yaml-data";
 
 interface LandsTarget {
   readonly targetFile: string;
   readonly path: readonly string[];
+  readonly structureKind?: "mapping-order";
 }
 
 interface LandsUnitContext {
   readonly targetFile: string;
   readonly path: readonly string[];
+  readonly structureKind?: "mapping-order";
 }
 
 interface LandsWritebackUnit extends TranslationUnitInput {
@@ -33,6 +40,7 @@ const targetLocatorSchema = z
   .object({
     file: z.string().min(1),
     path: z.array(z.string().min(1)).min(1),
+    kind: z.literal("mapping-order").optional(),
   })
   .strict();
 
@@ -55,7 +63,13 @@ function locate(target: LandsTarget) {
   }
   return {
     status: "located" as const,
-    locator: { file: target.targetFile, path: target.path },
+    locator: {
+      file: target.targetFile,
+      path: target.path,
+      ...(target.structureKind === "mapping-order"
+        ? { kind: "mapping-order" as const }
+        : {}),
+    },
   };
 }
 
@@ -167,9 +181,13 @@ export function createLandsWritebackAdapter<
     TUnavailable
   > = {
     locateExistingTarget: ({ identity, translation }) => {
+      const expectedIdentityKey =
+        translation.translation.structureKind === "mapping-order"
+          ? `order:${JSON.stringify(translation.translation.path)}`
+          : JSON.stringify(translation.translation.path);
       if (
         identity.namespace !== translation.translation.targetFile ||
-        identity.key !== JSON.stringify(translation.translation.path)
+        identity.key !== expectedIdentityKey
       ) {
         return {
           status: "notWritable",
@@ -184,6 +202,7 @@ export function createLandsWritebackAdapter<
         string,
         {
           readonly path: readonly string[];
+          readonly kind?: "mapping-order";
           readonly request: TranslationWriteRequest<TBody, TUnit>;
         }[]
       >();
@@ -193,7 +212,11 @@ export function createLandsWritebackAdapter<
           throw new Error(`目标路径不是项目内的规范相对路径：${locator.file}`);
         }
         const targets = requestsByFile.get(locator.file) ?? [];
-        targets.push({ path: locator.path, request: request.request });
+        targets.push({
+          path: locator.path,
+          ...(locator.kind === undefined ? {} : { kind: locator.kind }),
+          request: request.request,
+        });
         requestsByFile.set(locator.file, targets);
       }
 
@@ -211,7 +234,21 @@ export function createLandsWritebackAdapter<
         const targetFile = join(paths.projectDirectory, file);
         const document = await readTargetDocument(targetFile);
         const deletedPaths: (readonly string[])[] = [];
-        for (const { path, request } of fileRequests) {
+        const orderRequests: {
+          readonly path: readonly string[];
+          readonly request: Extract<
+            TranslationWriteRequest<TBody, TUnit>,
+            { readonly operation: "write" }
+          >;
+        }[] = [];
+        for (const { path, kind, request } of fileRequests) {
+          if (kind === "mapping-order") {
+            if (request.operation !== "write") {
+              throw new Error("映射顺序事实只能通过写入更新");
+            }
+            orderRequests.push({ path, request });
+            continue;
+          }
           if (request.operation === "write") {
             setDocumentPath(document, path, request.content);
           } else {
@@ -222,6 +259,15 @@ export function createLandsWritebackAdapter<
         const sourceDocument = sourceDocuments.get(file);
         if (sourceDocument !== undefined) {
           pruneDeletedEmptyMapAncestors(document, sourceDocument, deletedPaths);
+        }
+        for (const { path, request } of orderRequests) {
+          if (
+            !Array.isArray(request.content) ||
+            !request.content.every((key) => typeof key === "string")
+          ) {
+            throw new Error(`映射顺序内容必须是字符串数组：${path.join(".")}`);
+          }
+          reorderYamlMapping(document, path, request.content);
         }
         await mkdir(dirname(targetFile), { recursive: true });
         await writeFile(

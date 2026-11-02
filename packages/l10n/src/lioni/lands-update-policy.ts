@@ -121,6 +121,21 @@ function currentTranslationForItem(
   return matches[0];
 }
 
+function previousTranslationForItem(
+  input: LandsUpdateInput,
+  item: LandsPlanItem,
+): AvailableTranslation | undefined {
+  if (item.target === undefined || input.previous === undefined)
+    return undefined;
+  const matches = input.previous.translations.records.filter((record) =>
+    sameIdentity(record.identity, item.target!),
+  );
+  if (matches.length !== 1 || matches[0]?.bodyAvailability !== "available") {
+    return undefined;
+  }
+  return matches[0];
+}
+
 function planItemBase(
   item: LandsPlanItem,
   target: TranslationIdentity,
@@ -486,6 +501,20 @@ function removedStructureDecision(
     previousSource?.unit.context.role !== "structure"
   ) {
     return undefined;
+  }
+  if (
+    "structureKind" in previousSource.unit.context &&
+    previousSource.unit.context.structureKind === "mapping-order"
+  ) {
+    const target =
+      currentTranslationForItem(input, item) ??
+      previousTranslationForItem(input, item);
+    if (target?.translation.role !== "structure") return undefined;
+    return retainExistingItem(
+      item,
+      target,
+      "来源不再提供此映射顺序事实；保留物理映射并停止管理其顺序。",
+    );
   }
   const target = currentTranslationForItem(input, item);
   if (target?.translation.role !== "structure") return undefined;
