@@ -138,20 +138,33 @@ export function validateConfiguration(
       sourceIndex === undefined
         ? undefined
         : configuration.resources[sourceIndex]!.purpose;
+    // 9.1.1 将聊天确认文案与对话框字段放在同一文件，只允许 value.confirm 前缀跨用途登记。
+    const chatFieldsAreConfirmations = mapping.fields
+      .filter((field) => field.category.startsWith("chat-"))
+      .every(({ path }) => path[0] === "value" && path[1] === "confirm");
     const hasDialogItemFields =
       hasGuiFields &&
       guiFieldsAreDialogItems &&
       sourcePurpose === "dialog-language";
+    const hasChatFieldsInDialogResource =
+      hasChatFields &&
+      hasDialogFields &&
+      !hasConfigurationFields &&
+      (!hasGuiFields || guiFieldsAreDialogItems) &&
+      chatFieldsAreConfirmations &&
+      sourcePurpose === "dialog-language";
     const dialogUsesGuiItems = hasDialogFields && hasGuiFields;
-    const allowedPurposes = hasChatFields
-      ? new Set(["chat-language"])
-      : hasConfigurationFields
-        ? new Set(["configuration"])
-        : hasDialogFields || hasDialogItemFields
-          ? new Set(["dialog-language"])
-          : hasGuiFields
-            ? new Set(["gui-language"])
-            : new Set(["configuration"]);
+    const allowedPurposes = hasChatFieldsInDialogResource
+      ? new Set(["dialog-language"])
+      : hasChatFields
+        ? new Set(["chat-language"])
+        : hasConfigurationFields
+          ? new Set(["configuration"])
+          : hasDialogFields || hasDialogItemFields
+            ? new Set(["dialog-language"])
+            : hasGuiFields
+              ? new Set(["gui-language"])
+              : new Set(["configuration"]);
     if (sourceIndex === undefined) {
       issues.push({
         code: "configuration.mapping-source-unlisted",
@@ -177,7 +190,9 @@ export function validateConfiguration(
     }
     if (
       (hasChatFields &&
-        (hasGuiFields || hasDialogFields || hasConfigurationFields)) ||
+        ((hasGuiFields && !hasChatFieldsInDialogResource) ||
+          hasConfigurationFields ||
+          (hasDialogFields && !hasChatFieldsInDialogResource))) ||
       (hasConfigurationFields && (hasGuiFields || hasDialogFields)) ||
       (dialogUsesGuiItems && !guiFieldsAreDialogItems) ||
       (hasGuiFields && hasDialogFields && !dialogUsesGuiItems)

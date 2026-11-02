@@ -17,7 +17,7 @@ export interface LegacyFormatIssue {
 }
 
 export interface LegacyMiniMessageAdaptation extends AdaptedMiniMessageInput {
-  readonly sourceVersion: "8.0.1" | "8.9.2";
+  readonly sourceVersion: "8.0.1" | "8.9.2" | "9.1.1";
   readonly markers: readonly LegacyFormatMarker[];
   readonly issues: readonly LegacyFormatIssue[];
 }
@@ -112,12 +112,16 @@ function malformedHexCandidate(
   return remainder.includes(prefix) || /[0-9a-f]/iu.test(remainder);
 }
 
-/** 按两个已核实的 Lands 版本规则转换旧颜色码，其他版本显式不支持。 */
+/** 按已核实的 Lands 版本规则转换旧颜色码，其他版本显式不支持。 */
 export function adaptLegacyMiniMessageInput(
   input: string,
   sourceVersion: string,
 ): LegacyMiniMessageAdaptation | undefined {
-  if (sourceVersion !== "8.0.1" && sourceVersion !== "8.9.2") {
+  if (
+    sourceVersion !== "8.0.1" &&
+    sourceVersion !== "8.9.2" &&
+    sourceVersion !== "9.1.1"
+  ) {
     return undefined;
   }
 
@@ -129,9 +133,11 @@ export function adaptLegacyMiniMessageInput(
   const markers: LegacyFormatMarker[] = [];
   const issues: LegacyFormatIssue[] = [];
   const activeDecorations = new Set<string>();
-  const supportsSectionCodes = sourceVersion === "8.9.2";
-  const skipsExistingTags = sourceVersion === "8.9.2";
-  const supportsHexSequence = sourceVersion === "8.9.2";
+  const usesCurrentColorRules =
+    sourceVersion === "8.9.2" || sourceVersion === "9.1.1";
+  const supportsSectionCodes = usesCurrentColorRules;
+  const skipsExistingTags = usesCurrentColorRules;
+  const supportsHexSequence = usesCurrentColorRules;
 
   const emitClosures = (position: MiniMessagePosition): void => {
     for (const decoration of decorationNames) {

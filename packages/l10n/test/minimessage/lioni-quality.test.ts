@@ -14,7 +14,13 @@ import { dirname, join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { readFacts } from "@lioni/lioni";
+import {
+  analyzeQuality,
+  readFacts,
+  type FrameworkConfig,
+  type JsonValue,
+  type TranslationUnitInput,
+} from "@lioni/lioni";
 import { strToU8, zipSync } from "fflate";
 
 import { createLandsConfig } from "../../lioni.config.ts";
@@ -120,6 +126,10 @@ interface QualityProjectOptions {
   readonly targetCustomField?: boolean;
   readonly nestedStructure?: boolean;
   readonly chat?: { readonly source: string; readonly target: string };
+  readonly dialogChat?: {
+    readonly source: string;
+    readonly target: string;
+  };
   readonly chatList?: {
     readonly source: readonly string[];
     readonly target: readonly string[];
@@ -142,6 +152,7 @@ function landsJar(
   extraChatMessages: QualityProjectOptions["extraChatMessages"] = [],
   nestedStructure = false,
   chatList: QualityProjectOptions["chatList"],
+  dialogChat: QualityProjectOptions["dialogChat"],
 ): Uint8Array {
   const files: Record<string, Uint8Array> = {
     "Locale/en-US_gui.yml": strToU8(
@@ -197,6 +208,20 @@ function landsJar(
       ].join("\n"),
     );
   }
+  if (dialogChat !== undefined) {
+    files["Locale/en-US_dialogs.yml"] = strToU8(
+      [
+        "dialogs:",
+        "  confirm:",
+        '    title: "Confirm"',
+        "value:",
+        "  confirm:",
+        "    accept:",
+        `      confirm: ${JSON.stringify(dialogChat.source)}`,
+        "",
+      ].join("\n"),
+    );
+  }
   return zipSync(files);
 }
 
@@ -225,6 +250,9 @@ async function createQualityProject(
     ...(options.chat === undefined && options.chatList === undefined
       ? []
       : ["  - path: Locale/en-US_messages.yml", "    purpose: chat-language"]),
+    ...(options.dialogChat === undefined
+      ? []
+      : ["  - path: Locale/en-US_dialogs.yml", "    purpose: dialog-language"]),
   ];
   const mappings = [
     "    - source: Locale/en-US_gui.yml",
@@ -257,6 +285,25 @@ async function createQualityProject(
                 "        - path: [messages, entries]",
                 "          category: chat-string-list",
               ]),
+        ]),
+    ...(options.dialogChat === undefined
+      ? []
+      : [
+          "    - source: Locale/en-US_dialogs.yml",
+          "      target: Locale/zh-CN_dialogs.yml",
+          "      definitionsSource: Locale/en-US_dialogs.yml",
+          "      fields:",
+          "        - path: [value, confirm]",
+          "          category: chat-string",
+          "        - path: [dialogs, confirm, title]",
+          "          category: dialog-string",
+          "          scene: dialog-title",
+          '        - path: [dialogs, "*", bodies, "*", item, name]',
+          "          category: gui-string",
+          "          scene: gui-item-name",
+          '        - path: [dialogs, "*", bodies, "*", item, lore]',
+          "          category: gui-lore",
+          "          scene: gui-item-lore",
         ]),
   ];
   const directory = await mkdtemp(join(tmpdir(), "lioni-quality-"));
@@ -368,6 +415,21 @@ async function createQualityProject(
       ].join("\n"),
     );
   }
+  if (options.dialogChat !== undefined) {
+    await writeFile(
+      join(directory, "Locale/zh-CN_dialogs.yml"),
+      [
+        "dialogs:",
+        "  confirm:",
+        '    title: "确认"',
+        "value:",
+        "  confirm:",
+        "    accept:",
+        `      confirm: ${JSON.stringify(options.dialogChat.target)}`,
+        "",
+      ].join("\n"),
+    );
+  }
   const configPath = join(directory, ".lioni/lioni.config.ts");
   await writeFile(
     configPath,
@@ -395,6 +457,7 @@ async function createQualityProject(
       options.extraChatMessages,
       options.nestedStructure,
       options.chatList,
+      options.dialogChat,
     ),
   );
   const prepared = spawnSync(
@@ -2079,6 +2142,65 @@ void test("GUI lore 保留 action、label、desc、indent、空行与重复行�
     "complete",
   );
 
+  const lands911 = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      sourceLore: [
+        "<action:claim><label>&aClaim</label><desc><gray>Details</gray></desc></action><newline>",
+        "<indent>Next",
+      ],
+      targetLore: [
+        "<action:claim><label>&a占领</label><desc><gray>详情</gray></desc></action><newline>",
+        "<indent>下一项",
+      ],
+    },
+  );
+  const lands911Report = qualityReport(runLioni(["qa", lands911.configPath]));
+  assert.equal(
+    checkResult(lands911Report.report, "legacy-format").status,
+    "complete",
+    JSON.stringify(lands911Report.report, null, 2),
+  );
+  assert.equal(
+    checkResult(lands911Report.report, "minimessage-tag-correspondence").status,
+    "complete",
+    JSON.stringify(lands911Report.report, null, 2),
+  );
+  assert.equal(
+    checkResult(lands911Report.report, "minimessage-lands-controls").status,
+    "complete",
+    JSON.stringify(lands911Report.report, null, 2),
+  );
+
+  const lands911BadHex = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      sourceLore: ["<action:claim><label>Claim</label></action>"],
+      targetLore: ["<action:claim><label>&x&1&2&3&4&5&Z占领</label></action>"],
+    },
+  );
+  const lands911BadHexReport = qualityReport(
+    runLioni(["qa", lands911BadHex.configPath]),
+  );
+  const lands911BadHexFormat = checkResult(
+    lands911BadHexReport.report,
+    "legacy-format",
+  );
+  assert.ok(
+    lands911BadHexFormat.diagnostics.some(
+      ({ object }) => object.code === "legacy-format.hex-sequence-invalid",
+    ),
+    JSON.stringify(lands911BadHexFormat, null, 2),
+  );
+
   const moved = await createQualityProject(t, undefined, undefined, undefined, {
     sourceLore: [
       "<action:claim><label><red>Claim</red></label></action>",
@@ -2155,6 +2277,80 @@ void test("GUI lore 保留 action、label、desc、indent、空行与重复行�
       ({ code }) => code === "minimessage.lands-controls-version-unverified",
     ),
     JSON.stringify(unknownVersionControls, null, 2),
+  );
+});
+
+void test("对话资源中的聊天确认文案按聊天规则执行公开 QA", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      dialogChat: {
+        source: "<verbose>Confirm?</verbose>",
+        target: "<verbose>Confirm?</verbose>",
+      },
+    },
+  );
+  const config = createLandsConfig(pathToFileURL(project.configPath));
+  const facts = await readFacts(config);
+  const confirmation = facts.source.units.find(
+    ({ unit }) =>
+      unit.context.role === "message" &&
+      unit.context.sourceFile === "Locale/en-US_dialogs.yml" &&
+      unit.context.path.join(".") === "value.confirm.accept.confirm",
+  );
+  assert.ok(
+    confirmation?.unit.context.role === "message",
+    JSON.stringify(facts.source.read, null, 2),
+  );
+  assert.equal(confirmation.unit.context.category, "chat-string");
+  const translatedConfirmation = facts.translations.records.find(
+    (record) =>
+      record.bodyAvailability === "available" &&
+      record.translation.role === "message" &&
+      record.translation.targetFile === "Locale/zh-CN_dialogs.yml" &&
+      record.translation.path.join(".") === "value.confirm.accept.confirm",
+  );
+  assert.ok(translatedConfirmation);
+  assert.equal(typeof translatedConfirmation.content, "string");
+  const sourceKey = confirmation.key;
+  const report = await analyzeQuality(
+    config as unknown as FrameworkConfig<
+      TranslationUnitInput,
+      unknown,
+      JsonValue | undefined
+    >,
+    {
+      candidates: [
+        {
+          sourceKey,
+          language: "zh-CN",
+          content: translatedConfirmation.content,
+        },
+      ],
+    },
+  );
+  const controls = report.checks.find(
+    ({ checkId }) => checkId === "minimessage-lands-controls",
+  );
+  assert.ok(controls);
+  assert.ok(
+    controls.executions.some(
+      ({ sourceKey: executedKey }) => executedKey === sourceKey,
+    ),
+    JSON.stringify(controls, null, 2),
+  );
+  assert.equal(
+    controls.diagnostics.find(
+      ({ object }) =>
+        object.key === sourceKey &&
+        object.code === "minimessage.lands-control-invalid",
+    ),
+    undefined,
+    JSON.stringify(controls, null, 2),
   );
 });
 
