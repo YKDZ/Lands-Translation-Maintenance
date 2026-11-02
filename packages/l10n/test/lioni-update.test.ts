@@ -9,9 +9,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 import type { ComparisonBaselineStore, FrameworkConfig } from "@lioni/lioni";
 import { readFacts, update } from "@lioni/lioni";
@@ -22,13 +22,15 @@ import { parseDocument } from "yaml";
 import { createLandsConfig } from "../lioni.config.ts";
 import { readLandsStructureProjection } from "../src/lioni/lands-facts.ts";
 import { runLandsUpdateStage } from "../src/lioni/update-stage.ts";
-
-const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const nativeCli = join(packageDirectory, "node_modules/.bin/lioni");
-const sourcePreparer = join(
+import {
+  createProject,
+  landsJar,
+  nativeCli,
   packageDirectory,
-  "scripts/prepare-lioni-source.ts",
-);
+  prepareBaselineUpdate,
+  prepareSource,
+  runLioni,
+} from "./lioni-update-fixtures.ts";
 
 type BaselineStoreFor<TConfig> =
   TConfig extends FrameworkConfig<
@@ -39,112 +41,6 @@ type BaselineStoreFor<TConfig> =
   >
     ? ComparisonBaselineStore<TUnit, TTranslation, TBody, TUnavailable>
     : never;
-
-function runLioni(args: readonly string[]): string {
-  const result = spawnSync(process.execPath, [nativeCli, ...args], {
-    cwd: tmpdir(),
-    encoding: "utf8",
-  });
-  assert.equal(
-    result.status,
-    0,
-    `${args.join(" ")} 失败：\n${result.stdout}\n${result.stderr}`,
-  );
-  return result.stdout;
-}
-
-async function prepareSource(
-  configPath: string,
-  jarPath: string,
-  expectedVersion = "8.9.2",
-): Promise<void> {
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=source",
-      sourcePreparer,
-      "--jar",
-      jarPath,
-      "--config",
-      configPath,
-    ],
-    { cwd: tmpdir(), encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr);
-  const sourceDirectory = join(dirname(configPath), "source");
-  const pointer = JSON.parse(
-    await readFile(join(sourceDirectory, "current.json"), "utf8"),
-  ) as { readonly snapshotSha256: string };
-  const manifest = JSON.parse(
-    await readFile(
-      join(
-        sourceDirectory,
-        "snapshots",
-        pointer.snapshotSha256,
-        "manifest.json",
-      ),
-      "utf8",
-    ),
-  ) as { readonly sourceVersion: string };
-  assert.equal(manifest.sourceVersion, expectedVersion);
-}
-
-async function createProject(directory: string): Promise<void> {
-  await mkdir(join(directory, ".lioni"), { recursive: true });
-  await mkdir(join(directory, "Locale"), { recursive: true });
-  await writeFile(
-    join(directory, ".lioni/project.yml"),
-    [
-      "format: lands-l10n-project/v1",
-      "resources:",
-      "  - path: plugin.yml",
-      "    purpose: metadata",
-      "  - path: Locale/en-US.yml",
-      "    purpose: chat-language",
-      "translationScope:",
-      '  sourceLanguage: "en-US"',
-      '  targetLanguage: "zh-CN"',
-      "  mappings:",
-      "    - source: Locale/en-US.yml",
-      "      target: Locale/zh-CN.yml",
-      "      fields:",
-      "        - path: [messages]",
-      "          category: chat-string",
-      "",
-    ].join("\n"),
-  );
-  await writeFile(
-    join(directory, "Locale/zh-CN.yml"),
-    [
-      "# 保留文件注释",
-      "messages:",
-      "  greet: 你好 # 保留字段注释",
-      "  leave: 再见",
-      "  legacy: 旧译文",
-      "custom: 保留用户字段",
-      "",
-    ].join("\n"),
-  );
-  await writeFile(
-    join(directory, ".lioni/lioni.config.ts"),
-    [
-      'import { createLandsConfig } from "@lands-l10n/l10n/lioni.config";',
-      "",
-      "export default createLandsConfig(import.meta.url);",
-      "",
-    ].join("\n"),
-  );
-  const scopedPackageDirectory = join(directory, "node_modules/@lands-l10n");
-  await mkdir(scopedPackageDirectory, { recursive: true });
-  await symlink(packageDirectory, join(scopedPackageDirectory, "l10n"), "dir");
-}
-
-function landsJar(messages: string, version = "8.9.2"): Uint8Array {
-  return zipSync({
-    "plugin.yml": strToU8(`name: Lands\nversion: ${version}\n`),
-    "Locale/en-US.yml": strToU8(messages),
-  });
-}
 
 function landsJarWithUnregisteredResource(
   messages: string,
@@ -418,48 +314,6 @@ async function createDialogProject(directory: string): Promise<void> {
       "",
     ].join("\n"),
   );
-}
-
-async function prepareBaselineUpdate(
-  t: import("node:test").TestContext,
-): Promise<{
-  readonly configPath: string;
-  readonly baselinePath: string;
-  readonly projectDirectory: string;
-  readonly targetPath: string;
-}> {
-  const project = await mkdtemp(join(tmpdir(), "lioni-update-failure-"));
-  t.after(async () => rm(project, { force: true, recursive: true }));
-  await createProject(project);
-
-  const configPath = join(project, ".lioni/lioni.config.ts");
-  const initialJar = join(project, "Lands-initial.jar");
-  await writeFile(
-    initialJar,
-    landsJar(
-      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
-    ),
-  );
-  await prepareSource(configPath, initialJar);
-  await rm(initialJar);
-  runLioni(["baseline", configPath, "--output-format", "structured"]);
-
-  const changedJar = join(project, "Lands-changed.jar");
-  await writeFile(
-    changedJar,
-    landsJar(
-      "messages:\n  greet: Hello again\n  leave: Goodbye again\n  legacy: Parting\n",
-      "8.9.3",
-    ),
-  );
-  await prepareSource(configPath, changedJar, "8.9.3");
-  await rm(changedJar);
-  return {
-    configPath,
-    baselinePath: join(project, ".lioni/lioni.baseline.json"),
-    projectDirectory: project,
-    targetPath: join(project, "Locale/zh-CN.yml"),
-  };
 }
 
 void test("原生 update 回填变化与缺失消息并保留未变中文及 YAML 注释", async (t) => {
@@ -2250,63 +2104,6 @@ void test("执行期间来源变化时保留已写结果但不推进比较基线
   assert.equal(target.messages.greet, "Hello again");
   assert.equal(target.messages.leave, "Goodbye again");
   assert.deepEqual(await readFile(project.baselinePath), originalBaseline);
-});
-
-void test("同步阶段使用正式更新与 QA，数据错误不阻止完整阶段", async (t) => {
-  const project = await prepareBaselineUpdate(t);
-  await mkdir(join(project.projectDirectory, ".lioni/terms"), {
-    recursive: true,
-  });
-  await Promise.all(
-    ["concepts", "en-US", "zh-CN"].map((name) =>
-      writeFile(
-        join(project.projectDirectory, `.lioni/terms/${name}.yaml`),
-        "concepts: {}\n",
-      ),
-    ),
-  );
-  const initialJar = join(project.projectDirectory, "Lands-initial.jar");
-  await writeFile(
-    initialJar,
-    landsJar(
-      "messages:\n  greet: Hello\n  leave: Goodbye\n  legacy: Parting\n",
-    ),
-  );
-  await prepareSource(project.configPath, initialJar, "8.9.2");
-  await rm(initialJar);
-  await writeFile(
-    project.targetPath,
-    (await readFile(project.targetPath, "utf8")).replace(
-      "greet: 你好 # 保留字段注释",
-      'greet: "<red>人工翻译</red>" # 保留字段注释',
-    ),
-  );
-
-  const first = await runLandsUpdateStage(project.configPath);
-  assert.equal(first.status, "completed");
-  assert.equal(first.qualityDecision.executionStatus, "complete");
-  assert.equal(first.qualityDecision.passed, false);
-  assert.ok(first.qualityDecision.activeErrorCount > 0);
-  assert.match(first.qualityReport, /质量结论/u);
-
-  const translatedTarget = await readFile(project.targetPath, "utf8");
-  const recordedBaseline = await readFile(project.baselinePath);
-  const repeated = await runLandsUpdateStage(project.configPath);
-  assert.equal(repeated.status, "completed");
-  assert.equal(await readFile(project.targetPath, "utf8"), translatedTarget);
-  assert.deepEqual(await readFile(project.baselinePath), recordedBaseline);
-
-  await writeFile(
-    project.targetPath,
-    translatedTarget.replace(
-      'greet: "<red>人工翻译</red>"',
-      "greet: 人工二次校订",
-    ),
-  );
-  const editedTarget = await readFile(project.targetPath, "utf8");
-  const edited = await runLandsUpdateStage(project.configPath);
-  assert.equal(edited.status, "completed");
-  assert.equal(await readFile(project.targetPath, "utf8"), editedTarget);
 });
 
 void test("同步阶段的部分写入保留实际修改且不推进比较基线", async (t) => {

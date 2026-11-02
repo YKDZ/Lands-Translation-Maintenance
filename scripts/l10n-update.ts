@@ -55,6 +55,28 @@ async function runTurboBuilds(): Promise<void> {
   });
 }
 
+async function formatComparisonBaseline(configPath: string): Promise<void> {
+  const baselinePath = resolve(dirname(configPath), "lioni.baseline.json");
+  await new Promise<void>((resolveFormat, rejectFormat) => {
+    const child = spawn("pnpm", ["exec", "oxfmt", "--write", baselinePath], {
+      cwd: workspaceDirectory,
+      stdio: "inherit",
+    });
+    child.once("error", (error) => rejectFormat(error));
+    child.once("exit", (status, signal) => {
+      if (status === 0) {
+        resolveFormat();
+      } else {
+        rejectFormat(
+          new Error(
+            `Lioni 比较基线格式化失败（${signal === null ? `退出码 ${String(status)}` : `信号 ${signal}`}）。`,
+          ),
+        );
+      }
+    });
+  });
+}
+
 /** 首次建立版本分支，后续切回同版本分支；不暂存或清理工作区。 */
 function switchToVersionBranch(
   gitDirectory: string,
@@ -163,6 +185,9 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
+
+    // 比较基线由 Lioni 写回；交给现有根格式器完成正式资料的格式化。
+    await formatComparisonBaseline(configPath);
 
     process.stdout.write(`${stage.qualityReport}\n`);
     if (stage.status === "quality-incomplete") {
