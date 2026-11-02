@@ -216,6 +216,49 @@ function landsJarWithDialog(
   });
 }
 
+function landsJarWithLevels(levels: string): Uint8Array {
+  return zipSync({
+    "plugin.yml": strToU8("name: Lands\nversion: 8.9.2\n"),
+    "levels.yml": strToU8(levels),
+  });
+}
+
+async function createLevelsProject(directory: string): Promise<void> {
+  await createProject(directory);
+  await writeFile(
+    join(directory, ".lioni/project.yml"),
+    [
+      "format: lands-l10n-project/v1",
+      "resources:",
+      "  - path: plugin.yml",
+      "    purpose: metadata",
+      "  - path: levels.yml",
+      "    purpose: configuration",
+      "translationScope:",
+      '  sourceLanguage: "en-US"',
+      '  targetLanguage: "zh-CN"',
+      "  mappings:",
+      "    - source: levels.yml",
+      "      target: levels.yml",
+      "      definitionsSource: levels.yml",
+      "      fields:",
+      '        - path: [land, levels, "*", name]',
+      "          category: configuration-string",
+      "          scene: level-title",
+      '        - path: [land, levels, "*", attributes, "*", description]',
+      "          category: configuration-string",
+      "          scene: level-attribute-description",
+      '        - path: [land, levels, "*", requirements, "*", title]',
+      "          category: configuration-string",
+      "          scene: level-requirement-title",
+      '        - path: [land, levels, "*", requirements, "*", description]',
+      "          category: configuration-string-list",
+      "          scene: level-requirement-description",
+      "",
+    ].join("\n"),
+  );
+}
+
 async function createMixedConfigurationProject(
   directory: string,
 ): Promise<void> {
@@ -1165,6 +1208,145 @@ void test("移除结构字段时只删受管键并保留结构对象中的自定
   assert.deepEqual(target.gui.main.items.confirm.flags, {
     customSetting: true,
   });
+});
+
+void test("旧等级结构删除后清理来源已无的空映射并保留自定义键和当前空结构", async (t) => {
+  const project = await mkdtemp(
+    join(tmpdir(), "lioni-update-empty-level-shells-"),
+  );
+  t.after(async () => rm(project, { force: true, recursive: true }));
+  await createLevelsProject(project);
+
+  const initialSource = [
+    "land:",
+    "  levels:",
+    '    "1":',
+    "      name: First",
+    "      attributes:",
+    "        chunks:",
+    "          value: 1",
+    "        members:",
+    "          value: 2",
+    "      requirements:",
+    "        members:",
+    "          required: 2",
+    '    "2":',
+    "      name: Second",
+    "      attributes:",
+    "        chunks:",
+    "          value: 3",
+    "        members:",
+    "          value: 5",
+    "      requirements:",
+    "        members:",
+    "          required: 3",
+    '    "3":',
+    "      name: Third",
+    "      attributes:",
+    "        chunks:",
+    "          value: 4",
+    "      requirements:",
+    "        members:",
+    "          required: 4",
+    "",
+  ].join("\n");
+  const currentSource = [
+    "land:",
+    "  levels:",
+    '    "1":',
+    "      name: First",
+    "      attributes:",
+    "        chunks: {}",
+    "        members: {}",
+    "      requirements:",
+    "        members: {}",
+    "    borough:",
+    "      name: Borough",
+    "",
+  ].join("\n");
+  const target = [
+    "land:",
+    "  levels:",
+    '    "1":',
+    "      name: 一级",
+    "      attributes:",
+    "        chunks:",
+    "          value: 1",
+    "        members:",
+    "          value: 2",
+    "      requirements:",
+    "        members:",
+    "          required: 2",
+    '    "2":',
+    "      name: 二级",
+    "      attributes:",
+    "        chunks:",
+    "          value: 3",
+    "          customSetting: true",
+    "          customEmpty: {}",
+    "        members:",
+    "          value: 5",
+    "      requirements:",
+    "        members:",
+    "          required: 3",
+    '    "3":',
+    "      name: 三级",
+    "      attributes:",
+    "        chunks:",
+    "          value: 4",
+    "      requirements:",
+    "        members:",
+    "          required: 4",
+    "",
+  ].join("\n");
+  await writeFile(join(project, "levels.yml"), target);
+
+  const configPath = join(project, ".lioni/lioni.config.ts");
+  const initialJar = join(project, "Lands-initial-levels.jar");
+  await writeFile(initialJar, landsJarWithLevels(initialSource));
+  await prepareSource(configPath, initialJar);
+  await rm(initialJar);
+  runLioni(["baseline", configPath, "--output-format", "structured"]);
+
+  const changedJar = join(project, "Lands-current-levels.jar");
+  await writeFile(changedJar, landsJarWithLevels(currentSource));
+  await prepareSource(configPath, changedJar);
+  await rm(changedJar);
+  runLioni([
+    "update",
+    configPath,
+    "--record-baseline",
+    "--output-format",
+    "structured",
+  ]);
+
+  const updated = parseDocument(
+    await readFile(join(project, "levels.yml"), "utf8"),
+  ).toJS() as {
+    readonly land: {
+      readonly levels: Record<
+        string,
+        {
+          readonly name?: string;
+          readonly attributes?: Record<string, unknown>;
+          readonly requirements?: Record<string, unknown>;
+          readonly customSetting?: boolean;
+          readonly customEmpty?: Record<string, unknown>;
+        }
+      >;
+    };
+  };
+  const { levels } = updated.land;
+  assert.equal(levels["1"]?.name, "一级");
+  assert.deepEqual(levels["1"]?.attributes, { chunks: {}, members: {} });
+  assert.deepEqual(levels["1"]?.requirements, { members: {} });
+  assert.equal(levels["2"]?.name, undefined);
+  assert.deepEqual(levels["2"]?.attributes, {
+    chunks: { customSetting: true, customEmpty: {} },
+  });
+  assert.equal(levels["2"]?.requirements, undefined);
+  assert.equal(Object.hasOwn(levels, "3"), false);
+  assert.equal(levels.borough?.name, "Borough");
 });
 
 void test("混合配置按声明路径保留译文并更新结构字段与用户自定义键", async (t) => {
