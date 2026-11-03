@@ -324,4 +324,34 @@ exceptions:
           inputFingerprint: sha256:676253beb3db2d6205e67c2b0f2ec7365091a7048129fcbc238b8128ff19d13e,
         },
     },
+    {
+      id: upstream-limits-migrate-nesting,
+      reason:
+        上游原文存在不匹配的 </t> 结束标签；译文保留同一上游内容，不主动修复上游
+        bug。接受当前消息原文及译文的该项嵌套诊断，依据变化后重新复核。,
+      checkId: minimessage-nesting,
+      sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
+      language: zh-CN,
+      inputFingerprint: sha256:90f838c3feef34ec38e495ce9d82e26c88947a38ceb125c23203174460d9945d,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:1,
+          configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
+          inputFingerprint: sha256:de07c92d695163ef3536bd389e5f567462fff0290474be6797839759c9644ede,
+        },
+    },
+    {
+      id: nation-level-name-context,
+      reason: 此处是 nation 等级对应的称呼“国家”，用于不同等级的国家实体命名，不是通用 nation 对象名称，因此不要求使用通用译名“联邦”。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US.yml:["general","level","name","nation","nation"]',
+      language: zh-CN,
+      inputFingerprint: sha256:ea825e552e093c487ed3f0f3e0e61a9e04de23c88096d20118497210b1a54e9d,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:92fef025e5b9535b6029d29a54ba0e41f9b266571f5fe713ce0b7fb77424f63b,
+        },
+    },
   ]

@@ -232,21 +232,21 @@ general:
       wither: 凋零
     name:
       land:
-        borough: <aqua>自治市镇
+        borough: <aqua>城镇
         city: <dark_aqua>城市
         duchy: <gold>公国
         hamlet: <white>小村
         kingdom: <red>王国
-        metropolis: <blue>大都市
-        province: <light_purple>省
+        metropolis: <blue>都市
+        province: <light_purple>行省
         settlement: 聚落
-        town: <dark_green>镇
+        town: <dark_green>小镇
         village: <green>村庄
       nation:
         alliance: <green>联盟
-        dominion: <red>自治领
+        dominion: <red>霸权
         empire: <gold>帝国
-        federation: 联邦
+        federation: 初创邦联
         nation: <aqua>国家
     requirement:
       land:
