@@ -22,8 +22,44 @@ export interface MiniMessageTextRun {
   readonly continuityIndex: number;
 }
 
+interface MiniMessageTextAnalysis {
+  readonly contextKey: (context: readonly MiniMessageContextFrame[]) => string;
+  runs?: readonly MiniMessageTextRun[];
+}
+
+// 正式解析投影不可变；按项目和文档对象共享分析，项目释放后缓存可一起回收。
+const textAnalyses = new WeakMap<
+  MiniMessageParseProject,
+  WeakMap<TranslatableTextDocument, MiniMessageTextAnalysis>
+>();
+const textSignatures = new WeakMap<TranslatableTextDocument, string>();
+
+function textAnalysisFor(
+  project: MiniMessageParseProject,
+  document: TranslatableTextDocument,
+): MiniMessageTextAnalysis {
+  let documents = textAnalyses.get(project);
+  if (documents === undefined) {
+    documents = new WeakMap();
+    textAnalyses.set(project, documents);
+  }
+  let analysis = documents.get(document);
+  if (analysis === undefined) {
+    analysis = { contextKey: createTextContextKeyResolver(project, document) };
+    documents.set(document, analysis);
+  }
+  return analysis;
+}
+
 /** 复用正文 runs 的稳定规则，为独立变量和正文片段提供所属上下文。 */
 export function miniMessageTextContextKeyResolver(
+  project: MiniMessageParseProject,
+  document: TranslatableTextDocument,
+): (context: readonly MiniMessageContextFrame[]) => string {
+  return textAnalysisFor(project, document).contextKey;
+}
+
+function createTextContextKeyResolver(
   project: MiniMessageParseProject,
   document: TranslatableTextDocument,
 ): (context: readonly MiniMessageContextFrame[]) => string {
@@ -124,7 +160,9 @@ export function miniMessageTextRuns(
   project: MiniMessageParseProject,
   document: TranslatableTextDocument,
 ): readonly MiniMessageTextRun[] {
-  const contextKey = miniMessageTextContextKeyResolver(project, document);
+  const analysis = textAnalysisFor(project, document);
+  if (analysis.runs !== undefined) return analysis.runs;
+  const contextKey = analysis.contextKey;
   const runs: MiniMessageTextRun[] = [];
   let text = "";
   let parts: MiniMessageTextPart[] = [];
@@ -180,6 +218,7 @@ export function miniMessageTextRuns(
     });
   }
   flush();
+  analysis.runs = runs;
   return runs;
 }
 
@@ -205,16 +244,22 @@ export function positionsForTextRun(
   });
 }
 
+function textSignature(document: TranslatableTextDocument): string {
+  let signature = textSignatures.get(document);
+  if (signature === undefined) {
+    signature = canonicalJson(
+      document.segments.map(({ kind, value }) => ({ kind, value })),
+    );
+    textSignatures.set(document, signature);
+  }
+  return signature;
+}
+
 export function sameTranslatableText(
   source: TranslatableTextDocument,
   target: TranslatableTextDocument,
 ): boolean {
-  return (
-    canonicalJson(
-      source.segments.map(({ kind, value }) => ({ kind, value })),
-    ) ===
-    canonicalJson(target.segments.map(({ kind, value }) => ({ kind, value })))
-  );
+  return textSignature(source) === textSignature(target);
 }
 
 export function textRunReference(

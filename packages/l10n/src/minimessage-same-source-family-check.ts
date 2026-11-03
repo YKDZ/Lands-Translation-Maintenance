@@ -14,7 +14,7 @@ export const miniMessageSameSourceFamilyCheck = createMessageFamilyChecker({
   hostVersion: "lands-same-source-family-v1",
   analysis: landsMessageFamilyAnalysis,
   select: selectLandsMessageFamilyCandidate,
-  projectCandidate: projectLandsMessageFamilyCandidate,
-  project: projectLandsMessageFamilyReference,
+  project: projectLandsMessageFamilyCandidate,
+  reference: projectLandsMessageFamilyReference,
   fingerprintInput: landsMessageFamilyFingerprint,
 });

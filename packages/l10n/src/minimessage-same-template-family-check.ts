@@ -17,7 +17,7 @@ export const miniMessageSameTemplateFamilyCheck = createMessageFamilyChecker({
   sourceTemplate: landsMessageTemplate,
   targetTemplate: landsMessageTemplate,
   select: selectLandsMessageFamilyCandidate,
-  projectCandidate: projectLandsMessageFamilyCandidate,
-  project: projectLandsMessageFamilyReference,
+  project: projectLandsMessageFamilyCandidate,
+  reference: projectLandsMessageFamilyReference,
   fingerprintInput: landsMessageFamilyFingerprint,
 });

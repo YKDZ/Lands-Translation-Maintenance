@@ -73,15 +73,15 @@ function styleFingerprint(
   const dependencies = dependenciesOf(input.dependencies);
   const sourceKey = input.candidate.sourceKey;
   const message = messageForCandidate(dependencies, sourceKey);
-  const pairs = dependencies.pairing.pairs
-    .filter(({ sourceDocument }) => sourceDocument.message.id === sourceKey)
-    .map(({ sourceDocument, targetDocument }) => ({
+  const pairs = (dependencies.miniMessageViews[sourceKey]?.pairs ?? []).map(
+    ({ sourceDocument, targetDocument }) => ({
       source: documentSignature(sourceDocument),
       target: documentSignature(targetDocument),
       sameText: sameTranslatableText(sourceDocument, targetDocument),
       sourceRuns: miniMessageTextRuns(dependencies.projection, sourceDocument),
       targetRuns: miniMessageTextRuns(dependencies.projection, targetDocument),
-    }));
+    }),
+  );
   const association = input.facts.associations.find(
     ({ sourceKey: key, language }) =>
       key === sourceKey && language === input.candidate.language,
@@ -130,13 +130,13 @@ function styleFingerprint(
             target: input.candidate.content,
           },
     pairs,
-    incomplete: dependencies.pairing.incomplete
-      .filter(({ message: issueMessage }) => issueMessage?.id === sourceKey)
-      .map(({ code, reason, location }) => ({
-        code,
-        reason,
-        location: location ?? null,
-      })),
+    incomplete: (
+      dependencies.miniMessageViews[sourceKey]?.pairingIssues ?? []
+    ).map(({ code, reason, location }) => ({
+      code,
+      reason,
+      location: location ?? null,
+    })),
   });
 }
 
@@ -292,9 +292,9 @@ function diagnosticsForPair(
 function relevantIssue(
   input: MiniMessageCheckInput,
 ): MiniMessageIncompleteFact | undefined {
-  return dependenciesOf(input.dependencies).pairing.incomplete.find(
-    ({ message }) => message?.id === input.candidate.sourceKey,
-  );
+  return dependenciesOf(input.dependencies).miniMessageViews[
+    input.candidate.sourceKey
+  ]?.pairingIssues[0];
 }
 
 export function createMiniMessageStyleCheck(check: StyleCheck) {
@@ -355,10 +355,8 @@ export function createMiniMessageStyleCheck(check: StyleCheck) {
           [issueForQuality(issue, input.candidate)],
         );
       }
-      const pairs = dependencies.pairing.pairs.filter(
-        ({ sourceDocument }) =>
-          sourceDocument.message.id === input.candidate.sourceKey,
-      );
+      const view = dependencies.miniMessageViews[input.candidate.sourceKey];
+      const pairs = view?.pairs ?? [];
       if (pairs.length === 0) {
         const missing: MiniMessageIncompleteFact = {
           code: "translation-style.text-pair-missing",
@@ -370,9 +368,7 @@ export function createMiniMessageStyleCheck(check: StyleCheck) {
           [issueForQuality(missing, input.candidate)],
         );
       }
-      const parsedDocuments = dependencies.projection.documents.filter(
-        ({ message }) => message.id === input.candidate.sourceKey,
-      );
+      const parsedDocuments = view?.documents ?? [];
       if (parsedDocuments.some(({ status }) => status !== "parsed")) {
         const incomplete: MiniMessageIncompleteFact = {
           code: "translation-style.text-projection-incomplete",

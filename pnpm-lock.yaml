@@ -165,8 +165,8 @@ settings:
 catalogs:
   default:
     '@lioni/lioni':
-      specifier: 0.2.0
-      version: 0.2.0
+      specifier: 0.2.3
+      version: 0.2.3
     '@types/node':
       specifier: ^24.13.3
       version: 24.19.2
@@ -210,7 +210,7 @@ importers:
         version: link:packages/tooling-config
       '@lioni/lioni':
         specifier: 'catalog:'
-        version: 0.2.0
+        version: 0.2.3
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -234,7 +234,7 @@ importers:
     dependencies:
       '@lioni/lioni':
         specifier: 'catalog:'
-        version: 0.2.0
+        version: 0.2.3
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
@@ -295,8 +295,8 @@ packages:
     resolution: {integrity: sha512-l6e4NZyUgv8VyXXH4DbuucFOBmxLF56C/mqh2tvApbzl2Hrhi1aTDcuv5TKdxzfHYmpO3UB0Cz04fgDT9vszfw==}
     engines: {node: '>= 16'}
 
-  '@lioni/lioni@0.2.0':
-    resolution: {integrity: sha512-s3E8fyy6gIwSVnbV44llLp4VfqsbitvObDg5utJwWG/H5D6y+u4ynF4DJjerDtp0T+SDDnmgUsy1lNBAAhrgZg==}
+  '@lioni/lioni@0.2.3':
+    resolution: {integrity: sha512-zssUcBT13zeA0pAh/A64LYoq2KY+A687nEVwXQqyyW8m5mum4cS8VEMpbmY1Yw1YEtDdqgijzw/JbWDSMyVXYg==}
     engines: {node: ^24.21.0}
     hasBin: true
 
@@ -814,7 +814,7 @@ snapshots:
 
   '@intlify/shared@11.2.8': {}
 
-  '@lioni/lioni@0.2.0':
+  '@lioni/lioni@0.2.3':
     dependencies:
       '@intlify/message-compiler': 11.2.8
       '@standard-schema/spec': 1.1.0

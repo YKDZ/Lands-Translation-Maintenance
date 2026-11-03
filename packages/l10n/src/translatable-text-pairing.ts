@@ -23,6 +23,33 @@ function samePosition(
   return left.start === right.start && left.end === right.end;
 }
 
+// 索引只属于当前不可变的解析项目，候选重解析产生的新项目不会复用旧文档。
+const documentsByProject = new WeakMap<
+  MiniMessageParseProject,
+  ReadonlyMap<string, readonly ParsedMiniMessageDocument[]>
+>();
+
+function messageDocuments(
+  project: MiniMessageParseProject,
+  messageId: string,
+): readonly ParsedMiniMessageDocument[] {
+  let index = documentsByProject.get(project);
+  if (index === undefined) {
+    const documents = new Map<string, ParsedMiniMessageDocument[]>();
+    for (const document of project.documents) {
+      let entries = documents.get(document.message.id);
+      if (entries === undefined) {
+        entries = [];
+        documents.set(document.message.id, entries);
+      }
+      entries.push(document);
+    }
+    index = documents;
+    documentsByProject.set(project, index);
+  }
+  return index.get(messageId) ?? [];
+}
+
 function documentsFor(
   project: MiniMessageParseProject,
   document: Pick<
@@ -30,9 +57,8 @@ function documentsFor(
     "message" | "origin" | "path" | "file"
   >,
 ): readonly ParsedMiniMessageDocument[] {
-  return project.documents.filter(
+  return messageDocuments(project, document.message.id).filter(
     (candidate) =>
-      candidate.message.id === document.message.id &&
       candidate.origin === document.origin &&
       candidate.file === document.file &&
       candidate.path.length <= document.path.length &&
@@ -61,9 +87,8 @@ function identicalFieldHoverOwner(
   }
 
   const rootsFor = (origin: "source" | "target") =>
-    project.documents.filter(
+    messageDocuments(project, message.id).filter(
       (candidate) =>
-        candidate.message.id === message.id &&
         candidate.origin === origin &&
         candidate.documentIndex === 0 &&
         candidate.path.length <= document.path.length &&

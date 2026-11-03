@@ -8,6 +8,7 @@ import { readFacts } from "@lioni/lioni";
 
 import { createLandsConfig } from "../../lioni.config.ts";
 import { loadMiniMessageQualityDependencies } from "../../src/minimessage-quality.ts";
+import { miniMessageTextRuns } from "../../src/minimessage-text-runs.ts";
 import {
   createProject,
   createFormatProject,
@@ -26,6 +27,55 @@ async function inspectFormatProjection(project: {
 }
 
 void describe("地图与旧格式官方 MiniMessage 投影", () => {
+  void it("正文分析区分文档内容与所属项目中的交互命令", async (t) => {
+    const input = "<click:run_command:/lands claim>认领</click>";
+    const project = await createFormatProject(t, {
+      mapDescription: input,
+      targetMapDescription: input,
+      sourceVersion: "8.9.2",
+    });
+    const view = await inspectFormatProjection(project);
+    const document = view.projection.translatableText.find(
+      (entry) =>
+        entry.origin === "source" &&
+        entry.segments.some(
+          (segment) => segment.kind === "text" && segment.value === "认领",
+        ),
+    );
+    assert.ok(document);
+    const original = miniMessageTextRuns(view.projection, document);
+    assert.equal(original.map(({ text }) => text).join(""), "认领");
+    const changedProject = {
+      ...view.projection,
+      documents: view.projection.documents.map((parsed) => ({
+        ...parsed,
+        nodes: parsed.nodes.map((node) =>
+          node.kind === "tag" && node.name === "click"
+            ? { ...node, parameters: ["run_command", "/lands unclaim"] }
+            : node,
+        ),
+      })),
+    };
+    const changedOwner = miniMessageTextRuns(changedProject, document);
+    assert.notDeepEqual(
+      changedOwner.map(({ contextKey }) => contextKey),
+      original.map(({ contextKey }) => contextKey),
+    );
+    const changedDocument = {
+      ...document,
+      segments: document.segments.map((segment) =>
+        segment.kind === "text" ? { ...segment, value: "放弃" } : segment,
+      ),
+    };
+    assert.equal(
+      miniMessageTextRuns(view.projection, changedDocument)
+        .map(({ text }) => text)
+        .join(""),
+      "放弃",
+    );
+    assert.deepEqual(miniMessageTextRuns(view.projection, document), original);
+  });
+
   void it("正式检查向只读规则提供分开的正文、变量、命令、结构与换行片段", async (t) => {
     const input =
       "<div>前 <click:run_command:/lands claim>认领<v:land></click> 后<br/>完成</div>";

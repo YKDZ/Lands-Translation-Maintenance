@@ -59,11 +59,10 @@ export type LandsMessageFamilyOptions = MessageFamilyCheckerOptions<
 >;
 
 type SelectionInput = Parameters<LandsMessageFamilyOptions["select"]>[0];
-type ProjectionInput = Parameters<LandsMessageFamilyOptions["project"]>[0];
-type ReferenceProjectionInput = Extract<ProjectionInput, { kind: "reference" }>;
-type CandidateInput = Parameters<
-  NonNullable<LandsMessageFamilyOptions["projectCandidate"]>
+type ReferenceProjectionInput = Parameters<
+  LandsMessageFamilyOptions["reference"]
 >[0];
+type CandidateInput = Parameters<LandsMessageFamilyOptions["project"]>[0];
 type FingerprintInput = Parameters<
   NonNullable<LandsMessageFamilyOptions["fingerprintInput"]>
 >[0];
@@ -439,9 +438,10 @@ async function projectMessage(
       })),
     );
   }
-  for (const document of parsed.documents.filter(
-    ({ message }) => message.id === sourceKey,
-  )) {
+  const parsedDocuments = useSharedProjection
+    ? sharedView.documents
+    : parsed.documents.filter(({ message }) => message.id === sourceKey);
+  for (const document of parsedDocuments) {
     if (document.status === "parsed") continue;
     const issue = {
       code: `message-family-${document.status}`,
@@ -620,6 +620,19 @@ async function projectSavedMessageFamilyReference(
   );
 }
 
+function projectCandidateMessageFamily(
+  dependencies: MiniMessageQualityDependencies,
+  message: MiniMessageInputMessage,
+  content: LandsJson,
+  language: string,
+): Promise<MessageFamilyInput> {
+  return projectMessage(
+    dependencies,
+    messageWithCandidate(message, content),
+    language,
+  );
+}
+
 export async function selectLandsMessageFamilyCandidate(
   input: SelectionInput,
 ): Promise<SelectionResult> {
@@ -632,9 +645,11 @@ export async function selectLandsMessageFamilyCandidate(
   if (message === undefined) {
     return { status: "not-applicable" };
   }
-  const projected = await projectMessage(
+  // 两个消息族检查共享同一候选投影；正文身份参与键，草稿不会复用保存译文。
+  const projected = await input.memo.memo(projectCandidateMessageFamily)(
     dependencies,
-    messageWithCandidate(message, input.candidate.content),
+    message,
+    input.candidate.content,
     input.candidate.language,
   );
   if (projected.groups.length === 0 && projected.complete !== false) {
@@ -659,12 +674,9 @@ export function projectLandsMessageFamilyCandidate(
 }
 
 export async function projectLandsMessageFamilyReference(
-  input: ProjectionInput,
-  context: Parameters<LandsMessageFamilyOptions["project"]>[1],
+  input: ReferenceProjectionInput,
+  context: Parameters<LandsMessageFamilyOptions["reference"]>[1],
 ): Promise<MessageFamilyInput> {
-  if (input.kind !== "reference") {
-    return input.subject.projected;
-  }
   if (input.sourceUnit.unit.context.role !== "message") {
     return { groups: [] };
   }

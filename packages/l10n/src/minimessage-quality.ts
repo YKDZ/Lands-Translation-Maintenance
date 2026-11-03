@@ -282,7 +282,7 @@ export function messageForCandidate(
   dependencies: MiniMessageQualityDependencies,
   sourceKey: string,
 ): MiniMessageInputMessage | undefined {
-  return dependencies.messages.find((message) => message.id === sourceKey);
+  return dependencies.miniMessageViews[sourceKey]?.message;
 }
 
 export function hasMiniMessageDocuments(

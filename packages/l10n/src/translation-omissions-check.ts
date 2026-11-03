@@ -253,25 +253,22 @@ function relatedPairingIssues(
   dependencies: MiniMessageQualityDependencies,
   sourceKey: string,
 ): readonly MiniMessageIncompleteFact[] {
-  return dependencies.pairing.incomplete.filter(
-    ({ message }) => message?.id === sourceKey,
-  );
+  return dependencies.miniMessageViews[sourceKey]?.pairingIssues ?? [];
 }
 
 function omissionsBasis(input: MiniMessageCheckInput): JsonValue {
   const dependencies = dependenciesOf(input.dependencies);
   const sourceKey = input.candidate.sourceKey;
-  const pairs = dependencies.pairing.pairs
-    .filter(({ sourceDocument }) => sourceDocument.message.id === sourceKey)
-    .map(({ sourceDocument, targetDocument }) => ({
+  const view = dependencies.miniMessageViews[sourceKey];
+  const pairs = (view?.pairs ?? []).map(
+    ({ sourceDocument, targetDocument }) => ({
       source: sourceDocument,
       target: targetDocument,
-    }));
+    }),
+  );
   const issues = [
     ...relatedPairingIssues(dependencies, sourceKey),
-    ...dependencies.projection.incompleteFacts.filter(
-      ({ message }) => message?.id === sourceKey,
-    ),
+    ...(view?.incompleteFacts ?? []),
   ];
   return qualityBasis({
     candidate: input.candidate,
@@ -471,22 +468,17 @@ export const translationOmissionsCheck = defineQualityCheck<
 
     const pairingIssues = relatedPairingIssues(dependencies, message.id);
     const diagnostics: QualityFinding<MiniMessageQualityObject>[] = [];
+    const view = dependencies.miniMessageViews[message.id];
     const pairedSources = new Set(
-      dependencies.pairing.pairs
-        .filter(
-          ({ sourceDocument }) => sourceDocument.message.id === message.id,
-        )
-        .map(({ sourceDocument }) => sourceDocument),
+      (view?.pairs ?? []).map(({ sourceDocument }) => sourceDocument),
     );
-    for (const sourceDocument of dependencies.projection.translatableText) {
+    for (const sourceDocument of view?.translatableText ?? []) {
       if (
-        sourceDocument.message.id !== message.id ||
         sourceDocument.origin !== "source" ||
         pairedSources.has(sourceDocument) ||
         !hasExplicitEmptyTranslation(sourceDocument) ||
-        dependencies.pairing.incomplete.some(
+        pairingIssues.some(
           (issue) =>
-            issue.message?.id === message.id &&
             issue.origin === "source" &&
             issue.location?.file === sourceDocument.file &&
             canonicalJson(issue.location.path) ===

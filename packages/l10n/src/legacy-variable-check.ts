@@ -52,10 +52,10 @@ function legacyVariableIssues(
 ): readonly MiniMessageIncompleteFact[] {
   const dependencies = dependenciesOf(input.dependencies);
   const message = messageForCandidate(dependencies, sourceKey);
+  const view = dependencies.miniMessageViews[sourceKey];
   const documentIssues = (["source", "target"] as const).flatMap((origin) => {
-    const document = dependencies.projection.documents.find(
+    const document = view?.documents.find(
       (candidate) =>
-        candidate.message.id === sourceKey &&
         candidate.origin === origin &&
         candidate.parent === undefined &&
         candidate.documentIndex === 0,
@@ -129,9 +129,10 @@ function textDocumentsForSide(
   origin: "source" | "target",
 ): readonly TranslatableTextDocument[] {
   const dependencies = dependenciesOf(input.dependencies);
-  return dependencies.projection.translatableText.filter(
+  return (
+    dependencies.miniMessageViews[message.id]?.translatableText ?? []
+  ).filter(
     (document) =>
-      document.message.id === message.id &&
       document.origin === origin &&
       document.documentIndex === 0 &&
       document.context.length === 0,

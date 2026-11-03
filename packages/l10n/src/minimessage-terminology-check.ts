@@ -786,9 +786,8 @@ async function termProjection(input: TermProjectInput): Promise<
   const miniInput = input as unknown as MiniMessageCheckInput;
   const dependencies = dependenciesOf(miniInput.dependencies);
   const sourceKey = input.candidate.sourceKey;
-  const relevantIssue = dependencies.pairing.incomplete.find(
-    ({ message }) => message?.id === sourceKey,
-  );
+  const view = dependencies.miniMessageViews[sourceKey];
+  const relevantIssue = view?.pairingIssues[0];
   if (relevantIssue !== undefined) {
     return {
       status: "incomplete",
@@ -808,9 +807,7 @@ async function termProjection(input: TermProjectInput): Promise<
       ),
     };
   }
-  const documents = dependencies.projection.documents.filter(
-    ({ message: documentMessage }) => documentMessage.id === sourceKey,
-  );
+  const documents = view?.documents ?? [];
   if (documents.some(({ status }) => status !== "parsed")) {
     const issue: MiniMessageIncompleteFact = {
       code: "terminology.text-projection-incomplete",
@@ -822,9 +819,7 @@ async function termProjection(input: TermProjectInput): Promise<
       issue: issueForQuality(issue, miniInput.candidate),
     };
   }
-  const pairs = dependencies.pairing.pairs.filter(
-    ({ sourceDocument }) => sourceDocument.message.id === sourceKey,
-  );
+  const pairs = view?.pairs ?? [];
   if (pairs.length === 0) {
     return {
       status: "incomplete",
