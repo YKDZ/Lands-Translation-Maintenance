@@ -1,0 +1,56 @@
+name: 发布翻译
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lands-translation-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 验收并发布翻译
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: publication
+    timeout-minutes: 45
+    steps:
+      - name: 检出本次维护提交
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 设置 Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: package.json
+      - name: 设置 pnpm
+        uses: pnpm/action-setup@d9184bf108216479bc5a137cc391f4d7b14c870b # v6.1.0
+        with:
+          cache: true
+      - name: 设置 Java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: 正式完整验收
+        run: pnpm check:full
+      - name: 获取发布身份
+        id: publication-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.PUBLICATION_APP_ID }}
+          private-key: ${{ secrets.PUBLICATION_APP_PRIVATE_KEY }}
+          owner: YKDZ
+          repositories: Lands-Simplified-Chinese-Translation
+          permission-contents: write
+      - name: 发布译文与版本归档
+        run: pnpm l10n:publish
+        env:
+          GH_TOKEN: ${{ steps.publication-token.outputs.token }}

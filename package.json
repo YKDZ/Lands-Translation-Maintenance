@@ -1,5 +1,5 @@
 {
-  "name": "Lands-Simplified-Chinese-Translation",
+  "name": "Lands-Translation-Maintenance",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,14 +11,17 @@
     "fix": "node --conditions=source scripts/task-gates.ts fix",
     "l10n:update": "node --conditions=source scripts/l10n-update.ts",
     "l10n:review": "node --conditions=source scripts/l10n-review.ts",
-    "format:check": "oxfmt --list-different --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json tsconfig.scripts.json *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/project.yml translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/lioni.baseline.json translations/zhcn/.lioni/lioni.exceptions.yaml translations/zhcn/.lioni/terms",
-    "format:write": "oxfmt --write --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json tsconfig.scripts.json *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/project.yml translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/lioni.baseline.json translations/zhcn/.lioni/lioni.exceptions.yaml translations/zhcn/.lioni/terms",
+    "l10n:preview": "node --conditions=source scripts/l10n-publication-preview.ts",
+    "l10n:publish": "node --conditions=source scripts/l10n-publish.ts",
+    "format:check": "oxfmt --list-different --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json tsconfig.scripts.json README.md publication *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/project.yml translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/lioni.baseline.json translations/zhcn/.lioni/lioni.exceptions.yaml translations/zhcn/.lioni/terms",
+    "format:write": "oxfmt --write --no-error-on-unmatched-pattern package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.json tsconfig.config.json tsconfig.scripts.json README.md publication *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .devcontainer scripts translations/zhcn/.lioni/project.yml translations/zhcn/.lioni/lioni.config.ts translations/zhcn/.lioni/lioni.baseline.json translations/zhcn/.lioni/lioni.exceptions.yaml translations/zhcn/.lioni/terms",
     "lint": "oxlint --quiet --format=unix --no-error-on-unmatched-pattern *.config.ts scripts translations/zhcn/.lioni/lioni.config.ts",
     "lint:fix": "oxlint --format=unix --no-error-on-unmatched-pattern *.config.ts scripts translations/zhcn/.lioni/lioni.config.ts --fix",
     "l10n:submit": "node --conditions=source scripts/l10n-submit.ts",
     "test:l10n-review": "node --conditions=source --test scripts/l10n-review.test.ts",
     "test:task-gates": "node --conditions=source --test scripts/task-gates.test.ts",
     "test:l10n-submit": "node --conditions=source --test scripts/l10n-submit.test.ts",
+    "test:l10n-publication": "node --conditions=source --test scripts/l10n-prepare-publication.test.ts scripts/l10n-publication.test.ts",
     "typecheck": "tsc --build --noEmit --pretty false"
   },
   "devDependencies": {

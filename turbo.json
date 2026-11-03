@@ -82,6 +82,29 @@
       "outputs": [],
       "tags": ["work:on-demand"]
     },
+    "//#l10n:preview": {
+      "cache": false,
+      "outputs": [],
+      "tags": ["work:preparation"]
+    },
+    "//#l10n:publish": {
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": [
+        "GITHUB_ACTIONS",
+        "GITHUB_EVENT_NAME",
+        "GITHUB_REF",
+        "GITHUB_SHA",
+        "GITHUB_WORKFLOW_REF",
+        "GH_TOKEN"
+      ],
+      "tags": ["work:release"]
+    },
+    "//#test:l10n-publication": {
+      "dependsOn": ["@lands-l10n/l10n#build"],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
     "//#typecheck": {
       "inputs": [
         "$TURBO_DEFAULT$",
