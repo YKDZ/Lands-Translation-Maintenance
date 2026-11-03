@@ -38,7 +38,6 @@
         "translations/zhcn/Locale/**",
         "translations/zhcn/Modules/**",
         "translations/zhcn/categories.yml",
-        "translations/zhcn/levels.yml",
         "translations/zhcn/roles.yml"
       ],
       "outputs": [],

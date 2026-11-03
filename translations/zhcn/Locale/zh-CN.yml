@@ -40,7 +40,7 @@ general:
       camp: <t:regular><t:regular_value>%owner%</t> 的露营地.
       admin: <t:regular>这个城镇属于服务器.
     default-area: 默认总区域
-    all-areas: All areas
+    all-areas: 所有子区域
   area:
     description:
       default: <t:regular>新占领的领土将属于这个子区域.
@@ -62,9 +62,9 @@ general:
   top:
     hologram:
       land:
-        title: '<t:decoration>━━━━━━━━━━━━━━‹━ <t:prefix>Top 10 Lands </t><t:decoration>(</t><t:regular>Total: <t:regular_value><v:total></t><t:decoration>) </t><t:decoration>━›━━━━━━━━━━━━━━'
+        title: '<t:decoration>━━━━━━━━━━━━━━‹━ <t:prefix>前 10 城镇 </t><t:decoration>(</t><t:regular>总数: <t:regular_value><v:total></t><t:decoration>) </t><t:decoration>━›━━━━━━━━━━━━━━'
         entry: <t:regular_heading>#<v:pos> <t:entity_land><v:object></t> <t:regular_value><v:sorting></t>:<t:regular_value> <v:value></t>
-        footer: '<t:decoration>━━━━━━━━━━━━━━‹━ <t:prefix>Top 10 Lands </t><t:decoration>(</t><t:regular>Total: <t:regular_value><v:total></t><t:decoration>) </t><t:decoration>━›━━━━━━━━━━━━━━'
+        footer: '<t:decoration>━━━━━━━━━━━━━━‹━ <t:prefix>前 10 城镇 </t><t:decoration>(</t><t:regular>总数: <t:regular_value><v:total></t><t:decoration>) </t><t:decoration>━›━━━━━━━━━━━━━━'
   integration:
     dynmap:
       land:
@@ -106,13 +106,13 @@ general:
       message: '<t:regular>玩家<t:regular_value> <v:0> </t>修改了仓库. 取出物品: <v:1><t:regular> - 放入物品: <v:2>'
     economy:
       land:
-        sold: <t:regular>城镇已售予<t:regular_value> <v:0></t>, 价格为<t:cost> <v:1></t>.
+        sold: <t:regular>城镇已被卖给<t:regular_value> <v:0></t>, 价格为<t:cost> <v:1></t>.
       area:
-        sold: <t:regular>子区域<t:regular_value> <v:0> </t>已售予<t:regular_value> <v:1></t>, 价格为<t:cost> <v:2></t>.
+        sold: <t:regular>子区域<t:regular_value> <v:0> </t>已被卖给<t:regular_value> <v:1></t>, 价格为<t:cost> <v:2></t>.
         rented: <t:regular>子区域<t:regular_value> <v:0> </t>已由<t:regular_value> <v:1> </t>租用. 租金为<t:cost> <v:2></t>, 周期为<t:time> <v:3></t>.
-        rental-ended: <t:regular>The rental of the area<t:regular_value> <v:0></t> by<t:regular_value> <v:1></t> ended.
-        restored: <t:regular>The area<t:regular_value> <v:0></t> was restored to its state before the rental or purchase.
-        restore-resized: <t:negative>The area<t:error_value> <v:0></t> wasn't restored after its rental or purchase, because its size changed since the snapshot was taken.
+        rental-ended: <t:regular>子区域<t:regular_value> <v:0></t> 的<t:regular_value> <v:1></t> 的出租已结束.
+        restored: <t:regular>子区域<t:regular_value> <v:0></t> 已恢复到出租或被购买前的状态.
+        restore-resized: <t:negative>子区域<t:error_value> <v:0></t> 没有恢复到出租或被购买前的状态, 因为从快照以来其大小发生了变化.
       upkeep:
         alert:
           land:
@@ -191,68 +191,68 @@ general:
   player-load-failed: <t:error>你的 Lands 数据无法被加载.</t> <t:regular>请重新登入. 如果这持续发生, 联系管理员.
   level:
     effect:
-      absorption: Absorption
-      bad_omen: Bad Omen
-      blindness: Blindness
-      conduit_power: Conduit Power
-      darkness: Darkness
-      dolphins_grace: Dolphin's Grace
-      fire_resistance: Fire Resistance
-      glowing: Glowing
-      haste: Haste
-      health_boost: Health Boost
-      hero_of_the_village: Hero of the Village
-      hunger: Hunger
-      infested: Infested
-      instant_damage: Instant Damage
-      instant_health: Instant Health
-      invisibility: Invisibility
-      jump_boost: Jump Boost
-      levitation: Levitation
-      luck: Luck
-      mining_fatigue: Mining Fatigue
-      nausea: Nausea
-      night_vision: Night Vision
-      oozing: Oozing
-      poison: Poison
-      raid_omen: Raid Omen
-      regeneration: Regeneration
-      resistance: Resistance
-      saturation: Saturation
-      slow_falling: Slow Falling
-      slowness: Slowness
-      speed: Speed
-      strength: Strength
-      trial_omen: Trial Omen
-      unluck: Bad Luck
-      water_breathing: Water Breathing
-      weakness: Weakness
-      weaving: Weaving
-      wind_charged: Wind Charged
-      wither: Wither
+      absorption: 伤害吸收
+      bad_omen: 不祥之兆
+      blindness: 失明
+      conduit_power: 潮涌能量
+      darkness: 黑暗
+      dolphins_grace: 海豚的恩惠
+      fire_resistance: 抗火
+      glowing: 发光
+      haste: 急迫
+      health_boost: 生命提升
+      hero_of_the_village: 村庄英雄
+      hunger: 饥饿
+      infested: 寄生
+      instant_damage: 瞬间伤害
+      instant_health: 瞬间治疗
+      invisibility: 隐身
+      jump_boost: 跳跃提升
+      levitation: 飘浮
+      luck: 幸运
+      mining_fatigue: 挖掘疲劳
+      nausea: 反胃
+      night_vision: 夜视
+      oozing: 渗浆
+      poison: 中毒
+      raid_omen: 袭击之兆
+      regeneration: 生命恢复
+      resistance: 抗性提升
+      saturation: 饱和
+      slow_falling: 缓降
+      slowness: 缓慢
+      speed: 迅捷
+      strength: 力量
+      trial_omen: 试炼之兆
+      unluck: 霉运
+      water_breathing: 水下呼吸
+      weakness: 虚弱
+      weaving: 盘丝
+      wind_charged: 蓄风
+      wither: 凋零
     name:
       land:
-        borough: <aqua>Borough
-        city: <dark_aqua>City
-        duchy: <gold>Duchy
-        hamlet: <white>Hamlet
-        kingdom: <red>Kingdom
-        metropolis: <blue>Metropolis
-        province: <light_purple>Province
-        settlement: Settlement
-        town: <dark_green>Town
-        village: <green>Village
+        borough: <aqua>自治市镇
+        city: <dark_aqua>城市
+        duchy: <gold>公国
+        hamlet: <white>小村
+        kingdom: <red>王国
+        metropolis: <blue>大都市
+        province: <light_purple>省
+        settlement: 聚落
+        town: <dark_green>镇
+        village: <green>村庄
       nation:
-        alliance: <green>Alliance
-        dominion: <red>Dominion
-        empire: <gold>Empire
-        federation: Federation
-        nation: <aqua>Nation
+        alliance: <green>联盟
+        dominion: <red>自治领
+        empire: <gold>帝国
+        federation: 联邦
+        nation: <aqua>国家
     requirement:
       land:
         age:
-          description: <t:regular>The land exists for at least <t:regular_value><v:req></t>.
-          title: Exists for <v:req>
+          description: <t:regular>城镇必须至少存在了 <t:regular_value><v:req></t>.
+          title: 存在 <v:req>
         chunks:
           description: "<t:regular>Have <t:regular_value><v:req></t> claims. Command: <t:cmd>/claim</t>"
           title: Claim <v:req> Chunks
@@ -1255,8 +1255,8 @@ lands:
       limits:
         migrate:
           confirm: |
-            <t:negative>请确认你已在 <v:file> 中配置所有限制包. 将旧权限迁移到新限制时, 系统会计算编号权限与限制包之间的差异.<t:regular> 因此应提前配置所有限制包, 否则可能无法得到正确结果.<t:error_value> 另外建议在执行此操作前备份数据库, 以便需要时恢复.
-              </t><hover:show_text:"<t:regular>点击此处确认此操作."><click:run_command:"/<v:fullcmd>"><t:positive>✔ 确认: <t:cmd>/<v:fullcmd> </t><java><t:click>[点击]</t></java></click></hover>
+            <t:negative>Please confirm that you configured all your limit packs in <v:file>. Migrating the old permissions to the new limits will calculate the difference between the numbered permission and the limit pack.<t:regular> Therefore all limit packs should be configured beforehand. Otherwise, you might not get the correct results.<t:error_value> It's also recommended that you take a backup of your database in case you want to revert this action.
+              </t><hover:show_text:"</t><t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
       land:
         addrole:
           confirm: |

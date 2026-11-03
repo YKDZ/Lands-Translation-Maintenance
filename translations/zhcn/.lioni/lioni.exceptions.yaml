@@ -230,22 +230,6 @@ exceptions:
         },
     },
     {
-      id: ticket11-same-source-nation-level-2-title,
-      reason:
-        levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation
-        实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。,
-      checkId: message-family-same-source,
-      sourceKey: 'levels.yml:["nation","levels","2","title"]',
-      language: zh-CN,
-      inputFingerprint: sha256:c2bdf1126f2019f084b9ff4b70306ffb00103323fb091423c05984b94bbc8e91,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
-          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:ceef61b6ad978e61e607534e0a10d3e07f2a30752274e4bd506866dd38590b4f,
-        },
-    },
-    {
       id: ticket11-same-source-members-player-management,
       reason:
         排行榜 sorting.members 指按成员数量排序，显示“成员数”；player-management 的 Members
@@ -293,21 +277,6 @@ exceptions:
         },
     },
     {
-      id: ticket11-same-source-land-level-5-title,
-      reason: levels.land.levels.5.title
-        是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
-      checkId: message-family-same-source,
-      sourceKey: 'levels.yml:["land","levels","5","title"]',
-      language: zh-CN,
-      inputFingerprint: sha256:b6237f894041bc11ea45a4265c0219cd7eadfa5753137980de02ee0fb75568cb,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
-          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:ef171340704daedd0e4deaaaa894a173907bba06f7e17d69e5a4d20d327197f5,
-        },
-    },
-    {
       id: ticket11-same-source-land-nations-role,
       reason: levels.land.levels.5.title
         是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
@@ -320,37 +289,6 @@ exceptions:
           version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
           inputFingerprint: sha256:e8e0cccc077b25b97b8f258c9080bb14bc00efdb0e54852e06c9e6e71512b7a4,
-        },
-    },
-    {
-      id: ticket11-terminology-land-level-5-title,
-      reason: levels.land.levels.5.title
-        是独立等级名“市区”，另外两处“城镇”是实体名称。等级展示名按既定城镇玩法风格化；只接受这一标签和本同源组，不改变 Land 的全局规范。,
-      checkId: terminology,
-      sourceKey: 'levels.yml:["land","levels","5","title"]',
-      language: zh-CN,
-      inputFingerprint: sha256:b0ad125a4fd7a00adad1fe4104b65a69b8e1cc6b8d0ac765166d60afff4161da,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
-          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:85c35dda3b026c0e652db7e68df9f732c0d7c21708ed767789650682f3f0f2dd,
-        },
-    },
-    {
-      id: ticket11-terminology-nation-level-2-title,
-      reason:
-        levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation
-        实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。,
-      checkId: terminology,
-      sourceKey: 'levels.yml:["nation","levels","2","title"]',
-      language: zh-CN,
-      inputFingerprint: sha256:a27e78a5341e5f3a9ded50cc2dcbf8a64510b8d8fbbe89c20acd783b54ce5dd3,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
-          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:4d6b50472dcedb74c612d1fcec46a3ae40cc93ea95cc17b49097f11c7743cca0,
         },
     },
     {
