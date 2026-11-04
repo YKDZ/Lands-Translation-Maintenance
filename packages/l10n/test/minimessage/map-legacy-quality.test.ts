@@ -192,7 +192,7 @@ void describe("地图与旧格式原生 QA", () => {
       mapDescription: sourceMapDescription,
       targetMapDescription,
       legacyTitle: sourceTitle,
-      targetLegacyTitle: "属于%own<green>er% 等级%level% %person%",
+      targetLegacyTitle: "属于 %own<green>er% 等级 %level% %person%",
     });
     const nativeProject = await prepareNativeProject(t, project);
     const valid = runQa(nativeProject.configPath);
@@ -241,8 +241,8 @@ void describe("地图与旧格式原生 QA", () => {
       targetText
         .replace('href=\\"/lands\\"', 'href=\\"/changed\\"')
         .replace(
-          "属于%own<green>er% 等级%level% %person%",
-          "属于<green> 等级%level% %person% %player%",
+          "属于 %own<green>er% 等级 %level% %person%",
+          "属于 <green> 等级 %level% %person% %player%",
         ),
     );
     const invalid = runQa(nativeProject.configPath);

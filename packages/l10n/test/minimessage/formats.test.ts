@@ -9,6 +9,7 @@ import { readFacts } from "@lioni/lioni";
 import { createLandsConfig } from "../../lioni.config.ts";
 import { loadMiniMessageQualityDependencies } from "../../src/minimessage-quality.ts";
 import { miniMessageTextRuns } from "../../src/minimessage-text-runs.ts";
+import { pairTranslatableTextDocuments } from "../../src/translatable-text-pairing.ts";
 import {
   createProject,
   createFormatProject,
@@ -27,6 +28,89 @@ async function inspectFormatProjection(project: {
 }
 
 void describe("地图与旧格式官方 MiniMessage 投影", () => {
+  void it("GUI lore 行合并后按完整字段配对并继续检查标签和变量", async (t) => {
+    const project = await createGuiProject(t, {
+      name: "Selection",
+      lore: [
+        "<t:regular>Land",
+        "<t:regular_value><v:land></t>",
+        "<t:regular>created",
+      ],
+      sourceVersion: "8.9.2",
+    });
+    const targetPath = join(project.directory, "Locale/zh-CN_gui.yml");
+    await writeFile(
+      targetPath,
+      [
+        "physical:",
+        "  selection:",
+        '    name: "选择"',
+        "    lore:",
+        '      - "<t:regular>城镇<t:regular_value><v:land></t>"',
+        '      - "<t:regular>已创建"',
+        "",
+      ].join("\n"),
+    );
+
+    const view = await inspectFormatProjection(project);
+    const lore = view.messages.find(
+      (message) => message.path.at(-1) === "lore",
+    );
+    assert.ok(lore);
+    const pairs = view.pairing.pairs.filter(
+      ({ sourceDocument }) => sourceDocument.message.id === lore.id,
+    );
+    assert.equal(pairs.length, 1);
+    assert.deepEqual(
+      view.pairing.incomplete.filter((fact) => fact.message?.id === lore.id),
+      [],
+    );
+    const variableCount = (
+      segments: (typeof pairs)[number]["sourceDocument"]["segments"],
+    ) => segments.filter((segment) => segment.kind === "variable").length;
+    assert.equal(variableCount(pairs[0]!.sourceDocument.segments), 1);
+    assert.equal(variableCount(pairs[0]!.targetDocument.segments), 1);
+    assert.deepEqual(
+      view.tags.byMessage.find((entry) => entry.sourceKey === lore.id)?.analysis
+        .correspondence,
+      [],
+    );
+
+    const changedProject = await createGuiProject(t, {
+      name: "Selection",
+      lore: [
+        "<t:regular>Land",
+        "<t:regular_value><v:land></t>",
+        "<t:regular>created",
+      ],
+      sourceVersion: "8.9.2",
+    });
+    const changedTargetPath = join(
+      changedProject.directory,
+      "Locale/zh-CN_gui.yml",
+    );
+    await writeFile(
+      changedTargetPath,
+      [
+        "physical:",
+        "  selection:",
+        '    name: "选择"',
+        "    lore:",
+        '      - "<t:regular>城镇<t:regular_value><v:owner></t>"',
+        '      - "<t:regular>已创建"',
+        "",
+      ].join("\n"),
+    );
+    const changed = await inspectFormatProjection(changedProject);
+    assert.ok(
+      changed.tags.byMessage
+        .find((entry) => entry.sourceKey === lore.id)
+        ?.analysis.correspondence.some(
+          (finding) => finding.code === "minimessage.tag-mismatch",
+        ),
+    );
+  });
+
   void it("正文分析区分文档内容与所属项目中的交互命令", async (t) => {
     const input = "<click:run_command:/lands claim>认领</click>";
     const project = await createFormatProject(t, {
@@ -278,6 +362,58 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
         const actual = finding.actual as Record<string, unknown>;
         return Number(actual.documentIndex) > 0;
       }),
+    );
+  });
+
+  void it("同一字段的重复 hover 按出现次序配对，不依赖文案或投影收集顺序", async (t) => {
+    const source =
+      '<hover:show_text:"First tip">A</hover><hover:show_text:"Second tip">B</hover>';
+    const target =
+      '<hover:show_text:"第一条较长的说明">甲</hover><hover:show_text:"第二条说明">乙</hover>';
+    const project = await createProject(t, { sourceGreeting: source });
+    const targetPath = join(project.directory, "lang/zh.yml");
+    const targetYaml = await readFile(targetPath, "utf8");
+    await writeFile(
+      targetPath,
+      targetYaml.replace(
+        "greeting: 你好",
+        `greeting: ${JSON.stringify(target)}`,
+      ),
+    );
+    const view = await inspectFormatProjection(project);
+    const greeting = view.messages.find(
+      (message) => message.path.join(".") === "messages.greeting",
+    );
+    assert.ok(greeting);
+    const pairing = pairTranslatableTextDocuments({
+      ...view.projection,
+      translatableText: [...view.projection.translatableText].reverse(),
+    });
+    assert.deepEqual(
+      pairing.incomplete.filter((fact) => fact.message?.id === greeting.id),
+      [],
+    );
+    const hoverPairs = pairing.pairs.filter(
+      ({ sourceDocument }) =>
+        sourceDocument.message.id === greeting.id &&
+        sourceDocument.documentIndex > 0,
+    );
+    assert.equal(hoverPairs.length, 2);
+    assert.deepEqual(
+      hoverPairs.map(({ sourceDocument, targetDocument }) => [
+        sourceDocument.segments
+          .filter((segment) => segment.kind === "text")
+          .map((segment) => segment.value)
+          .join(""),
+        targetDocument.segments
+          .filter((segment) => segment.kind === "text")
+          .map((segment) => segment.value)
+          .join(""),
+      ]),
+      [
+        ["First tip", "第一条较长的说明"],
+        ["Second tip", "第二条说明"],
+      ],
     );
   });
 

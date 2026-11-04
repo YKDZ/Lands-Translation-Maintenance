@@ -1534,6 +1534,23 @@ function tagOccurrences(
     });
   };
   const nodesByPosition = new Map<string, MiniMessageTagNode>();
+  const isSyntheticListSeparator = (
+    document: ParsedMiniMessageDocument,
+    node: MiniMessageTagNode,
+  ) =>
+    node.name === "newline" &&
+    document.listItems !== undefined &&
+    !document.listItems.some(
+      (item) =>
+        item.position.start <= node.position.start &&
+        node.position.end <= item.position.end,
+    );
+  const isReflowedListField = (document: ParsedMiniMessageDocument) =>
+    document.listItems !== undefined &&
+    document.parent === undefined &&
+    Array.isArray(document.message.source) &&
+    Array.isArray(document.message.target) &&
+    document.message.source.length !== document.message.target.length;
   for (const document of documents) {
     if (document.status !== "parsed") continue;
     const htmlTagRanges =
@@ -1543,6 +1560,9 @@ function tagOccurrences(
     for (const sourceNode of document.nodes) {
       for (const node of semanticNodes(document, sourceNode, htmlTagRanges)) {
         if (node.kind !== "tag" || node.raw === "") continue;
+        // GUI lore 数组拼接时插入的 <newline> 只是列表分隔符，不是译文标签。
+        // 真正写在某一行中的 <newline> 仍落在该行范围内并照常检查。
+        if (isSyntheticListSeparator(document, node)) continue;
         const key = nodePositionKey(node.position);
         const current = nodesByPosition.get(key);
         if (current === undefined || (current.closing && !node.closing)) {
@@ -1561,17 +1581,23 @@ function tagOccurrences(
     for (const sourceNode of document.nodes) {
       for (const node of semanticNodes(document, sourceNode, htmlTagRanges)) {
         if (node.kind !== "tag" || node.raw === "") continue;
+        if (isSyntheticListSeparator(document, node)) continue;
         const signature: TagSignature = {
           name: canonicalTagName(node),
           parameters: canonicalParameters(node, themes, document.surface),
           closing: node.closing,
           selfClosing: node.selfClosing,
-          context: tagContext(
-            node,
-            document,
-            semantic,
-            landsContextByPosition.get(landsContextKey(document, node)) ?? [],
-          ),
+          // Lore 列表可合并行；此时以整字段比较标签身份和参数，行边界
+          // 导致的继承样式上下文变化由 MiniMessage 嵌套检查单独处理。
+          context: isReflowedListField(document)
+            ? []
+            : tagContext(
+                node,
+                document,
+                semantic,
+                landsContextByPosition.get(landsContextKey(document, node)) ??
+                  [],
+              ),
         };
         occurrences.push({
           document,

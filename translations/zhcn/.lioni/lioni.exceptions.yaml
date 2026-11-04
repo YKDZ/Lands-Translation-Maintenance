@@ -8,12 +8,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_players","items","default","child_failure_owner","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:c83538d31241aea01019556aed7220792632e61bef3f294e16c5f3480f02a5e5,
+      inputFingerprint: sha256:bc5968f9819302c47af7dfb37e478b3135420dd34db820c4fb2b69fc3744bdfc,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:ada8e1c37ce6906c5aa874f8064a05e92baf77577b7b14d34a56de2354ecdd58,
+          inputFingerprint: sha256:147cfc769404677af9516b697fd7d77c964818e3e55772d44b1e0218df18e923,
         },
     },
     {
@@ -23,12 +23,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_inbox","items","default","child_failure_owner","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:4012f391033ced9c4a00eb05f8db4a4818cbfedfbc2ec2e07d36020b6ec8a6f3,
+      inputFingerprint: sha256:1c1bec8370b43212128d2c5f6fc24430cdcc2ecf204ce58c5b75e237846a544b,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:eb5a4a7a73e4c6d1cfc34bdc386294735e453015ba4ffa7ec41333de21d9be0f,
+          inputFingerprint: sha256:68faa1a4aaa54771af75c7265428075582cdec604895632b50d285ddaa63ada8,
         },
     },
     {
@@ -38,12 +38,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'roles.yml:["land","roles","owner","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:69ecef52942426f5ac0d4cb6384ba2da748705f50f3e6c19efd3187a9cdce4f6,
+      inputFingerprint: sha256:35272cebe455956c095425357ce015c6c98be8fb4fbed73ebed1468e65ce27f8,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:0edb570ae39d2aeffaa7a26a5e17b252de7dbb3e769f5c706201a7f39b4574a4,
+          inputFingerprint: sha256:350a6d445b5869663c0a19198afd026200196e5d190507643be8b041abb1d02e,
         },
     },
     {
@@ -53,12 +53,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_role_settings","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:86af46b644373dfb3ed6399accd60f0747bee7e0b08f5d98e698ccd9022c1ae9,
+      inputFingerprint: sha256:7e2e0157742ca4632c26fdbed027e7eeca591e74e221070da216bd47b218f800,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:dc48d05727c48070596a8ad4b441d6051550b19f3560e8363cbd4d9c5efe075f,
+          inputFingerprint: sha256:9b798b1e5487f9be603d1359ca2b6e3885165793024d573cc4c51c06dcb65f43,
         },
     },
     {
@@ -68,12 +68,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["common","items","default","child_failure_noaccess","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:ff619b21bb63e9f4df9039b3b34c1fa792c59c8f2224ac73d209ab5cde7f884e,
+      inputFingerprint: sha256:95599a5b3dccd348111827cebcf53a20a834207ccf79a131c7d03be1026d1fe6,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:6751ad43da143eaf758c722442a97185dbfdbaaebdbad2f3227ad67ca5ec1da3,
+          inputFingerprint: sha256:1022912a4140f1f8000667e44613e3bb95e523d9314a96bf21119f6b3ba6647d,
         },
     },
     {
@@ -83,12 +83,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["common","items","default","child_failure_noaccess_owner","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:5435c007d869f2c3b3cdc89e317efe409b6f4ab8f61177a1926e56fbeb3d8f26,
+      inputFingerprint: sha256:60dc540f656f318cbcfc03537a1f383b1d7c44d81f62690f0ccb7b5e0549e2c5,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:c0fddeb0cc0a0da77f5ff7832988920c46d5a8d38bcd692fcca8d07e90606ac5,
+          inputFingerprint: sha256:efca54106958266b3c1b4602dff9815768834a3dd53e8c39c5b28de65eb867bf,
         },
     },
     {
@@ -98,12 +98,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","area","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:69dee549875a4fe1f59f853032281945138d07763f1861d206de5d6d04cc4da1,
+      inputFingerprint: sha256:186796d5679b071d5b1a8e6ce84fdb64b190dfaaf9a56a0fc81ec7deac2333f9,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:c4ba1d13a2c00b6ef7e1db7ba6449d435d4f12c8712ff2c3ad8a95f514f6aa70,
+          inputFingerprint: sha256:2a66147dbea402a1ce69d66b9b234e9f6a564ac2466e4be545e517887de13164,
         },
     },
     {
@@ -113,12 +113,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_invites","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:b596e4ca0913e747b05598837dcb708e55a39d4280169f41f97007a55e754ebe,
+      inputFingerprint: sha256:6e49bcdad16ba7f6ae11478c55d6ac82deb06e7fc79531d4555e7e67d8bbaecb,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:8ba6a75984d60f0da57cc504562fc10f14956959faf63477b21785226c600444,
+          inputFingerprint: sha256:b7c844e2e005ff8d6ac533a1e10f6a3008941bd5decfcd9ce51e787a8843f9cb,
         },
     },
     {
@@ -128,12 +128,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/Wars/en-US_gui.yml:["gui","war","items","default","child_failure_permission","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:60d39a47c3189f0d86b9a0890e7654685934bea109ed36648eb9be8c2036b20c,
+      inputFingerprint: sha256:f3f84ca6e7a165f84461c437151027643d014579fe3014ae2a0591a930adf171,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:96f778cbd78b5b42161cd050708fe4f67bef4f2dcbfa41919b98bca38ee7da64,
+          inputFingerprint: sha256:547c882783c25bfea0b166fc476c16bc2d35b3fcebda165561e7ee5c963e85db,
         },
     },
     {
@@ -143,12 +143,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_roles","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:6f3f478d67a9b34ecc8876068734e34702415f6bc2ff770c6c589917172fd7b1,
+      inputFingerprint: sha256:4abf755570b01117017a7fbf6fbc0217c17b7c306376a53f4e2af8b4e5d91bd8,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:647058923686a73bb90289604861211b8097ee17941ea67bd289fc7b7798376e,
+          inputFingerprint: sha256:c05cc4f9897a88a12d990db65ea895b3d01961371b72349423b98d07823f89bb,
         },
     },
     {
@@ -158,12 +158,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:a198a636e8df0c0cce003935698751d70a3347ebfd17d952168924f7a5bcf22a,
+      inputFingerprint: sha256:0c813713523070d943561a4d61303325edeed79d0ca4464c35c125b730134927,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:fb25d1fd869604316488c1c6e608fa564b744a721367918ad1b39836fdd9c110,
+          inputFingerprint: sha256:c67f86e63fca6feaad6dcf18349f4f872ba46a5f647ddb2171404c0f1f9bfe0e,
         },
     },
     {
@@ -173,12 +173,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:23ce5dbcf2e064921e788e58ed2f7cf604104b75b14abf98db182b9815d094b4,
+      inputFingerprint: sha256:c726b3bf69aa2feaf7a71768279c5f3ebf0516fbf28f8e8a7397ab46367a2166,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:d6656da8879105ea2c61f2318fc7c7386e070acf97ade01b45d5dcf913f7a947,
+          inputFingerprint: sha256:69c5aa867429f30ccb7fb65995b7543ec996fb799efd5a65536f6edd83ea3e50,
         },
     },
     {
@@ -189,12 +189,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","area","items","default","child_failure_rented","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:54f63cf12cb231563592e8b481b0defaaf1d5c1441cbf481c7e12ea7610c11cf,
+      inputFingerprint: sha256:f0542af33bb52a51577a45905f4fcbb1ee5e362d9bcbdee100a854b9fe334e2f,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:9da89d9e008f50af12cf9f7ded42c143d3645ee60ee599f1fb56a0dc0b370a1e,
+          inputFingerprint: sha256:177421e8dd1ee53d87e64cc65a509ade360cb295e0e46eea962dce402e0694a8,
         },
     },
     {
@@ -205,12 +205,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_rented","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:e70d34b8e6e2bac3d03e2b019814cd8c2a006097d4dd672535da4660cf5ff53e,
+      inputFingerprint: sha256:15ae85ba77222f623bf6d6a872b5175b5326dba86f3a634d51042ae18a35e4b2,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:865d3d759bb7f4ce6202ded8aa29e33915416915e8f77e30dea1f01f8457e33a,
+          inputFingerprint: sha256:65c7c62bb30e98e40dbdb6ce26d72720e682e2cb336e11643d60b4b0c8914844,
         },
     },
     {
@@ -221,12 +221,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'roles.yml:["land","roles","nation","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:9ae2c2c423a6fe4b9e686d93de145ce7e8d28230e4077dd7c6f8b4ac3bcc3d8d,
+      inputFingerprint: sha256:3005bf23a3b561180aa5966418d5157667ffe93cfd80cb4316af9af674842b17,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:8dcd44fd666aa84cbc8b05743cee41a3426bc1a4f4e18d8258fbea32dfa3cbee,
+          inputFingerprint: sha256:17a050b08ade5c829cbf51f201bd14e7609a868435725c9320349e554c2eb634,
         },
     },
     {
@@ -237,12 +237,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","player-management","items","default","members","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:be25606071254c1c15db3817b182596410adf699223d069aca1e9d40ff8482a8,
+      inputFingerprint: sha256:226030faa3b289365317da4eebe5f4c66545c83a7362891a1d6845d8691e8c45,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:6662c477cce22c70c3e92ecbb6e31c0b3ebcc278baac8be58ea7084be20152da,
+          inputFingerprint: sha256:771fc20c804b44d93c4391615d6951836529e2afe2dcf9d6b87b08e35dd9f1cc,
         },
     },
     {
@@ -253,12 +253,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["general","top","sorting","members"]',
       language: zh-CN,
-      inputFingerprint: sha256:65a2b369cb8ac818c87ec90c2538066d1f59b35f5ade5d4d54bd479b0aaabdc2,
+      inputFingerprint: sha256:1477da5d10dc3a3518ea107b772b9ed10a678c9a14dd0f0262ee950322045118,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:bf2a8d4b8e728dbf8a8f33e06e946b11e535a487791275ffb99714718e177c0c,
+          inputFingerprint: sha256:649dd1228731df7310dbbebc238f128db936122e6c99b3f75508f11ded397455,
         },
     },
     {
@@ -268,12 +268,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","mainblock","items","default","land","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:ca17980305f6a922fd6193da70256f50d81707f4adcfbc6c82abe7c7331393c1,
+      inputFingerprint: sha256:fa00a120b510f8db27a3dbb52f5b2f5bce3129ce0f66153cf1dbdc4dcbd1a46d,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:2a61c6a49e2a213ee8c9c8a9db28f9d243ded19a669042840d9b9ee55f1176e9,
+          inputFingerprint: sha256:fbc24653b89467bccaf70c1a387ae64174ff11e08311153369c8db41d89a1d20,
         },
     },
     {
@@ -283,12 +283,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/Nations/en-US_gui.yml:["general","nation","role","land"]',
       language: zh-CN,
-      inputFingerprint: sha256:46dbe6883e1828b8ff305d31fbf8ddad8b21f59ac896ec6941ed331b19cdca8b,
+      inputFingerprint: sha256:94feabe331435e755da3b5508493a7ef60f1452e70b8763452c6382ab6579c38,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v2+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:e8e0cccc077b25b97b8f258c9080bb14bc00efdb0e54852e06c9e6e71512b7a4,
+          inputFingerprint: sha256:979b8acc3fb9c41345c4ae5e7a94381de59788b432f17cf83cc27c2549fb3013,
         },
     },
     {
@@ -300,12 +300,12 @@ exceptions:
       checkId: minimessage-tag-correspondence,
       sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:bf8b1c7557162b80fb56dd46804b513c83b180bdf56509ffa473a0b499b27c76,
+      inputFingerprint: sha256:d5b22ca5ca0d801fa269b55f40c637a96fd79e86c025bfb693735b0b54f5c7c6,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:1,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:9940d7858195e8d664de246a180534a224fa35a6e9f7969ec56190f723b219d7,
+          inputFingerprint: sha256:eca60c6ca62551bd08344903a52241c1429f542a490f999a38c01cf288aa3a48,
         },
     },
     {
@@ -316,42 +316,116 @@ exceptions:
       checkId: minimessage-nesting,
       sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:5da6b6b805b7cd89cacf398620da63e320be9bcbd2d8bdf01a35c8cfc05ba6dc,
+      inputFingerprint: sha256:96f80e0588c127ed8d13062f3138ec0b0448fa73d55769e4ad20bbd1dc3a4e9f,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:1,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:676253beb3db2d6205e67c2b0f2ec7365091a7048129fcbc238b8128ff19d13e,
+          inputFingerprint: sha256:c80a618456d076e0002f61cf9d297fe6592ab4f31ff293ef87b8af440d7b355f,
         },
     },
     {
       id: upstream-limits-migrate-nesting,
-      reason:
-        上游原文存在不匹配的 </t> 结束标签；译文保留同一上游内容，不主动修复上游
-        bug。接受当前消息原文及译文的该项嵌套诊断，依据变化后重新复核。,
+      reason: 上游英文原文存在不匹配的 </t> 结束标签；译文保留同一标签结构，不主动修复上游内容。,
       checkId: minimessage-nesting,
       sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:90f838c3feef34ec38e495ce9d82e26c88947a38ceb125c23203174460d9945d,
+      inputFingerprint: sha256:96f80e0588c127ed8d13062f3138ec0b0448fa73d55769e4ad20bbd1dc3a4e9f,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:1,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:de07c92d695163ef3536bd389e5f567462fff0290474be6797839759c9644ede,
+          inputFingerprint: sha256:c80a618456d076e0002f61cf9d297fe6592ab4f31ff293ef87b8af440d7b355f,
         },
     },
     {
       id: nation-level-name-context,
-      reason: 此处是 nation 等级对应的称呼“国家”，用于不同等级的国家实体命名，不是通用 nation 对象名称，因此不要求使用通用译名“联邦”。,
+      reason: 此处是 nation 等级对应的称呼“国家”，用于不同等级的国家实体命名，不是通用 nation 对象名称，因此保留“国家”译法。,
       checkId: terminology,
       sourceKey: 'Locale/en-US.yml:["general","level","name","nation","nation"]',
       language: zh-CN,
-      inputFingerprint: sha256:ea825e552e093c487ed3f0f3e0e61a9e04de23c88096d20118497210b1a54e9d,
+      inputFingerprint: sha256:35757356e639f07a1c34a7b69ac116e7e4674a192939c7c4a6b871dc53c8e8ad,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:92fef025e5b9535b6029d29a54ba0e41f9b266571f5fe713ce0b7fb77424f63b,
+          inputFingerprint: sha256:b27151ff452f288dff8072d2314b1ede1f9c9cee205390b9e308d75f2a0bd6b9,
+        },
+    },
+    {
+      id: dialogs-declare-independence-context,
+      reason:
+        此处 Declare independence 表示宣布独立，译为脱离联邦并宣布独立；declare 并非宣战动词，不要求译为宣战。后续 war
+        已正常译为战争。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_dialogs.yml:["value","confirm","war","independence","confirm"]',
+      language: zh-CN,
+      inputFingerprint: sha256:c5d8205e44cf3fe62c43820d823e5703fece3c05d8fefafe2193cf4b9ed759a7,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:b96d4c6fffbe8db81d50d6f6fee8dc703beaca57004d3b919bbacd68f617defd,
+        },
+    },
+    {
+      id: rental-setup-type-word-composition,
+      reason:
+        Lands 9.1.1 的租售设置菜单将 type 替换为 rentables.rental 或 rentables.sell
+        的本地化文本，即“出租”或“出售”。此处与“设置”有意组成“出租设置”或“出售设置”，保留紧邻；不属于需要隔开的实体名称或数值。,
+      checkId: translation-spacing,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","rental_setup","title"]',
+      language: zh-CN,
+      inputFingerprint: sha256:0d8776fa057918f6bf5db3be072a2ed98c7be162db8f9357993152426284e202,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:lands-chinese-spacing-v1,
+          configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
+          inputFingerprint: sha256:1c8dbc3a84d676b453a23f1aa8d109b88ad5184aef804fd68b22cf6d159102c6,
+        },
+    },
+    { id: world-default-spawn-terminology, reason: world spawn 指 Minecraft
+        世界的默认出生与重生位置，不是可设置并供玩家传送前往的城镇、子区域或联邦传送点，因此译为“世界出生点”。, checkId: terminology, sourceKey: 'Locale/en-US.yml:["lands","command","unstuck","success_wilderness"]', language: zh-CN, inputFingerprint: sha256:a7ec7bdb0055be15a0c6d049ae16ccb2896dad6b8fa88c0fe7aa987090070104, fingerprintSummary: { version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3, configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d, inputFingerprint: sha256:f35a15cc4d387e437406d351132e8964113dc019fd867e25701aa50e8c660b8d } },
+    {
+      id: mob-animal-spawning-context,
+      reason: 此处 animal spawn 指动物生成行为，不是供玩家传送前往的固定位置；按上下文译为动物生成相关描述。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_animal_spawn","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:cc99ee215f6fee209866fb86d7882290f25ca81c9e8d95fc4e7ee999530424d3,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:813d7ef67db22024ead7e0cdab976f4376fc3fba94dcde8a6ba961191046b1d6,
+        },
+    },
+    {
+      id: mob-monster-spawning-context,
+      reason: 此处 monster spawn 指怪物生成行为，不是供玩家传送前往的固定位置；按上下文译为怪物生成相关描述。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_monster_spawn","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:dcdc2b4e98c788a0afdee0f0b7937bea76b7126baa6f3636a3f7f7b6c86e862f,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:b47929d37099b971515396bc759f21e7ab6d0c2c771fc9f4f8295fae3d96c1e1,
+        },
+    },
+    {
+      id: mob-phantom-spawning-context,
+      reason: 此处 phantom spawning 指幻翼生成行为，不是供玩家传送前往的固定位置；按上下文译为幻翼生成相关描述。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_phantom_spawn","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:ab327aaa7952bab1a0ec6d5b7d565a647e12470a4290ddfd344740c835d1d0b5,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:5e5123c4b498d5d45eb26febebd59c0f3428797d25ae15564b7694d492ade924,
         },
     },
   ]

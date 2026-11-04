@@ -1,7 +1,18 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { readLandsPublication } from "@lands-l10n/l10n/maintenance";
+import {
+  readLandsPublication,
+  readLandsPublicationTerms,
+} from "@lands-l10n/l10n/maintenance";
 
 export interface PrepareTranslationPublicationOptions {
   readonly projectFilePath: string;
@@ -13,7 +24,7 @@ export interface PrepareTranslationPublicationOptions {
 async function requireEmptyOutput(directory: string): Promise<void> {
   try {
     if ((await readdir(directory)).length > 0) {
-      throw new Error(`发布准备目录必须为空，已保留原有内容：${directory}`);
+      throw new Error(`导出目录必须为空，已保留原有内容：${directory}`);
     }
   } catch (error) {
     if (
@@ -35,6 +46,7 @@ function renderReadme(
     readonly sourcePath: string;
     readonly targetPath: string;
   }[],
+  termTable?: string,
 ): string {
   const substitutions = [
     ["{{LANDS_VERSION}}", sourceVersion],
@@ -49,6 +61,9 @@ function renderReadme(
         ),
       ].join("\n"),
     ],
+    ...(termTable === undefined
+      ? []
+      : [["{{TERMINOLOGY}}", termTable] as const]),
   ] as const;
   let readme = template;
   for (const [placeholder, value] of substitutions) {
@@ -64,8 +79,8 @@ function renderReadme(
 }
 
 /**
- * 准备待验收的发布目录，预览和正式发布复用同一份内容生成逻辑。
- * 输入读取、模板检查全部成功后才开始写出；非空目标目录不会被清理或覆盖。
+ * 导出待验收的发布目录，本地与正式发布复用同一份内容生成逻辑。
+ * 先在同级临时目录完整写出，再原子替换空输出目录；失败时保留原目录。
  * 此函数不执行 QA，调用方须对同一来源提交完成正式验收后才能发布。
  */
 export async function prepareTranslationPublication(
@@ -85,6 +100,24 @@ export async function prepareTranslationPublication(
     template,
     publication.sourceVersion,
     publication.files,
+    template.includes("{{TERMINOLOGY}}")
+      ? [
+          "| 术语 | 翻译 | 备注 |",
+          "| --- | --- | --- |",
+          ...(await readLandsPublicationTerms(options.projectFilePath)).map(
+            (entry) => {
+              const cell = (text: string) =>
+                text
+                  .replaceAll("&", "&amp;")
+                  .replaceAll("<", "&lt;")
+                  .replaceAll(">", "&gt;")
+                  .replaceAll("|", "&#124;")
+                  .replace(/\r?\n/gu, "<br>");
+              return `| ${cell(entry.source.join(", "))} | ${cell(entry.target.join(", "))} | ${cell(entry.note)} |`;
+            },
+          ),
+        ].join("\n")
+      : undefined,
   );
   const files = [
     { path: "README.md", content: Buffer.from(readme, "utf8") },
@@ -94,10 +127,19 @@ export async function prepareTranslationPublication(
       content,
     })),
   ];
-  for (const { path, content } of files) {
-    const destination = join(outputDirectory, path);
-    await mkdir(dirname(destination), { recursive: true });
-    await writeFile(destination, content, { flag: "wx" });
+  await mkdir(dirname(outputDirectory), { recursive: true });
+  const temporaryDirectory = await mkdtemp(
+    join(dirname(outputDirectory), ".lioni-export-"),
+  );
+  try {
+    for (const { path, content } of files) {
+      const destination = join(temporaryDirectory, path);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, content, { flag: "wx" });
+    }
+    await rename(temporaryDirectory, outputDirectory);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
   }
   return {
     sourceVersion: publication.sourceVersion,

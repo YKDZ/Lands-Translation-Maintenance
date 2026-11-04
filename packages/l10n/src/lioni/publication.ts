@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
+import { loadTermbaseYaml } from "@lioni/lioni/node";
+
 import { parseLandsProjectConfiguration } from "#/lioni/project-configuration";
 import { readLandsSourceSnapshot } from "#/lioni/source-input";
 
@@ -13,6 +15,33 @@ export interface LandsPublicationFile {
 export interface LandsPublication {
   readonly sourceVersion: string;
   readonly files: readonly LandsPublicationFile[];
+}
+
+/** 从正式术语库读取可公开的表达；禁用表达不进入用户术语表。 */
+export async function readLandsPublicationTerms(projectFilePath: string) {
+  const directory = dirname(resolve(projectFilePath));
+  const configuration = parseLandsProjectConfiguration(
+    await readFile(projectFilePath, "utf8"),
+    projectFilePath,
+  );
+  const termbase = await loadTermbaseYaml(join(directory, "terms"));
+  return termbase.concepts
+    .map((concept) => {
+      const expressions = (language: string) => [
+        ...new Set(
+          concept.languages
+            .find((entry) => entry.language === language)
+            ?.expressions.filter((entry) => entry.usage !== "forbidden")
+            .map((entry) => entry.text) ?? [],
+        ),
+      ];
+      return {
+        source: expressions(configuration.translationScope.sourceLanguage),
+        target: expressions(configuration.translationScope.targetLanguage),
+        note: concept.note ?? "",
+      };
+    })
+    .filter((entry) => entry.source.length > 0 && entry.target.length > 0);
 }
 
 /**

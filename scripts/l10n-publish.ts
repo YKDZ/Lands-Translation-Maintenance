@@ -1,16 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 
-import { prepareTranslationPublication } from "./l10n-prepare-publication.ts";
 import { publishTranslation } from "./l10n-publication.ts";
 
 // 正式门槛由唯一发布工作流先执行；只有通过后，后续步骤才能取得 App 凭据。
 // 此脚本是工作流内部步骤，不提供可绕过工作流验收的本地发布入口。
 async function publish(): Promise<void> {
-  if (process.argv.length !== 2) {
-    throw new Error("发布内部步骤不接受参数，请从维护仓库的发布工作流运行。");
+  const [directory, sourceVersion, ...extra] = process.argv.slice(2);
+  if (!directory || !sourceVersion || extra.length !== 0) {
+    throw new Error(
+      "用法：pnpm l10n:publish <导出目录> <来源版本>；只接受正式发布工作流调用。",
+    );
   }
   if (
     process.env.GITHUB_ACTIONS !== "true" ||
@@ -34,33 +34,19 @@ async function publish(): Promise<void> {
   if (token === undefined || token === "") {
     throw new Error("发布工作流尚未配置 GitHub App 凭据。");
   }
-  const directory = await mkdtemp(join(tmpdir(), "lands-publication-stage-"));
-  try {
-    const publicationDirectory = join(directory, "files");
-    const { sourceVersion } = await prepareTranslationPublication({
-      projectFilePath: resolve("translations/zhcn/.lioni/project.yml"),
-      readmeTemplatePath: resolve("publication/README.template.md"),
-      licensePath: resolve("LICENSE"),
-      outputDirectory: publicationDirectory,
-    });
-    const result = await publishTranslation({
-      publicationDirectory,
-      maintenanceDirectory: process.cwd(),
-      sourceCommit,
-      sourceVersion,
-      token,
-    }).catch((error: unknown) => {
-      throw new Error(
-        "翻译发布未完成；已推送的提交、标签或草稿会保留，修复后可重试补齐。\n" +
-          (error instanceof Error ? error.message : String(error)),
-      );
-    });
-    process.stdout.write(
-      `翻译发布已完成：${result.tag}\n${result.releaseUrl}\n`,
+  const result = await publishTranslation({
+    publicationDirectory: resolve(directory),
+    maintenanceDirectory: process.cwd(),
+    sourceCommit,
+    sourceVersion,
+    token,
+  }).catch((error: unknown) => {
+    throw new Error(
+      "翻译发布未完成；已推送的提交、标签或草稿会保留，修复后可重试补齐。\n" +
+        (error instanceof Error ? error.message : String(error)),
     );
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+  });
+  process.stdout.write(`翻译发布已完成：${result.tag}\n${result.releaseUrl}\n`);
 }
 
 try {

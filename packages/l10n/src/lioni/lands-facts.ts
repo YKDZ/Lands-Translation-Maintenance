@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { formatForScene } from "#/field-metadata";
 import type { JsonValue } from "#/json-value";
+import type { LandsLanguageLoadResource } from "#/lands-language-load";
 import { formatForMessagePath } from "#/lioni/lands-format";
 import type {
   ResourcePurpose,
@@ -928,6 +929,7 @@ async function readTargetResource(
 }
 
 interface MappingStructureProjection {
+  readonly languageLoad?: LandsLanguageLoadResource;
   readonly sourceFile: string;
   readonly targetFile: string;
   readonly definitionsSource?: string;
@@ -992,6 +994,7 @@ function mappingStructures(
   mapping: LandsMapping,
   snapshot: LandsSourceSnapshot,
   target: ReadResourceResult,
+  purpose: ResourcePurpose | undefined,
 ): MappingStructureProjection {
   const definition = mappingDefinitions(mapping, snapshot);
   const issues: string[] = [];
@@ -1011,7 +1014,41 @@ function mappingStructures(
   if (target.status === "unavailable") {
     issues.push(target.error ?? `${mapping.target} 无法读取`);
   }
+  let languageLoad: LandsLanguageLoadResource | undefined;
+  if (purpose === "chat-language" || purpose === "gui-language") {
+    const base = {
+      file: mapping.target,
+      kind: purpose === "chat-language" ? ("chat" as const) : ("gui" as const),
+    };
+    const bytes = snapshot.resources.get(mapping.source);
+    const source =
+      bytes === undefined ? undefined : parseResource(bytes, mapping.source);
+    if (
+      source?.status !== "available" ||
+      target.status === "unavailable" ||
+      definition.status === "unavailable"
+    ) {
+      languageLoad = {
+        ...base,
+        status: "unavailable",
+        reason: issues.join("；") || source?.error || "语言资源读取不完整",
+      };
+    } else if (target.status === "missing") {
+      languageLoad = { ...base, status: "missing" };
+    } else {
+      languageLoad = {
+        ...base,
+        status: "available",
+        source: source.value!,
+        target: target.value!,
+        ...(definition.status === "available"
+          ? { definitions: definition.value }
+          : {}),
+      };
+    }
+  }
   return {
+    ...(languageLoad === undefined ? {} : { languageLoad }),
     sourceFile: mapping.source,
     targetFile: mapping.target,
     ...(mapping.definitionsSource === undefined
@@ -1063,7 +1100,15 @@ export async function readLandsStructureProjection(
       paths.projectDirectory,
       mapping.target,
     );
-    mappings.push(mappingStructures(mapping, snapshot, target));
+    mappings.push(
+      mappingStructures(
+        mapping,
+        snapshot,
+        target,
+        configuration.resources.find(({ path }) => path === mapping.source)
+          ?.purpose,
+      ),
+    );
   }
   return {
     sourceVersion: snapshot.manifest.sourceVersion,

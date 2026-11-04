@@ -1815,27 +1815,52 @@ function translatableTextDocuments(
       });
 
     if (document.parent === undefined) {
-      for (const item of listItems) {
-        const itemSegments = segments.filter(
-          (segment) =>
-            item.position.start <= segment.position.start &&
-            segment.position.end <= item.position.end,
-        );
-        output.push({
-          message: document.message,
-          documentIndex: document.documentIndex,
-          origin: document.origin,
-          file: document.file,
-          path: item.path,
-          surface: document.surface,
-          range: {
-            start: 0,
-            end: item.position.end - item.position.start,
-          },
-          context: document.context,
-          segments: localizeSegments(item, itemSegments),
-        });
+      const sourceItemCount = Array.isArray(document.message.source)
+        ? document.message.source.length
+        : undefined;
+      const targetItemCount = Array.isArray(document.message.target)
+        ? document.message.target.length
+        : undefined;
+      if (
+        sourceItemCount !== undefined &&
+        sourceItemCount === targetItemCount
+      ) {
+        for (const item of listItems) {
+          const itemSegments = segments.filter(
+            (segment) =>
+              item.position.start <= segment.position.start &&
+              segment.position.end <= item.position.end,
+          );
+          output.push({
+            message: document.message,
+            documentIndex: document.documentIndex,
+            origin: document.origin,
+            file: document.file,
+            path: item.path,
+            surface: document.surface,
+            range: {
+              start: 0,
+              end: item.position.end - item.position.start,
+            },
+            context: document.context,
+            segments: localizeSegments(item, itemSegments),
+          });
+        }
+        continue;
       }
+      // Lore 行允许为阅读体验合并或拆分；术语和文风检查应配对完整字段。
+      // listItems 仍保留在解析文档上，用于把发现定位回 YAML 行。
+      output.push({
+        message: document.message,
+        documentIndex: document.documentIndex,
+        origin: document.origin,
+        file: document.file,
+        path: document.path,
+        surface: document.surface,
+        range: document.range,
+        context: document.context,
+        segments,
+      });
       continue;
     }
 

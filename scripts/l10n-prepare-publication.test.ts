@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -207,7 +207,7 @@ void test("发布准备拒绝非空输出目录，保持使用者原有文件不
 
   await assert.rejects(
     prepareTranslationPublication(inputs),
-    /准备目录必须为空/u,
+    /导出目录必须为空/u,
   );
 
   assert.deepEqual(await readdir(inputs.outputDirectory), ["existing.yml"]);
@@ -227,4 +227,67 @@ void test("受管译文读取失败时不留下只含说明或部分译文的输
   });
 
   assert.deepEqual(await readdir(inputs.outputDirectory), []);
+});
+
+void test("README 术语表复用原生术语库并排除禁用表达，转义表格内容", async (context) => {
+  const inputs = await createPublicationInputs(context);
+  const terms = join(inputs.projectDirectory, ".lioni/terms");
+  await mkdir(terms);
+  await writeFile(
+    join(terms, "concepts.yaml"),
+    'concepts:\n  nation:\n    note: "多个城镇 | 联合\\n组成"\n',
+  );
+  await writeFile(
+    join(terms, "en-US.yaml"),
+    "concepts:\n  nation:\n    expressions:\n      - {id: nation, text: nation, usage: allowed}\n      - {id: old, text: obsolete, usage: forbidden}\n",
+  );
+  await writeFile(
+    join(terms, "zh-CN.yaml"),
+    'concepts:\n  nation:\n    expressions:\n      - {id: preferred, text: 联邦, usage: preferred}\n      - {id: allowed, text: "联合<体>", usage: allowed}\n      - {id: forbidden, text: 旧译, usage: forbidden}\n',
+  );
+  await writeFile(
+    inputs.readmeTemplatePath,
+    "{{LANDS_VERSION}}\n{{TRANSLATION_FILES}}\n{{TERMINOLOGY}}\n保留用户正文\n",
+  );
+  await prepareTranslationPublication(inputs);
+  const readme = await readFile(
+    join(inputs.outputDirectory, "README.md"),
+    "utf8",
+  );
+  assert.ok(
+    readme.includes(
+      "| nation | 联邦, 联合&lt;体&gt; | 多个城镇 &#124; 联合<br>组成 |",
+    ),
+  );
+  assert.ok(readme.includes("保留用户正文"));
+  assert.ok(!readme.includes("obsolete"));
+  assert.ok(!readme.includes("旧译"));
+});
+
+void test("导出写出中途失败时保留空目标，不留下部分文件或临时目录", async (context) => {
+  const inputs = await createPublicationInputs(context);
+  await mkdir(inputs.outputDirectory);
+  const configuration = join(inputs.projectDirectory, ".lioni/project.yml");
+  await writeFile(
+    configuration,
+    (await readFile(configuration, "utf8")).replace(
+      "target: Locale/Nations/zh-CN.yml",
+      "target: LICENSE/nation.yml",
+    ),
+  );
+  await mkdir(join(inputs.projectDirectory, "LICENSE"));
+  await writeFile(
+    join(inputs.projectDirectory, "LICENSE/nation.yml"),
+    "messages: {}\n",
+  );
+  await assert.rejects(prepareTranslationPublication(inputs), {
+    code: "EEXIST",
+  });
+  assert.deepEqual(await readdir(inputs.outputDirectory), []);
+  assert.deepEqual(
+    (await readdir(dirname(inputs.outputDirectory))).filter((name) =>
+      name.startsWith(".lioni-export-"),
+    ),
+    [],
+  );
 });

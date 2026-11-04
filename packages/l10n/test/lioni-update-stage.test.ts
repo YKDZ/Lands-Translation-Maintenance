@@ -1,28 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { runLandsUpdateStage } from "../../src/lioni/update-stage.ts";
+import { runLandsUpdateStage } from "../src/lioni/update-stage.ts";
 import {
   landsJar,
   prepareBaselineUpdate,
   prepareSource,
-} from "../lioni-update-fixtures.ts";
+} from "./lioni-update-fixtures.ts";
 
-void test("同步阶段用完整 QA 接受数据报告并保留重复同步与人工编辑", async (t) => {
+void test("同步阶段用不执行 QA，保留重复同步与人工编辑", async (t) => {
   const project = await prepareBaselineUpdate(t);
-  await mkdir(join(project.projectDirectory, ".lioni/terms"), {
-    recursive: true,
-  });
-  await Promise.all(
-    ["concepts", "en-US", "zh-CN"].map((name) =>
-      writeFile(
-        join(project.projectDirectory, `.lioni/terms/${name}.yaml`),
-        "concepts: {}\n",
-      ),
-    ),
-  );
   const initialJar = join(project.projectDirectory, "Lands-initial.jar");
   await writeFile(
     initialJar,
@@ -42,10 +31,6 @@ void test("同步阶段用完整 QA 接受数据报告并保留重复同步与�
 
   const first = await runLandsUpdateStage(project.configPath);
   assert.equal(first.status, "completed");
-  assert.equal(first.qualityDecision.executionStatus, "complete");
-  assert.equal(first.qualityDecision.passed, false);
-  assert.ok(first.qualityDecision.activeErrorCount > 0);
-  assert.match(first.qualityReport, /质量结论/u);
 
   const translatedTarget = await readFile(project.targetPath, "utf8");
   const recordedBaseline = await readFile(project.baselinePath);

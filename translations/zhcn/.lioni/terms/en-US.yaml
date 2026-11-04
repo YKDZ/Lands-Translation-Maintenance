@@ -31,6 +31,32 @@ concepts:
       - id: en-US-areas
         text: areas
         usage: allowed
+  spawn-point:
+    expressions:
+      - id: en-US-spawn
+        text: spawn
+        usage: allowed
+      - id: en-US-spawn-point
+        text: spawn point
+        usage: allowed
+      - id: en-US-spawnpoint
+        text: spawnpoint
+        usage: allowed
+      - id: en-US-land-spawn
+        text: land spawn
+        usage: allowed
+      - id: en-US-area-spawn
+        text: area spawn
+        usage: allowed
+      - id: en-US-nation-spawn
+        text: nation spawn
+        usage: allowed
+      - id: en-US-world-spawn
+        text: world spawn
+        usage: allowed
+      - id: en-US-worlds-spawn
+        text: world's spawn
+        usage: allowed
   camp:
     expressions:
       - id: en-US-camp
@@ -285,11 +311,16 @@ concepts:
         usage: allowed
   shield:
     expressions:
-      - id: en-US-shield
-        text: shield
+      - id: en-US-war-shield
+        text: war shield
         usage: allowed
-      - id: en-US-shields
-        text: shields
+      - id: en-US-war-shields
+        text: war shields
+        usage: allowed
+  expiration-shield:
+    expressions:
+      - id: en-US-expiration-shield
+        text: expiration shield
         usage: allowed
   declare-noun:
     expressions:
@@ -330,4 +361,26 @@ concepts:
         usage: allowed
       - id: en-US-declaring-war
         text: declaring war
+        usage: allowed
+  tenant-cancellation:
+    expressions:
+      - id: en-US-tenant-cancellation-1
+        text: remove tenant
+        usage: allowed
+      - id: en-US-tenant-cancellation-2
+        text: remove the tenant
+        usage: allowed
+      - id: en-US-tenant-cancellation-3
+        text: remove the current tenant
+        usage: allowed
+      - id: en-US-tenant-cancellation-4
+        text: removed the tenant
+        usage: allowed
+      - id: en-US-tenant-cancellation-5
+        text: removed as a tenant
+        usage: allowed
+  compensation:
+    expressions:
+      - id: en-US-compensation
+        text: compensation
         usage: allowed
