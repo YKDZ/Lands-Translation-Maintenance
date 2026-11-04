@@ -41,6 +41,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 正式完整验收
         run: pnpm check:full
+      - name: 导出本次发布文件
+        run: pnpm --silent l10n:export "$RUNNER_TEMP/translation" > "$RUNNER_TEMP/translation.json"
       - name: 获取发布身份
         id: publication-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -51,6 +53,6 @@ jobs:
           repositories: Lands-Simplified-Chinese-Translation
           permission-contents: write
       - name: 发布译文与版本归档
-        run: pnpm l10n:publish
+        run: pnpm l10n:publish "$RUNNER_TEMP/translation" "$(jq -r .sourceVersion "$RUNNER_TEMP/translation.json")"
         env:
           GH_TOKEN: ${{ steps.publication-token.outputs.token }}

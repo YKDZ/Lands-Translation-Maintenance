@@ -2648,6 +2648,7 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
     "message-family-same-source",
     "message-family-same-template",
   ]) {
+    // 数值译文没有可比正文，因此消息族检查不适用；旧例外仍须识别为依据变化。
     assert.equal(
       checkResult(accepted.report, checkId).diagnostics.find(
         ({ object }) => object.key === sourceKey,
@@ -2701,7 +2702,7 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
   ]) {
     assert.equal(
       checkResult(unavailableReference.report, checkId).status,
-      "incomplete",
+      "not-applicable",
     );
     assert.equal(
       unavailableReference.report.exceptionApplicability.find(
@@ -3141,5 +3142,138 @@ void test("角色名 9.1.1 规则不外推到较早 Lands 来源版本", async (
   assert.equal(
     checkResult(report, "lands-role-name-duplicate").status,
     "not-applicable",
+  );
+});
+
+void test("原生 QA 识别不产生正文候选的旧空壳、废弃 GUI 和无槽位残片，清理后通过", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    "<red>Confirm</red>",
+    "<red>确认</red>",
+    {
+      sourceVersion: "9.1.1",
+      chat: { source: "Hello", target: "你好" },
+    },
+  );
+  const guiFile = join(project.directory, "Locale/zh-CN_gui.yml");
+  const chatFile = join(project.directory, "Locale/zh-CN_messages.yml");
+  const originalGui = await readFile(guiFile, "utf8");
+  const originalChat = await readFile(chatFile, "utf8");
+  await writeFile(
+    guiFile,
+    originalGui.replace(
+      "    items:\n",
+      "    items:\n      default:\n        refresh_removed: {}\n        tribute_removed:\n          bedrock:\n            detail: true\n",
+    ) + "  obsolete_menu:\n    items:\n      default:\n        old: {}\n",
+  );
+  await writeFile(chatFile, originalChat + "old_command:\n  nested: {}\n");
+
+  const failed = runLioni(["qa", project.configPath]);
+  const check = checkResult(
+    qualityReport(failed).report,
+    "lands-language-load",
+  );
+  assert.equal(failed.status, 1);
+  assert.equal(check.status, "complete");
+  assert.deepEqual(
+    check.diagnostics
+      .map(({ object }) => object.code)
+      .sort((left, right) => String(left).localeCompare(String(right))),
+    [
+      "lands.language.invalid-slots",
+      "lands.language.invalid-slots",
+      "lands.language.unused-menu",
+      "lands.language.unused-value",
+      "lands.language.unused-value",
+    ],
+  );
+  assert.ok(
+    check.diagnostics.some(
+      ({ location }) =>
+        location.range.file === "Locale/zh-CN_gui.yml" &&
+        location.range.path.at(-1) === "tribute_removed",
+    ),
+  );
+  assert.ok(
+    check.diagnostics.some(
+      ({ location }) =>
+        location.range.file === "Locale/zh-CN_messages.yml" &&
+        location.range.path.join(".") === "old_command.nested",
+    ),
+  );
+
+  await writeFile(guiFile, originalGui);
+  await writeFile(chatFile, originalChat);
+  const passed = runLioni(["qa", project.configPath]);
+  assert.equal(passed.status, 0, passed.stdout);
+  const cleaned = checkResult(
+    qualityReport(passed).report,
+    "lands-language-load",
+  );
+  assert.equal(cleaned.status, "complete");
+  assert.deepEqual(cleaned.diagnostics, []);
+});
+
+void test("原生 QA 只读检查间隔，定位 lore 行并排除禁止空格的角色名，修订译文后通过", async (t) => {
+  const project = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.1.1",
+      chat: {
+        source: "<red>Land <v:land> claimed 10 chunks.</red>",
+        target: "<red>城镇 <v:land>已占领10个区块.</red>",
+      },
+      sourceLore: ["<red>Limit 10 chunks", "Second line</red>"],
+      targetLore: ["<red>上限10个区块", "第二行</red>"],
+      roles: {
+        source: [{ key: "test", name: "Name" }],
+        target: [{ key: "test", name: "称号A" }],
+      },
+    },
+  );
+  const chatFile = join(project.directory, "Locale/zh-CN_messages.yml");
+  const guiFile = join(project.directory, "Locale/zh-CN_gui.yml");
+  const before = await Promise.all([
+    readFile(chatFile, "utf8"),
+    readFile(guiFile, "utf8"),
+  ]);
+  const failed = runLioni(["qa", project.configPath]);
+  const spacing = checkResult(
+    qualityReport(failed).report,
+    "translation-spacing",
+  );
+  assert.equal(failed.status, 1, failed.stdout);
+  assert.equal(spacing.status, "complete");
+  assert.equal(
+    spacing.diagnostics.length,
+    5,
+    JSON.stringify(spacing.diagnostics),
+  );
+  assert.deepEqual(
+    spacing.diagnostics
+      .filter(({ location }) => location.range.file === "Locale/zh-CN_gui.yml")
+      .map(({ location }) => location.range.path),
+    [
+      ["gui", "main", "items", "confirm", "lore", 0],
+      ["gui", "main", "items", "confirm", "lore", 0],
+    ],
+  );
+  assert.deepEqual(
+    await Promise.all([readFile(chatFile, "utf8"), readFile(guiFile, "utf8")]),
+    before,
+  );
+
+  await writeFile(chatFile, before[0]!.replace("已占领10个", " 已占领 10 个"));
+  await writeFile(guiFile, before[1]!.replace("上限10个", "上限 10 个"));
+  const passed = runLioni(["qa", project.configPath]);
+  assert.equal(passed.status, 0, passed.stdout);
+  assert.deepEqual(
+    checkResult(qualityReport(passed).report, "translation-spacing")
+      .diagnostics,
+    [],
   );
 });

@@ -23,6 +23,8 @@ concepts:
       - path: README.md
         commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
         section: 术语表
+  spawn-point:
+    note: 为城镇、子区域或联邦设置，供玩家传送前往的固定位置；世界默认出生位置不适用此译法。
   camp:
     note: 临时、固定大小的城镇。
     sourceRefs:
@@ -48,7 +50,7 @@ concepts:
         commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
         section: 术语表
   tenant:
-    note: 区域租客和买主都用此词。
+    note: 租用或购买子区域的玩家, 统一称为住户; 包括租客和子区域买主。
     sourceRefs:
       - path: README.md
         commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
@@ -191,6 +193,13 @@ concepts:
       - path: README.md
         commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
         section: 术语表
+  expiration-shield:
+    note: 管理员启用后，可防止非活跃城镇因过期而被删除。
+    sourceRefs:
+      - path: Locale/en-US_gui.yml
+        section: expiration.reason.shield
+      - path: Locale/en-US_gui.yml
+        section: gui.list_area_settings.items.default.entry_expiration_shield
   declare-noun:
     note: 名词义，常见完整短语为 war declaration。
     sourceRefs:
@@ -203,3 +212,13 @@ concepts:
       - path: README.md
         commit: b8f6985a4ad2af1b76b05f0f79b718a2234623ad
         section: 术语表
+  tenant-cancellation:
+    note: 城镇方解除子区域已有的租用或购买合约, 结束住户身份并收回子区域; 与普通成员移出和撤销租售报价区分。
+    sourceRefs:
+      - path: Locale/en-US.yml
+        section: lands.command.rental.remove.tenant
+      - url: https://github.com/IncrediblePlugins/LandsAPI/blob/master/src/main/java/me/angeschossen/lands/api/land/rental/offer/base/AcceptedRentalOfferBase.java
+  compensation:
+    note: 城镇方与住户解约时支付的补偿金, 涵盖租客和子区域买主, 不表示额外违约罚金。
+    sourceRefs:
+      - url: https://github.com/IncrediblePlugins/LandsAPI/blob/master/src/main/java/me/angeschossen/lands/api/land/rental/offer/base/AcceptedRentalOfferBase.java

@@ -1,13 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import {
-  analyzeQuality,
-  decideQualityReport,
-  formatQualityReport,
-  readFacts,
-  update,
-} from "@lioni/lioni";
+import { readFacts, update } from "@lioni/lioni";
 import {
   createFileComparisonBaselineStore,
   loadConfig,
@@ -48,7 +42,10 @@ function updateFailureMessage(
   return `同步未完整，比较基线未推进；请先完成同步再开始翻译${detail === undefined ? "。" : `：${detail}`}`;
 }
 
-/** 通过公开 Lioni SDK 执行正式更新、基线推进和完整 QA。 */
+/**
+ * 内部同步步骤：通过公开 Lioni SDK 同步并推进基线，验收由 check:full 独立执行。
+ * SDK 中断时可能已部分写回；可回退的更新入口须在隔离项目副本中调用。
+ */
 export async function runLandsUpdateStage(entry: string | URL) {
   const configPath = configPathOf(entry);
   const paths = landsProjectPaths(pathToFileURL(configPath));
@@ -76,23 +73,5 @@ export async function runLandsUpdateStage(entry: string | URL) {
     };
   }
 
-  const quality = await analyzeQuality(config);
-  const qualityDecision = decideQualityReport(quality);
-  const qualityReport = formatQualityReport(quality);
-  if (qualityDecision.executionStatus !== "complete") {
-    return {
-      status: "quality-incomplete" as const,
-      message: "同步已完成，但质量检查未能完整执行。",
-      update: updateResult,
-      qualityDecision,
-      qualityReport,
-    };
-  }
-
-  return {
-    status: "completed" as const,
-    update: updateResult,
-    qualityDecision,
-    qualityReport,
-  };
+  return { status: "completed" as const, update: updateResult };
 }

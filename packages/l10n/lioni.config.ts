@@ -4,6 +4,7 @@ import {
   loadTermbaseYaml,
 } from "@lioni/lioni/node";
 
+import { landsLanguageLoadCheck } from "#/lands-language-load-check";
 import { landsRoleNameDuplicateCheck } from "#/lands-role-name-duplicate-check";
 import { landsRoleNameValidityCheck } from "#/lands-role-name-validity-check";
 import { landsStructureConsistencyCheck } from "#/lands-structure-consistency-check";
@@ -23,6 +24,7 @@ import { miniMessagePunctuationCheck } from "#/minimessage-punctuation-check";
 import { loadMiniMessageQualityDependencies } from "#/minimessage-quality";
 import { miniMessageSameSourceFamilyCheck } from "#/minimessage-same-source-family-check";
 import { miniMessageSameTemplateFamilyCheck } from "#/minimessage-same-template-family-check";
+import { miniMessageSpacingCheck } from "#/minimessage-spacing-check";
 import { miniMessageSyntaxCheck } from "#/minimessage-syntax-check";
 import { miniMessageTagCorrespondenceCheck } from "#/minimessage-tag-correspondence-check";
 import {
@@ -45,6 +47,7 @@ export function createLandsConfig(entryUrl: string | URL) {
     quality: {
       buildCandidates: buildTranslationOmissionCandidates,
       checks: [
+        landsLanguageLoadCheck,
         miniMessageSyntaxCheck,
         miniMessageThemeCheck,
         miniMessageTagCorrespondenceCheck,
@@ -57,6 +60,7 @@ export function createLandsConfig(entryUrl: string | URL) {
         landsTerminologyCheck,
         miniMessagePunctuationCheck,
         miniMessageHonorificCheck,
+        miniMessageSpacingCheck,
         landsRoleNameValidityCheck,
         landsRoleNameDuplicateCheck,
         miniMessageVariableCorrespondenceCheck,

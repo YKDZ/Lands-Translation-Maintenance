@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { cp, mkdtemp, rename, rm } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -8,203 +9,135 @@ import {
   runLandsUpdateStage,
 } from "@lands-l10n/l10n/maintenance";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const workspaceDirectory = resolve(scriptDirectory, "..");
+const workspaceDirectory = resolve(import.meta.dirname, "..");
 
-function git(workingDirectory: string, arguments_: readonly string[]): string {
-  const result = spawnSync("git", [...arguments_], {
-    cwd: workingDirectory,
-    encoding: "utf8",
-  });
-  if (result.error !== undefined) {
-    throw new Error(`无法运行 Git：${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Git ${arguments_.join(" ")} 失败（退出码 ${String(result.status)}）：${(result.stderr || result.stdout).trim()}`,
-    );
-  }
-  return result.stdout.trim();
-}
-
-async function runTurboBuilds(): Promise<void> {
-  await new Promise<void>((resolveBuild, rejectBuild) => {
-    const child = spawn(
-      "pnpm",
-      [
-        "exec",
-        "turbo",
-        "run",
-        "@lands-l10n/l10n#build",
-        "@lands-l10n/l10n#build:minimessage",
-      ],
-      { cwd: workspaceDirectory, stdio: "inherit" },
-    );
-    child.once("error", (error) => rejectBuild(error));
-    child.once("exit", (status, signal) => {
-      if (status === 0) {
-        resolveBuild();
-      } else {
-        rejectBuild(
-          new Error(
-            `Lioni 与 MiniMessage 构建失败（${signal === null ? `退出码 ${String(status)}` : `信号 ${signal}`}）。`,
-          ),
-        );
-      }
-    });
-  });
-}
-
-async function formatComparisonBaseline(configPath: string): Promise<void> {
-  const baselinePath = resolve(dirname(configPath), "lioni.baseline.json");
-  await new Promise<void>((resolveFormat, rejectFormat) => {
-    const child = spawn("pnpm", ["exec", "oxfmt", "--write", baselinePath], {
+async function run(command: string, args: readonly string[]): Promise<void> {
+  await new Promise<void>((resolveRun, rejectRun) => {
+    const child = spawn(command, [...args], {
       cwd: workspaceDirectory,
       stdio: "inherit",
     });
-    child.once("error", (error) => rejectFormat(error));
+    child.once("error", rejectRun);
     child.once("exit", (status, signal) => {
-      if (status === 0) {
-        resolveFormat();
-      } else {
-        rejectFormat(
+      if (status === 0) resolveRun();
+      else
+        rejectRun(
           new Error(
-            `Lioni 比较基线格式化失败（${signal === null ? `退出码 ${String(status)}` : `信号 ${signal}`}）。`,
+            `${command} 失败（${signal === null ? `退出码 ${String(status)}` : `信号 ${signal}`}）。`,
           ),
         );
-      }
     });
   });
 }
 
-/** 首次建立版本分支，后续切回同版本分支；不暂存或清理工作区。 */
-function switchToVersionBranch(
-  gitDirectory: string,
-  sourceVersion: string,
-): string {
-  const branch = `update/lands-${sourceVersion}`;
-  const validation = spawnSync(
-    "git",
-    ["check-ref-format", "--branch", branch],
-    {
-      cwd: gitDirectory,
-      encoding: "utf8",
-    },
+/**
+ * 在同一文件系统的临时副本中准备快照、译文和基线，全部完成后替换项目目录。
+ * 保留项目中的人工编辑；普通失败不改动原目录。调用期间应暂停对该项目的其他写入。
+ * 目录提交使用两次 rename；第二步失败时恢复原目录，进程强制中断时保留备份供恢复。
+ */
+export async function updateTranslationProject(
+  jarPath: string,
+  configPath: string,
+) {
+  const projectDirectory = dirname(dirname(configPath));
+  const temporaryDirectory = await mkdtemp(
+    join(dirname(projectDirectory), ".lioni-update-"),
   );
-  if (validation.error !== undefined || validation.status !== 0) {
-    throw new Error(`Lands 来源版本无法用于 Git 分支名：${sourceVersion}`);
+  const stagedProject = join(temporaryDirectory, "project");
+  const backup = join(temporaryDirectory, "original");
+  let retainBackup = false;
+  try {
+    await cp(projectDirectory, stagedProject, {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
+    const stagedConfig = join(
+      stagedProject,
+      relative(projectDirectory, configPath),
+    );
+    const source = await prepareLandsSource(
+      jarPath,
+      pathToFileURL(stagedConfig),
+    );
+    const stage = await runLandsUpdateStage(stagedConfig);
+    if (stage.status !== "completed") throw new Error(stage.message);
+    await run("pnpm", [
+      "exec",
+      "oxfmt",
+      "--write",
+      join(dirname(stagedConfig), "lioni.baseline.json"),
+    ]);
+
+    await rename(projectDirectory, backup);
+    retainBackup = true;
+    try {
+      await rename(stagedProject, projectDirectory);
+    } catch (error) {
+      try {
+        await rename(backup, projectDirectory);
+        retainBackup = false;
+      } catch (restoreError) {
+        throw new AggregateError(
+          [error, restoreError],
+          `更新提交失败，原项目保留在 ${backup}，请恢复后重试。`,
+        );
+      }
+      throw error;
+    }
+    retainBackup = false;
+    return source;
+  } finally {
+    if (!retainBackup)
+      await rm(temporaryDirectory, { recursive: true, force: true });
   }
-
-  const currentBranch = git(gitDirectory, [
-    "rev-parse",
-    "--abbrev-ref",
-    "HEAD",
-  ]);
-  if (currentBranch === branch) return branch;
-
-  const existingBranch = spawnSync(
-    "git",
-    ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
-    { cwd: gitDirectory, encoding: "utf8" },
-  );
-  if (existingBranch.error !== undefined) {
-    throw new Error(`无法检查版本分支：${existingBranch.error.message}`);
-  }
-  const switchArguments =
-    existingBranch.status === 0
-      ? ["switch", branch]
-      : ["switch", "--create", branch];
-  git(gitDirectory, switchArguments);
-  return branch;
-}
-
-function printUsage(): void {
-  process.stdout.write(
-    "用法：pnpm l10n:update --jar <Lands.jar> [--config <lioni.config.ts>]\n",
-  );
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function parseInvocation() {
-  return parseArgs({
-    args: process.argv.slice(2),
-    options: {
-      config: { type: "string" },
-      help: { type: "boolean", short: "h" },
-      jar: { type: "string" },
-    },
-    strict: true,
-  });
 }
 
 async function main(): Promise<void> {
-  let invocation: ReturnType<typeof parseInvocation>;
-  try {
-    invocation = parseInvocation();
-  } catch (error) {
-    process.stderr.write(`参数格式无效：${errorMessage(error)}\n`);
-    printUsage();
-    process.exitCode = 2;
-    return;
-  }
-
-  if (invocation.values.help) {
-    printUsage();
-    return;
-  }
-  const jar = invocation.values.jar;
-  if (jar === undefined) {
-    process.stderr.write("必须提供 --jar。\n");
-    process.exitCode = 2;
-    return;
-  }
-
-  try {
-    const gitDirectory = git(process.cwd(), ["rev-parse", "--show-toplevel"]);
-    const jarPath = resolve(gitDirectory, jar);
-    const configPath = resolve(
-      gitDirectory,
-      invocation.values.config ?? "translations/zhcn/.lioni/lioni.config.ts",
-    );
-
-    // pnpm 直接调用不会执行当前任务图，构建依赖由此显式交给 Turbo。
-    if (process.env.TURBO_HASH === undefined) await runTurboBuilds();
-
-    const source = await prepareLandsSource(jarPath, pathToFileURL(configPath));
-    const branch = switchToVersionBranch(gitDirectory, source.sourceVersion);
+  const { values } = parseArgs({
+    options: {
+      jar: { type: "string" },
+      config: { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+    strict: true,
+  });
+  if (values.help) {
     process.stdout.write(
-      `正在 ${branch} 准备 Lands ${source.sourceVersion} 的同步。\n`,
+      "用法：pnpm l10n:update --jar <Lands.jar> [--config <lioni.config.ts>]\n",
     );
+    return;
+  }
+  if (values.jar === undefined) throw new Error("必须提供 --jar。");
+  const gitRoot = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+  });
+  if (gitRoot.status !== 0) throw new Error("请在维护仓库中执行更新。");
+  const directory = gitRoot.stdout.trim();
+  // 直接 pnpm 调用不会执行任务图，构建依赖仍统一交给 Turbo。
+  if (process.env.TURBO_HASH === undefined)
+    await run("pnpm", ["exec", "turbo", "run", "@lands-l10n/l10n#build"]);
+  const source = await updateTranslationProject(
+    resolve(directory, values.jar),
+    resolve(
+      directory,
+      values.config ?? "translations/zhcn/.lioni/lioni.config.ts",
+    ),
+  );
+  process.stdout.write(
+    `已更新 Lands ${source.sourceVersion} 的原文快照、译文结构和比较基线。请运行 pnpm check:full 验收。\n`,
+  );
+}
 
-    const stage = await runLandsUpdateStage(configPath);
-    if (stage.status === "sync-incomplete") {
-      process.stderr.write(`${stage.message}\n`);
-      process.exitCode = 1;
-      return;
-    }
-
-    // 比较基线由 Lioni 写回；交给现有根格式器完成正式资料的格式化。
-    await formatComparisonBaseline(configPath);
-
-    process.stdout.write(`${stage.qualityReport}\n`);
-    if (stage.status === "quality-incomplete") {
-      process.stderr.write(`${stage.message}\n`);
-      process.exitCode = 1;
-      return;
-    }
-
-    process.stdout.write(
-      stage.qualityDecision.passed
-        ? "同步与质量检查均已完成。\n"
-        : "同步与质量检查均已完成；质量未通过，请先处理报告中的数据问题。\n",
-    );
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    await main();
   } catch (error) {
-    process.stderr.write(`Lands 同步准备失败：${errorMessage(error)}\n`);
+    process.stderr.write(
+      `Lands 更新失败：${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exitCode = 1;
   }
 }
-
-await main();

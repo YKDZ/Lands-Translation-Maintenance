@@ -4,6 +4,9 @@ concepts:
       - id: zh-CN-联邦
         text: 联邦
         usage: allowed
+      - id: zh-CN-国家
+        text: 国家
+        usage: allowed
   capital:
     expressions:
       - id: zh-CN-首都
@@ -18,6 +21,11 @@ concepts:
     expressions:
       - id: zh-CN-子区域
         text: 子区域
+        usage: allowed
+  spawn-point:
+    expressions:
+      - id: zh-CN-传送点
+        text: 传送点
         usage: allowed
   camp:
     expressions:
@@ -76,6 +84,15 @@ concepts:
     expressions:
       - id: zh-CN-取消占领
         text: 取消占领
+        usage: allowed
+      - id: zh-CN-未占领
+        text: 未占领
+        usage: allowed
+      - id: zh-CN-解除占领
+        text: 解除占领
+        usage: allowed
+      - id: zh-CN-取消
+        text: 取消
         usage: allowed
   natural-settings:
     expressions:
@@ -162,6 +179,11 @@ concepts:
       - id: zh-CN-战争护盾
         text: 战争护盾
         usage: allowed
+  expiration-shield:
+    expressions:
+      - id: zh-CN-过期保护
+        text: 过期保护
+        usage: allowed
   declare-noun:
     expressions:
       - id: zh-CN-宣战书
@@ -171,4 +193,14 @@ concepts:
     expressions:
       - id: zh-CN-宣战
         text: 宣战
+        usage: allowed
+  tenant-cancellation:
+    expressions:
+      - id: zh-CN-解约
+        text: 解约
+        usage: allowed
+  compensation:
+    expressions:
+      - id: zh-CN-补偿金
+        text: 补偿金
         usage: allowed

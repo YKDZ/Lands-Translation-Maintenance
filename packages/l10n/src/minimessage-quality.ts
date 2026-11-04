@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 
 import type { JsonValue } from "#/json-value";
+import { inspectLandsLanguageLoad } from "#/lands-language-load";
 import type {
   LandsStructureProjection,
   LandsJson,
@@ -65,6 +66,7 @@ export interface MiniMessageQualityObject extends QualityObject {
 }
 
 export interface MiniMessageQualityDependencies {
+  readonly languageLoad?: ReturnType<typeof inspectLandsLanguageLoad>;
   readonly sourceVersion: string;
   readonly resources: readonly ResourceInventoryEntry[];
   readonly messages: readonly MiniMessageInputMessage[];
@@ -413,6 +415,15 @@ export async function projectMiniMessageQualityInputs(
       ? {}
       : { landsProjection: options.landsProjection }),
     readIssues: options.readIssues ?? [],
+    ...(options.landsProjection === undefined
+      ? {}
+      : {
+          languageLoad: inspectLandsLanguageLoad(
+            options.landsProjection.mappings.flatMap((mapping) =>
+              mapping.languageLoad === undefined ? [] : [mapping.languageLoad],
+            ),
+          ),
+        }),
   };
 }
 

@@ -313,9 +313,39 @@ export function pairTranslatableTextDocuments(
     targetDocument: TranslatableTextDocument;
   }[] = [];
   for (const { source, target } of groups.values()) {
-    if (source.length === 1 && target.length === 1) {
-      pairs.push({ sourceDocument: source[0]!, targetDocument: target[0]! });
-      continue;
+    if (source.length > 0 && source.length === target.length) {
+      // 同一字段可重复使用相同的 hover/参数所属范围；按原始位置配对，
+      // 不以可翻译文案或投影收集顺序识别实例。数量不符时保留整组不完整，避免错位匹配。
+      const byPosition = (
+        left: TranslatableTextDocument,
+        right: TranslatableTextDocument,
+      ) =>
+        left.range.start - right.range.start ||
+        left.documentIndex - right.documentIndex;
+      const orderedSource = source.toSorted(byPosition);
+      const orderedTarget = target.toSorted(byPosition);
+      const distinctOccurrences = (
+        documents: readonly TranslatableTextDocument[],
+      ) =>
+        documents.length === 1 ||
+        documents.every(
+          (document, index) =>
+            document.documentIndex > 0 &&
+            (index === 0 ||
+              document.range.start > documents[index - 1]!.range.start),
+        );
+      if (
+        distinctOccurrences(orderedSource) &&
+        distinctOccurrences(orderedTarget)
+      ) {
+        for (let index = 0; index < orderedSource.length; index += 1) {
+          pairs.push({
+            sourceDocument: orderedSource[index]!,
+            targetDocument: orderedTarget[index]!,
+          });
+        }
+        continue;
+      }
     }
     if (
       source.length === 1 &&

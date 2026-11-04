@@ -65,27 +65,9 @@
     },
     "//#l10n:update": {
       "cache": false,
-      "dependsOn": [
-        "@lands-l10n/l10n#build",
-        "@lands-l10n/l10n#build:minimessage"
-      ],
+      "dependsOn": ["@lands-l10n/l10n#build"],
       "outputs": [],
       "tags": ["work:on-demand"]
-    },
-    "//#l10n:review": {
-      "cache": false,
-      "outputs": [],
-      "tags": ["work:on-demand"]
-    },
-    "//#l10n:submit": {
-      "cache": false,
-      "outputs": [],
-      "tags": ["work:on-demand"]
-    },
-    "//#l10n:preview": {
-      "cache": false,
-      "outputs": [],
-      "tags": ["work:preparation"]
     },
     "//#l10n:publish": {
       "cache": false,
@@ -119,16 +101,13 @@
       "outputs": [],
       "tags": ["quality:light"]
     },
-    "//#test:l10n-review": {
+    "//#l10n:export": {
       "cache": false,
-      "dependsOn": [
-        "@lands-l10n/l10n#build",
-        "@lands-l10n/l10n#build:minimessage"
-      ],
       "outputs": [],
-      "tags": ["quality:heavy"]
+      "tags": ["work:preparation"]
     },
-    "//#test:l10n-submit": {
+    "//#test:l10n-update": {
+      "dependsOn": ["@lands-l10n/l10n#build"],
       "outputs": [],
       "tags": ["quality:light"]
     }

@@ -33,40 +33,7 @@
 
 本插件使用了数个赋予了特殊含义的名词和动词（术语），它们的翻译可能随着服务器的玩法和性质等而改变，故提供术语表，方便使用 `VSCode` 等编辑器的**批量修改功能**快速地进行匹配和替换以满足各类服务器的需求。
 
-| 术语                     | 翻译            | 备注                                                    |
-| ------------------------ | --------------- | ------------------------------------------------------- |
-| Nation                   | 联邦            |                                                         |
-| Capital                  | 首都            | 建立联邦的那个城镇                                      |
-| Land                     | 城镇            |                                                         |
-| Area                     | 子区域          | 城镇领土内划出的小区域                                  |
-| Camp                     | 露营地          | 临时、固定大小的城镇，通过放置一个营火道具创建          |
-| Wilderness               | 荒野            | 没有被占领的区块                                        |
-| Role                     | 职位            | 用于城镇或联邦的成员权限控制                            |
-| Owner                    | 所有者          |                                                         |
-| Tenant                   | 住户            | 区域的租客和买主都用这个词表示                          |
-| Trust                    | 邀请, 加入      | 对应其他领地插件中的 invite，在玩家眼中相当于 “被” join |
-| Trusted Player           | 成员            |                                                         |
-| Untrust                  | 移出            | 对应其他领地插件中的 kick，在玩家眼中相当于 “被” leave  |
-| Claim                    | v.占领 n.领土   |                                                         |
-| Unclaim                  | 取消占领        |                                                         |
-| Natural Flags / Settings | 环境设置        | 区域中是否能刷怪、TNT 是否可以破坏方块等                |
-| Role Flags / Settings    | 职位设置        | 职位中的玩家是否可以破坏方块等                          |
-| Mainblock                | 城镇核心        | 城镇被创建时自动产生的方块结构                          |
-| Bank                     | 金库            | 城镇和联邦的 “银行”                                     |
-| Storage                  | 仓库            | 城镇核心具有的储存物品的虚拟空间                        |
-| Upkeep                   | 维护费          | 城镇和联邦需要定时向服务器支付的款项                    |
-| Taxes                    | 税费            | 城镇或联邦成员需要定时向所属城镇或联邦支付的款项        |
-| Relation                 | 外交关系        | 城镇或联邦等在战争中的关系                              |
-| Ally                     | 盟友            |                                                         |
-| Enemy                    | 政敌            |                                                         |
-| Neutral                  | 中立            |                                                         |
-| War                      | 战争            |                                                         |
-| Capture Block / Flag     | 战旗            | 战争中攻方用于占领守方领土的信标道具                    |
-| Attacker                 | 攻方            |                                                         |
-| Defender                 | 守方            |                                                         |
-| Tribute                  | 赔偿金          | 战争中一方投降后需要向另一方支付的款项                  |
-| Shield                   | 战争护盾        | 保护城镇或联邦免于战争的时间                            |
-| Declare                  | n.宣战书 v.宣战 |                                                         |
+{{TERMINOLOGY}}
 
 ## 风格化
 
@@ -76,15 +43,11 @@
 
 本仓库主分支提供当前版本的翻译。每次正式发布都会在 [Releases](https://github.com/YKDZ/Lands-Simplified-Chinese-Translation/releases) 保存当次文件，可按插件版本选择下载。
 
-请下载 Release 附件中的 `lands-版本-zh-CN-r修订号.zip`。解压后直接得到 `Locale/` 等目录及配置文件；安装方式见上文。相同插件版本的翻译修订用 `r1`、`r2` 等区分。
-
-历史归档保留当时的内容，不随新版本更新。升级插件或替换翻译前，请备份现有配置，并确认下载版本适用于你的插件。
-
 ## 贡献
 
-若发现遗漏或错误的翻译条目（包括但不限于样式代码缺漏、错字漏字、同词异译等），烦请在本仓库的 [Issues](https://github.com/YKDZ/Lands-Simplified-Chinese-Translation/issues) 中反馈。
+本仓库实际上是 [维护仓库](https://github.com/YKDZ/Lands-Translation-Maintenance) 的一个投影。若发现遗漏或错误的翻译条目（包括但不限于样式代码缺漏、错字漏字、同词异译等），可以在维护仓库中提交 Issue。
 
-如需直接提交修改，请前往 [翻译维护仓库](https://github.com/YKDZ/Lands-Translation-Maintenance) 提交 Pull Request。
+想要参与翻译贡献时，也请在维护仓库中进行，本仓库不应被手动提交修改。
 
 ## 支持
 
