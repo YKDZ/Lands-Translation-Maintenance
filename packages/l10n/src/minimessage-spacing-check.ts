@@ -99,7 +99,6 @@ export const miniMessageSpacingCheck = defineQualityCheck<
     const view = viewFor(input);
     if (
       input.candidate.language !== "zh-CN" ||
-      view?.message.scene === "role-name" ||
       !hasMiniMessageInput(input, dependencies)
     )
       return outcome("not-applicable", [], []);

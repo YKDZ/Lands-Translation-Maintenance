@@ -251,10 +251,3 @@ translationScope:
         - path: [land, categories, "*", description]
           category: configuration-string-list
           scene: category-description
-    - source: roles.yml
-      target: roles.yml
-      definitionsSource: roles.yml
-      fields:
-        - path: [land, roles, "*", name]
-          category: configuration-string
-          scene: role-name

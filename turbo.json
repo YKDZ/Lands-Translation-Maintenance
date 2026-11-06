@@ -38,7 +38,7 @@
         "translations/zhcn/Locale/**",
         "translations/zhcn/Modules/**",
         "translations/zhcn/categories.yml",
-        "translations/zhcn/roles.yml"
+        "!translations/zhcn/roles.yml"
       ],
       "outputs": [],
       "tags": ["quality:heavy"]

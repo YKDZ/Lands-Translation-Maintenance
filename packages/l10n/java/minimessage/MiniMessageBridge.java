@@ -54,8 +54,7 @@ public final class MiniMessageBridge {
       String input,
       int[] sourceOffsets,
       boolean exact,
-      boolean requiresRenderedProjection,
-      boolean roleNameTarget) {}
+      boolean requiresRenderedProjection) {}
 
   private record StyleParse(Style style, String error, int start, int end) {}
 
@@ -268,38 +267,6 @@ public final class MiniMessageBridge {
   private static TagResolver messageResolver(Map<String, Style> theme) {
     TagResolver standard = StandardTags.defaults();
     return TagResolver.resolver(standard, themeResolver(theme), variableResolver());
-  }
-
-  private static TagResolver roleNameResolver(Map<String, Style> theme) {
-    // Lands 重复角色名只用标准标签和当前主题；不把消息变量占位 resolver 带入比较。
-    return TagResolver.resolver(StandardTags.defaults(), themeResolver(theme));
-  }
-
-  private static String roleNameRule(String raw, String plainText) {
-    // 不含数据库长度上限和语言禁用词；这两项由部署状态决定，不能静态推断。
-    if (raw.isEmpty()) return "blank";
-    String name = plainText.trim().toLowerCase(Locale.ENGLISH);
-    if (name.equals("here") || name.equals("all")) return "reserved";
-    if (plainText.indexOf('<') >= 0 || plainText.indexOf('>') >= 0) return "markup";
-    if (plainText.isBlank()) return "blank";
-    if (plainText.contains(" ")) return "space";
-
-    String characters = plainText.startsWith("*") ? plainText.substring(1) : plainText;
-    for (char character : characters.replaceAll("\\s", "").toCharArray()) {
-      if (Character.isLetterOrDigit(character)
-          || "_-%'.!?".indexOf(character) >= 0) continue;
-      return "character";
-    }
-    return "";
-  }
-
-  private static MiniMessage roleNameValidationParser() {
-    return MiniMessage.builder()
-        .tags(TagResolver.resolver(
-            StandardTags.color(),
-            StandardTags.decorations(),
-            StandardTags.reset()))
-        .build();
   }
 
   private static MappedValue decodePart(String input, Token token, SourceMap sourceMap) {
@@ -918,13 +885,12 @@ public final class MiniMessageBridge {
         themes.add(new ThemeInput(Integer.parseInt(fields.get(1)), decode(fields.get(2)),
             decode(fields.get(3)), decode(fields.get(4))));
       } else if (fields.get(0).equals("M")
-          && (fields.size() == 4 || fields.size() == 7 || fields.size() == 8
-              || fields.size() == 9)) {
+          && (fields.size() == 4 || fields.size() == 7 || fields.size() == 8)) {
         String surface = decode(fields.get(2));
         if (fields.size() == 4) {
           String input = decode(fields.get(3));
           messages.add(new MessageInput(Integer.parseInt(fields.get(1)), surface,
-              input, input, identityOffsets(input), true, false, false));
+              input, input, identityOffsets(input), true, false));
         } else {
           String originalInput = decode(fields.get(3));
           String input = decode(fields.get(4));
@@ -944,16 +910,9 @@ public final class MiniMessageBridge {
             }
             requiresRenderedProjection = fields.get(7).equals("true");
           }
-          boolean roleNameTarget = false;
-          if (fields.size() == 9) {
-            if (!fields.get(8).equals("true") && !fields.get(8).equals("false")) {
-              throw new IllegalArgumentException("角色名标记无效");
-            }
-            roleNameTarget = fields.get(8).equals("true");
-          }
           messages.add(new MessageInput(Integer.parseInt(fields.get(1)), surface,
               originalInput, input, sourceOffsets, fields.get(6).equals("true"),
-              requiresRenderedProjection, roleNameTarget));
+              requiresRenderedProjection));
         }
       } else {
         throw new IllegalArgumentException("Invalid bridge request row");
@@ -975,9 +934,6 @@ public final class MiniMessageBridge {
       }
     }
 
-    Map<Integer, String> renderedRoleNames = new java.util.LinkedHashMap<>();
-    // 固定校验失败的名称会先替换为 invalid_N，不能拿原始非法文本参与重复比较。
-    Set<Integer> validRoleNames = new HashSet<>();
     for (MessageInput message : messages) {
       Map<String, Style> theme = stylesBySurface.getOrDefault(message.surface(), Map.of());
       MiniMessage runtimeParser = MiniMessage.builder()
@@ -1002,52 +958,6 @@ public final class MiniMessageBridge {
             + encode(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()));
       }
 
-      if (message.roleNameTarget()) {
-        String raw = message.originalInput().trim();
-        try {
-          String plain = raw.isEmpty()
-              ? ""
-              : PlainTextComponentSerializer.plainText()
-                  .serialize(roleNameValidationParser().deserialize(message.input()))
-                  .replace("\ue000", "");
-          String rule = roleNameRule(raw, plain);
-          System.out.println("R\t" + message.index() + "\tok\t" + encode(plain)
-              + "\t" + rule + "\t");
-          if (rule.isEmpty()) validRoleNames.add(message.index());
-        } catch (ParsingException exception) {
-          System.out.println("R\t" + message.index() + "\tinvalid\t\t\t"
-              + encode(exception.detailMessage() == null
-                  ? exception.getClass().getSimpleName() : exception.detailMessage()));
-        } catch (RuntimeException exception) {
-          System.out.println("R\t" + message.index() + "\tfailed\t\t\t"
-              + encode(exception.getMessage() == null
-                  ? exception.getClass().getSimpleName() : exception.getMessage()));
-        }
-
-        try {
-          MiniMessage parser = MiniMessage.builder()
-              .tags(roleNameResolver(theme))
-              .build();
-          // 角色构造器先将适配输入存为纯文本；加载器比较前会再次解析该字段。
-          String stored = PlainTextComponentSerializer.plainText()
-              .serialize(parser.deserialize(message.input()))
-              .replace("\ue000", "");
-          String rendered = PlainTextComponentSerializer.plainText()
-              .serialize(parser.deserialize(stored))
-              .replace("\ue000", "");
-          renderedRoleNames.put(message.index(), rendered);
-          System.out.println("P\t" + message.index() + "\tok\t" + encode(rendered) + "\t");
-        } catch (ParsingException exception) {
-          System.out.println("P\t" + message.index() + "\tinvalid\t\t"
-              + encode(exception.detailMessage() == null
-                  ? exception.getClass().getSimpleName() : exception.detailMessage()));
-        } catch (RuntimeException exception) {
-          System.out.println("P\t" + message.index() + "\tfailed\t\t"
-              + encode(exception.getMessage() == null
-                  ? exception.getClass().getSimpleName() : exception.getMessage()));
-        }
-      }
-
       SourceMap sourceMap = new SourceMap(
           message.originalInput(),
           message.input(),
@@ -1063,18 +973,5 @@ public final class MiniMessageBridge {
       for (String row : structureOutput) System.out.println(row);
     }
 
-    List<Map.Entry<Integer, String>> roleNames = new ArrayList<>(renderedRoleNames.entrySet());
-    // 留在 JVM 直接使用 String.equalsIgnoreCase，保留 Lands 的 UTF-16 比较语义。
-    for (int first = 0; first < roleNames.size(); first++) {
-      Map.Entry<Integer, String> left = roleNames.get(first);
-      if (!validRoleNames.contains(left.getKey())) continue;
-      for (int second = first + 1; second < roleNames.size(); second++) {
-        Map.Entry<Integer, String> right = roleNames.get(second);
-        if (validRoleNames.contains(right.getKey())
-            && left.getValue().equalsIgnoreCase(right.getValue())) {
-          System.out.println("X\t" + left.getKey() + "\t" + right.getKey());
-        }
-      }
-    }
   }
 }
