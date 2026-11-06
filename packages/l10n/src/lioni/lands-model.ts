@@ -34,8 +34,7 @@ export type TranslationFieldScene =
   | "level-title"
   | "level-attribute-description"
   | "level-requirement-title"
-  | "level-requirement-description"
-  | "role-name";
+  | "level-requirement-description";
 
 export type TranslationFormat =
   | "plain"
@@ -65,7 +64,6 @@ export const translationFieldScenes = [
   "level-attribute-description",
   "level-requirement-title",
   "level-requirement-description",
-  "role-name",
 ] as const satisfies readonly TranslationFieldScene[];
 
 export const translationFieldCategories = [

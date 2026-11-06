@@ -23,7 +23,6 @@ const sceneCategories: Readonly<
   "level-attribute-description": "configuration-string",
   "level-requirement-title": "configuration-string",
   "level-requirement-description": "configuration-string-list",
-  "role-name": "configuration-string",
 };
 
 const sceneFormats: Readonly<Record<TranslationFieldScene, TranslationFormat>> =
@@ -44,7 +43,6 @@ const sceneFormats: Readonly<Record<TranslationFieldScene, TranslationFormat>> =
     "level-attribute-description": "legacy-color-variable-minimessage",
     "level-requirement-title": "legacy-variable-minimessage",
     "level-requirement-description": "legacy-color-variable-minimessage",
-    "role-name": "legacy-color-minimessage",
   };
 
 export function sceneMatchesCategory(

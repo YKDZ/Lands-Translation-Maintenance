@@ -44,8 +44,8 @@ concepts:
         usage: allowed
   owner:
     expressions:
-      - id: zh-CN-所有者
-        text: 所有者
+      - id: zh-CN-主人
+        text: 主人
         usage: allowed
   tenant:
     expressions:

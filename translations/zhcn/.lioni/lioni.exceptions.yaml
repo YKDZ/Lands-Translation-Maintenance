@@ -32,21 +32,6 @@ exceptions:
         },
     },
     {
-      id: ticket11-same-source-owner-land-role,
-      reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox
-        messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。,
-      checkId: message-family-same-source,
-      sourceKey: 'roles.yml:["land","roles","owner","name"]',
-      language: zh-CN,
-      inputFingerprint: sha256:35272cebe455956c095425357ce015c6c98be8fb4fbed73ebed1468e65ce27f8,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
-          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:350a6d445b5869663c0a19198afd026200196e5d190507643be8b041abb1d02e,
-        },
-    },
-    {
       id: ticket11-same-source-not-allowed-list-role-settings,
       reason: “职位权限不足”的三个条目 lore 均明确 role
         permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
@@ -214,22 +199,6 @@ exceptions:
         },
     },
     {
-      id: ticket11-same-source-nation-role,
-      reason:
-        levels.nation.levels.2.title 是独立等级名“国家”，角色名“联邦”则指 Nation
-        实体关系。等级序列为“联邦→国家→帝国”，配置要求等级名唯一；本候选只接受该等级标签的差异，不扩大全局术语允许译法。,
-      checkId: message-family-same-source,
-      sourceKey: 'roles.yml:["land","roles","nation","name"]',
-      language: zh-CN,
-      inputFingerprint: sha256:3005bf23a3b561180aa5966418d5157667ffe93cfd80cb4316af9af674842b17,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
-          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:17a050b08ade5c829cbf51f201bd14e7609a868435725c9320349e554c2eb634,
-        },
-    },
-    {
       id: ticket11-same-source-members-player-management,
       reason:
         排行榜 sorting.members 指按成员数量排序，显示“成员数”；player-management 的 Members
@@ -355,17 +324,17 @@ exceptions:
     {
       id: dialogs-declare-independence-context,
       reason:
-        此处 Declare independence 表示宣布独立，译为脱离联邦并宣布独立；declare 并非宣战动词，不要求译为宣战。后续 war
-        已正常译为战争。,
+        此处 declare independence 表示“宣布独立”，不是 declare war 所表达的“宣战”；译文语义完整。仅接受本条
+        declare-verb 诊断。,
       checkId: terminology,
       sourceKey: 'Locale/en-US_dialogs.yml:["value","confirm","war","independence","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:c5d8205e44cf3fe62c43820d823e5703fece3c05d8fefafe2193cf4b9ed759a7,
+      inputFingerprint: sha256:86d44c1df120d47b92fbd1decfa227d597686f8e39739098d6b6c9fa96d85f5d,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:b96d4c6fffbe8db81d50d6f6fee8dc703beaca57004d3b919bbacd68f617defd,
+          inputFingerprint: sha256:436b1985f14dfc0bd7e51ea1cc49b3773e4111c19ff04bf98d82b54ae81a58fa,
         },
     },
     {
@@ -384,48 +353,235 @@ exceptions:
           inputFingerprint: sha256:1c8dbc3a84d676b453a23f1aa8d109b88ad5184aef804fd68b22cf6d159102c6,
         },
     },
-    { id: world-default-spawn-terminology, reason: world spawn 指 Minecraft
-        世界的默认出生与重生位置，不是可设置并供玩家传送前往的城镇、子区域或联邦传送点，因此译为“世界出生点”。, checkId: terminology, sourceKey: 'Locale/en-US.yml:["lands","command","unstuck","success_wilderness"]', language: zh-CN, inputFingerprint: sha256:a7ec7bdb0055be15a0c6d049ae16ccb2896dad6b8fa88c0fe7aa987090070104, fingerprintSummary: { version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3, configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d, inputFingerprint: sha256:f35a15cc4d387e437406d351132e8964113dc019fd867e25701aa50e8c660b8d } },
     {
-      id: mob-animal-spawning-context,
-      reason: 此处 animal spawn 指动物生成行为，不是供玩家传送前往的固定位置；按上下文译为动物生成相关描述。,
+      id: world-default-spawn-terminology,
+      reason: world spawn 在此处指 Minecraft
+        世界默认重生位置，译为“世界出生点”；它不同于可设置并供玩家传送前往的“传送点”。仅接受本条 spawn-point 术语诊断。,
       checkId: terminology,
-      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_animal_spawn","lore"]',
+      sourceKey: 'Locale/en-US.yml:["lands","command","unstuck","success_wilderness"]',
       language: zh-CN,
-      inputFingerprint: sha256:cc99ee215f6fee209866fb86d7882290f25ca81c9e8d95fc4e7ee999530424d3,
+      inputFingerprint: sha256:fc18dbf3745034fef9326539047eb6d0fac146bd274ebc56a1866d516af867d0,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:813d7ef67db22024ead7e0cdab976f4376fc3fba94dcde8a6ba961191046b1d6,
+          inputFingerprint: sha256:2481179ccd849a0ac0f9b28ecef745f91a0937a366eca1dd598fa858df255fef,
+        },
+    },
+    {
+      id: mob-animal-spawning-context,
+      reason: 此处 animal spawn 指动物生成行为，不是供玩家传送前往的固定位置；“动物生成”是准确译法。仅接受本条 spawn-point 诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_animal_spawn","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:7c4ab76baaf9b52dfa85743b00da1bf17f5f2c5fb4182345a32dd3c281ed31d3,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:51afddab1880f196d5350cff46d47dd6e94a1677a3a9b6446fa663de877d6fba,
         },
     },
     {
       id: mob-monster-spawning-context,
-      reason: 此处 monster spawn 指怪物生成行为，不是供玩家传送前往的固定位置；按上下文译为怪物生成相关描述。,
+      reason:
+        此处 monster spawn 指怪物生成行为，不是供玩家传送前往的固定位置；“怪物生成”是准确译法。仅接受本条 spawn-point
+        诊断。,
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_monster_spawn","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:dcdc2b4e98c788a0afdee0f0b7937bea76b7126baa6f3636a3f7f7b6c86e862f,
+      inputFingerprint: sha256:abcc364872486d60f9892f0f965a80d12e46c437b44a545c8edc1cac6f9de842,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:b47929d37099b971515396bc759f21e7ab6d0c2c771fc9f4f8295fae3d96c1e1,
+          inputFingerprint: sha256:3ec67cbec75b4cf6a421addc8abbe364482fe4c41b96fa23202f3668d70f5ed5,
         },
     },
     {
       id: mob-phantom-spawning-context,
-      reason: 此处 phantom spawning 指幻翼生成行为，不是供玩家传送前往的固定位置；按上下文译为幻翼生成相关描述。,
+      reason:
+        此处 phantom spawn 指幻翼生成行为，不是供玩家传送前往的固定位置；“幻翼生成”是准确译法。仅接受本条 spawn-point
+        诊断。,
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_phantom_spawn","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:ab327aaa7952bab1a0ec6d5b7d565a647e12470a4290ddfd344740c835d1d0b5,
+      inputFingerprint: sha256:a06f6d8b11dd3c06bf72f109143caf35c9cd80cbbdc1a09f0e9c1c6f7715a424,
       fingerprintSummary:
         {
           version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:5e5123c4b498d5d45eb26febebd59c0f3428797d25ae15564b7694d492ade924,
+          inputFingerprint: sha256:16a279284d4c6b3e9f81a4b41b2c56ce300bcdb025e353efbe629b4f346b17ee,
+        },
+    },
+    {
+      id: gui-action-confirm-info-tag-layout,
+      reason: 经人工核对，此 GUI lore 的 MiniMessage <t>
+        主题标签按中文文案组织后仍符合预期；逐项对照标签数量和参数在此处误报。仅接受本字段的标签对应诊断，其他语法检查继续生效。,
+      checkId: minimessage-tag-correspondence,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","action-confirm","items","default","info","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:b81f837576d738e400f1166ea0aa13f85b72d2ea99b331d9dad61ea152c94eb2,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:1,
+          configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
+          inputFingerprint: sha256:03226fea333da7a79c7e08f7cdc7d04bb9938b31f94841cab9e479c41abdff94,
+        },
+    },
+    {
+      id: gui-list-area-players-self-tag-layout,
+      reason: 经人工核对，此 GUI lore 的 MiniMessage <t>
+        主题标签格式符合运行时预期；逐项对照标签数量和参数在此处误报。仅接受本字段的标签对应诊断，其他语法检查继续生效。,
+      checkId: minimessage-tag-correspondence,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_players","items","default","child_failure_self","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:03cfa77e3438060508cce3ccbfc6137c6e972590b0f439f0897f6b99d630056d,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:1,
+          configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
+          inputFingerprint: sha256:ad67644978ee341e30d03390428e74c742d8239752bad20603f113e821540f79,
+        },
+    },
+    {
+      id: gui-list-land-areas-default-land-wording,
+      reason: 此处以“领土”表达 land，并说明新占领的领土归属默认总区域；“领土”符合本句对象语义。仅接受本条 land 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_default","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:0aa272c98b812dd54fe9ea7c73f7ad17ae65f7ceeaf801e538830181a0ccc611,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:b2788f0726db9d8f2e5d099e8ed3fdad163af79715c836cacb6e36f430393e0f,
+        },
+    },
+    {
+      id: gui-list-land-areas-default-area-name,
+      reason: 此处 default area 是区别于普通子区域的默认总区域，译为“默认总区域”能准确说明其层级和用途。仅接受本条 area 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_default","name"]',
+      language: zh-CN,
+      inputFingerprint: sha256:ceafc18d8cf92c2b7b77fc4fe4f5e9f63610e3d77bc79466dd2d22675deaf104,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:17574d973d62aaa9034c8dd47559e1ab11b1cdc1d932cc569931f6379ecbd6a7,
+        },
+    },
+    {
+      id: gui-list-land-areas-koth-arena-context,
+      reason: 此项是不可删除的 KotH 竞技场；GUI 上下文已说明它属于区域列表，因此译文省略重复的“子区域”不影响含义。仅接受本条 area 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_koth_arena","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:64e38883839252c5271c334c9f59a44aeb2cf025a4ea02e0d76f147ffb70a565,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:0b8b69f58af235e81d9e669823c5a41c6538655d6266e4b16d3722b011d78e0e,
+        },
+    },
+    {
+      id: gui-player-lands-entry-land-action-label,
+      reason: 此处是城镇条目内的按钮文案“设为编辑目标”，当前城镇由条目上下文确定，省略“城镇”是有意简写。仅接受本条 land 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_lands","items","default","entry_land","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:f319846140be01919577b0129eb82127bd402d195933910d3477e09d3ab2e19f,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:ef9567210d69e180f7383318960c210a031822ff1c9108961fc764d854c81624,
+        },
+    },
+    {
+      id: gui-player-lands-entry-land-edit-context,
+      reason: 此处“已设为编辑目标，命令将对其生效”描述当前选中的城镇；对象已由条目上下文确定，省略“城镇”是有意简写。仅接受本条 land 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_lands","items","default","entry_land_edit","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:3ac055c8e1056ef540a48da7ad9f930bdccf1bae252293a3ea3ccd4edbfc816b,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:727c7c1f55bbc404cb2a4fdfd9aac29b47c801dc87e31b4bffd52d3973f80c2d,
+        },
+    },
+    {
+      id: gui-player-lands-entry-land-own-action-label,
+      reason: 此处是城镇条目内的按钮文案“设为编辑目标”，当前城镇由条目上下文确定，省略“城镇”是有意简写。仅接受本条 land 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_lands","items","default","entry_land_own","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:f2f20cd316fb4df1d53bac8c2ad21179690cb82eff1aaaffa9b2ce4eeccc6b95,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:e8d55957cbe5c0739d1bd26a9a5a5502bf0829ac1313ac5f7557cf708e5159e0,
+        },
+    },
+    {
+      id: gui-player-map-claim-verb-context,
+      reason: 此处 claim 用作“占领区块”的动词，译文已用“占领区块”表达操作；提示语无需再重复名词形式。仅接受本条 claim-noun 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_map","items","default","child_failure_no-land-selected","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:43f2eab317a19b18272f6428d05f7249bc84256bafb8331103738a37b902776f,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:8317d4b3f1929e6d941494c3a71877d179cd43fc1576bc2926e57939c2141020,
+        },
+    },
+    {
+      id: gui-relation-nation-land-context,
+      reason: 外交关系菜单中的当前城镇由页面上下文确定，提示语“所有外交关系均由所属联邦管理”省略重复的“城镇”不造成歧义。仅接受本条 land 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_relation","items","default","child_failure_nation","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:87889a2f377a19767fae42cf6eda0bdea229d01a08be637828442f3025c78f82,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:479ba4cb6c98848a1987c0fc6608ff7d13d4fd36fc3d2f4a2d14e84cc0fa636d,
+        },
+    },
+    {
+      id: gui-relation-remove-nation-land-context,
+      reason: 此移除操作位于外交关系菜单，当前城镇由页面上下文确定；提示语省略重复的“城镇”不造成歧义。仅接受本条 land 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","list_relation","items","default","remove_nation","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:00b0ee9379403771188236569e02bb6e48024d699e17a780c1927c107e1e6961,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:6014c3e96a263dff7a93fc6e4eca06fa4fd4ae166f9b65aa344a8be85b7fb372,
+        },
+    },
+    {
+      id: gui-rental-restore-unavailable-area-context,
+      reason: 此条目标题和 lore 均明确写有“恢复子区域”；术语检查切分片段后仍报缺少 area，是上下文误报。仅接受本条 area 术语诊断。,
+      checkId: terminology,
+      sourceKey: 'Locale/en-US_gui.yml:["gui","rental_setup","items","default","restore_unavailable","lore"]',
+      language: zh-CN,
+      inputFingerprint: sha256:341d6e0339d92ff7dc284de8805eb21f42f6cc96087a4ba5252f0c6f36f7470b,
+      fingerprintSummary:
+        {
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
+          inputFingerprint: sha256:aa11a958b7a5f685f08e4081f9d16cf049153185bb90ef483fa9881ebe460b55,
         },
     },
   ]
