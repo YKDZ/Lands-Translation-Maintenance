@@ -1,0 +1,273 @@
+# War modes and goals.
+# A war mode decides how a war is scored and won; a war goal decides what the winner gets when it
+# ends. Each mode/goal is registered in code; this file holds its configurable settings and marks the
+# mode and goal that are used by default for newly declared wars (default: true).
+# You can add optional properties per entry - they simply won't do anything unless the mode/goal reads
+# them.
+
+modes:
+  # The built-in skirmish mode: score from kills, captures and points; ends on points-to-win or timeout.
+  skirmish:
+    # Set to false to disable this mode entirely - it won't be offered for new wars.
+    enabled: true
+    default: true
+    # Extra goals applied to every war of this mode, on top of the war's chosen primary goal.
+    # e.g. add 'raid' to let the winner's members raid the loser's lands after the war.
+    add-goals: [ ]
+    # How long a war of this mode may last before it ends by timeout (the higher-scoring team wins, or a
+    # draw if tied). Set to 0 for no time limit.
+    timeout: 36h
+    points:
+      # Points per kill.
+      kill: 1
+      # Points for capturing/breaking/exploding a capture flag (see the "capture" section in wars.yml).
+      capture-flag:
+        capture: 5
+        break: 3
+        explode: 5
+      # How many points a team needs to win. Calculated as (smallest team's player count) * per-player,
+      # but never less than min.
+      towin:
+        per-player: 5
+        min: 100
+
+  # King of the Hill: fought over a neutral, admin-designated arena (see /lands admin koth). Points come
+  # only from holding the arena's capture point over time; the war is won on points-to-win or by timeout.
+  # Only offered when at least one fully set-up arena exists.
+  koth:
+    enabled: true
+    default: false
+    timeout: 30m
+    # Hold reward: every <interval>, whichever team currently controls the arena point earns <amount>
+    # points. BOTH the attacker and the defender score this way, so either side can win by out-holding the
+    # other (set amount to 0 to disable). Tune amount/interval against points.towin below.
+    hold-reward:
+      interval: 20s
+      amount: 5
+    points:
+      # KotH scores only from holding the point (see hold-reward above), so kills award nothing.
+      kill: 0
+      towin:
+        per-player: 5
+        min: 100
+      # At timeout, if the leader is ahead by this many points or fewer, the war is a draw instead of a win
+      # - so a brief fluke hold doesn't hand someone the whole war. 0 = any lead wins. Reaching towin always
+      # wins outright regardless of this.
+      timeout-draw-margin: 20
+
+  # King of the Hill (player lands): a two-front variant that needs no admin arena. During preparation
+  # each team places one re-arming KotH point in its OWN land, and scores by holding the ENEMY's point
+  # over time. Both lands become battlegrounds. Won on points-to-win or by timeout, like the arena mode.
+  # If both points aren't placed by war start, the war falls back to an admin arena if one exists, or
+  # else the side that placed wins (a draw if neither placed).
+  koth_land:
+    enabled: true
+    default: false
+    timeout: 30m
+    # Hold reward: every <interval>, whichever team currently controls a point earns <amount> points (you
+    # score by holding the ENEMY's point). Both sides score this way (set amount to 0 to disable). Tune
+    # amount/interval against points.towin below.
+    hold-reward:
+      interval: 20s
+      amount: 5
+    points:
+      # KotH scores only from holding a point (see hold-reward above), so kills award nothing.
+      kill: 0
+      towin:
+        per-player: 5
+        min: 100
+      # At timeout, if the leader is ahead by this many points or fewer, the war is a draw instead of a win
+      # - so a brief fluke hold doesn't hand someone the whole war. 0 = any lead wins. Reaching towin always
+      # wins outright regardless of this.
+      timeout-draw-margin: 20
+
+# War goals. Every goal's outcome is configured per war-state so it can be milder when a side gives up:
+#   end        - a fought win/loss
+#   surrender  - a side conceded (during preparation or an active war). Usually less punishing than 'end'.
+#   draw       - no decisive winner. A draw has no winner/loser, so cmds and shields do nothing and aren't
+#                listed below - add them if you want a draw to still grant a shield/run a command.
+# Every state (below) takes the same options:
+#   cmds.winner / cmds.loser - Console commands run once per winner/loser land when the war resolves.
+#     Placeholders: {winner}/{loser} (parameter name, no spaces), {winner_name}/{loser_name} (display name),
+#     {winner_owner}/{loser_owner} (owner). Set a list to [] to disable it.
+#   shield.winner / shield.loser - War shield granted to the winner / loser after the war resolves (0 = none).
+# Goals may add their own options (e.g. the skirmish goal's 'robbery').
+goals:
+  # The raid goal: the winner's members may act on the loser's lands for a window after the war (limited to
+  # the flags/blocks in 'actions'). Also usable as an add-on on top of another goal (modes.<id>.add-goals).
+  raid:
+    # Set to false to disable this goal entirely - it won't be offered for new wars.
+    enabled: true
+    default: true
+    duration: 1h
+    end:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 0
+        loser: 0
+    surrender:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 0
+        loser: 0
+    # Which actions the winner's members may perform on a raided land. role-flags grants a flag
+    # outright (e.g. BLOCK_BREAK -> break any block); block-break/block-place instead allow only the
+    # listed materials when the flag itself isn't granted - so raiders can breach and loot without
+    # levelling the whole base. Flag names: see the roles-and-their-flags wiki page.
+    actions:
+      # Loot containers, open doors/hatches, flip levers/buttons and pick up drops - but not break/place
+      # freely (that's limited to the material lists below).
+      role-flags:
+        - INTERACT_CONTAINER
+        - INTERACT_DOOR
+        - INTERACT_TRAPDOOR
+        - INTERACT_MECHANISM
+        - ITEM_PICKUP
+      # Common wall/base blocks a raider may break to breach into a claim. This is a curated set - enough
+      # to tunnel through a typical build, but not the whole block palette, so raiders can't level
+      # everything or destroy valuables/decoration. Doors, hatches and gates are intentionally NOT here:
+      # the INTERACT_DOOR/INTERACT_TRAPDOOR flags above already let raiders open them, so breaking them
+      # would be pointless. Materials your server version doesn't have are ignored.
+      block-break:
+        # Wood (all variants, so a base can't dodge raids by picking a different wood)
+        - OAK_PLANKS
+        - SPRUCE_PLANKS
+        - BIRCH_PLANKS
+        - JUNGLE_PLANKS
+        - ACACIA_PLANKS
+        - DARK_OAK_PLANKS
+        - MANGROVE_PLANKS
+        - CHERRY_PLANKS
+        - PALE_OAK_PLANKS
+        - BAMBOO_PLANKS
+        - CRIMSON_PLANKS
+        - WARPED_PLANKS
+        - OAK_LOG
+        - SPRUCE_LOG
+        - BIRCH_LOG
+        - JUNGLE_LOG
+        - ACACIA_LOG
+        - DARK_OAK_LOG
+        - MANGROVE_LOG
+        - CHERRY_LOG
+        - PALE_OAK_LOG
+        - BAMBOO_BLOCK
+        - CRIMSON_STEM
+        - WARPED_STEM
+        # Stone
+        - COBBLESTONE
+        - MOSSY_COBBLESTONE
+        - STONE
+        - STONE_BRICKS
+        - COBBLED_DEEPSLATE
+        - DEEPSLATE_BRICKS
+        - TUFF
+        # Earth
+        - DIRT
+        - COARSE_DIRT
+        - GRASS_BLOCK
+        - SAND
+        - GRAVEL
+        # Glass and climbables
+        - GLASS
+        - GLASS_PANE
+        - LADDER
+      # Blocks a raider may place to bridge/climb into the base.
+      block-place:
+        - LADDER
+        - SCAFFOLDING
+        - DIRT
+        - COBBLESTONE
+        - OAK_PLANKS
+
+  # The skirmish goal: a low-consequence war - the winner robs money from the loser and runs commands, but
+  # no one loses claims. 'robbery': trailing % = percentage of the loser's bank balance (e.g. 75%), a plain
+  # number = a flat amount (capped at what the loser has).
+  skirmish:
+    enabled: true
+    end:
+      robbery: 75%
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 7d
+        loser: 7d
+    surrender:
+      robbery: 40%
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 7d
+        loser: 7d
+
+  # The annexation goal: the winner unclaims all of the loser's war lands (the loser is paid the usual
+  # unclaim cash-back into its bank). No ownership transfer.
+  annex:
+    enabled: true
+    default: false
+    end:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 0
+        loser: 3d
+    surrender:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 0
+        loser: 3d
+
+  # The vassalage goal: the winning nation subjugates the loser. The loser's lands are absorbed into the
+  # winner's nation as restricted VASSAL members. Only usable when the attacker is a nation.
+  vassal:
+    enabled: true
+    default: false
+    # Also transfer the loser's bank balance to the winner's nation bank when it is vassalized.
+    seize-treasury: false
+    # The loser is absorbed into the winner's nation (not left independent), so it gets no shield by
+    # default - but both winner.shield and loser.shield are honored if you set them.
+    end:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 0
+        loser: 0
+    surrender:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 0
+        loser: 0
+
+  # The independence goal: applied only via '/land <vassal> war independence' - a vassal wages war to
+  # secede from its overlord. If the vassal wins it stays free; if the overlord wins or the war draws,
+  # the vassal is re-subjugated and can't declare independence again for this cooldown.
+  independence:
+    enabled: true
+    default: false
+    cooldown: 7d
+    end:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 7d
+        loser: 0
+    surrender:
+      cmds:
+        winner: [ ]
+        loser: [ ]
+      shield:
+        winner: 7d
+        loser: 0

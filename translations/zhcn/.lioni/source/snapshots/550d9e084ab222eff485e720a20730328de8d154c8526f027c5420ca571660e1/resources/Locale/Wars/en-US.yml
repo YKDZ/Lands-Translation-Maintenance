@@ -1,0 +1,441 @@
+general:
+  command:
+    argument:
+      type:
+        tribute: tribute
+        preparation_time: preparation time
+        team: team
+  inbox:
+    war:
+      shield: '<t:regular>Received additional war shield time of<t:time> <v:0></t>. Total:<t:time> <v:1></t>'
+      start: <t:regular>The war against<t:entity_land> <v:0></t> has started. Timeout:<t:time> <v:1></t>
+      koth:
+        postponed: <t:regular>The KotH war against<t:entity_land> <v:0></t> is waiting for a free arena. It will start automatically once one frees up.
+      declaration:
+        sent: <t:regular>Declared war against<t:entity_land> <v:0></t>. The war will start in<t:time> <v:1></t>.
+        received: <t:negative_value><v:0></t> <t:negative>declared war against us. <t:regular>The war will start in<t:time> <v:1></t>.
+        mutual:
+          sent: <t:regular>Sent war request to<t:entity_land> <v:0></t>. They need to accept it.
+          received: '<t:negative_value><v:0></t> <t:negative>sent a war request. Accept: <t:cmd>/<v:1></t>'
+          denied: <t:regular>Mutual war declaration denied by<t:entity_land> <v:0></t>.
+      surrender:
+        sent: <t:negative>We surrendered to<t:negative_value> <v:0></t>. They robbed<t:cost> <v:1></t> from us.
+        received: <t:regular>The enemy<t:entity_land> <v:0></t> surrendered to us. We robbed<t:cost> <v:1></t> from them.
+        annex:
+          received: <t:regular>The enemy<t:entity_land> <v:0></t> <t:regular>surrendered - we annexed them and unclaimed their lands.
+          sent: <t:negative>We surrendered to<t:negative_value> <v:0></t> <t:negative>and were annexed - our lands were unclaimed.
+        vassal:
+          received: <t:regular>The enemy<t:entity_land> <v:0></t> <t:regular>surrendered - we subjugated them as our vassals.
+          subjugated: <t:negative>We surrendered to<t:negative_value> <v:0></t> <t:negative>- our land is now their vassal.
+        raid:
+          received: <t:regular>The enemy<t:entity_land> <v:0></t> <t:regular>surrendered - we're raiding their lands for the next<t:time> <v:1></t>.
+          sent: <t:negative>We surrendered to<t:negative_value> <v:0></t> <t:negative>- our lands are being raided for the next<t:time> <v:1></t>.
+        independence:
+          won: <t:positive><v:0> <t:positive>surrendered - we won our independence and are free!
+          lost: <t:negative>We surrendered our independence war against<t:negative_value> <v:0></t> <t:negative>- we remain a vassal.
+          overlord-won: <t:regular>Our vassal<t:entity_land> <v:0></t> <t:regular>surrendered its independence war - they remain our vassal.
+          overlord-lost: <t:negative>We surrendered - our vassal<t:entity_land> <v:0></t> <t:negative>is now independent.
+      end:
+        won: <t:regular>We've won the war against the enemy<t:entity_land> <v:0></t> with<t:regular_value> <v:1></t> points. They only had<t:regular_value> <v:2></t> points. We robbed<t:cost> <v:4></t> from them. The war took <t:time><v:3></t>.
+        draw: <t:regular>The war against<t:entity_land> <v:0></t> ended in a draw with<t:regular_value> <v:1></t> points.
+        lost: <t:regular>We've lost the war against the enemy<t:entity_land> <v:0></t> with<t:regular_value> <v:1></t> points. They had<t:regular_value> <v:2></t> points. They robbed<t:cost> <v:4></t> from us. The war took <t:time><v:3></t>.
+        annex:
+          won: <t:regular>We won the war against the enemy<t:entity_land> <v:0></t> <t:regular>and annexed them - their lands were unclaimed. The war took <t:time><v:1></t>.
+          lost: <t:negative>We lost the war against<t:negative_value> <v:0></t> <t:negative>and were annexed - our lands were unclaimed. The war took <t:time><v:1></t>.
+        vassal:
+          won: <t:regular>We won the war against the enemy<t:entity_land> <v:0></t> <t:regular>and subjugated them - their lands are now our vassals. The war took <t:time><v:1></t>.
+          lost: <t:negative>We lost the war against<t:negative_value> <v:0></t> <t:negative>- our land is now their vassal.
+          freed: <t:positive>Our land was set free and is now independent after<t:negative_value> <v:0></t> <t:positive>won the war.
+        independence:
+          won: <t:positive>Our land won its independence war against<t:negative_value> <v:0></t> <t:positive>and is free!
+          lost: <t:negative>Our independence war against<t:negative_value> <v:0></t> <t:negative>failed - we are a vassal again.
+          overlord-won: <t:regular>We won the war and crushed the rebellion of our vassal<t:entity_land> <v:0></t> <t:regular>- they remain our vassal.
+          overlord-lost: <t:negative>We lost the war - our vassal<t:entity_land> <v:0></t> <t:negative>won its independence and left our nation.
+        raid:
+          won: <t:regular>We won the war against the enemy<t:entity_land> <v:0></t> <t:regular>and are raiding their lands for the next<t:time> <v:1></t>.
+          raided: <t:negative>We lost the war against<t:negative_value> <v:0></t> <t:negative>and our lands are being raided by them for the next<t:time> <v:1></t>.
+  wars:
+    object:
+      enemy: <t:error_value>Enemy</t>
+      ally: <t:regular_value>Ally</t>
+    nametag:
+      enemy: '<t:error_value>ENEMY </t><t:decoration>| </t>'
+      ally: '<t:regular_value>ALLY </t><t:decoration>| </t>'
+    state:
+      preparation: <t:positive>Preparation</t>
+      fight: <t:negative>Fight</t>
+    mode:
+      points:
+        total: '<t:regular_value><v:points></t><t:regular>/</t><t:regular_value><v:towin></t>'
+      skirmish:
+        description: <t:regular>Score points by killing enemy players and capturing their land with capture flags.
+        name: Skirmish
+      koth:
+        description: <t:regular>Score points by holding the arena's control point - the longer your team holds it, the more it scores. Kills don't count.
+        name: King of the Hill (Server Arena)
+      koth_land:
+        description: '<t:regular>Each team places a control point in its own land during preparation, then scores by holding the enemy''s point. <t:error>Both lands become battlegrounds: the enemy can break and place all blocks to reach your point.'
+        name: King of the Hill (Player Lands)
+    goal:
+      skirmish:
+        outcome: <t:regular><v:winner> <t:regular>robs<t:cost> <v:robbery></t> from <v:loser><t:regular>.
+        name: Skirmish
+      annex:
+        outcome: <t:negative><v:loser><t:regular>'s lands are annexed (unclaimed) by <v:winner><t:regular>.
+        name: Annexation
+      vassal:
+        outcome: <t:negative><v:loser><t:regular>'s lands are subjugated as vassals of <v:winner><t:regular>.
+        name: Vassalage
+      independence:
+        outcome:
+          attacker-wins: <t:positive><v:winner> <t:regular>breaks free from<t:regular_value> <v:loser></t> <t:regular>and becomes independent.
+          defender-wins: <t:negative><v:loser> <t:regular>stays a vassal of<t:regular_value> <v:winner></t><t:regular>.
+        name: Independence
+      raid:
+        outcome: <t:negative><v:winner> <t:regular>raids <v:loser><t:regular>'s lands.
+        name: Raid
+
+    koth:
+      admin:
+        status:
+          ready: <t:positive>Ready</t>
+          in-use: <t:regular_value>In use</t>
+          incomplete: <t:error>Incomplete</t>
+wars:
+  message:
+    koth:
+      arena:
+        start: <t:regular>The war has started! You've been sent to your team's spawn - reach and hold the arena point to score.
+      captured-teleport: <t:regular>The arena point was captured and has reset - you were sent back to your team's spawn.
+      hold-reward: '<actionbar><t:positive>Holding the point:<t:positive_value> +<v:points></t> points'
+      bar:
+        attacker: '<bossbar:red:solid><t:error>Attacker holds the point</t> <t:decoration>-</t> <t:error_value>Attacker <v:attacker></t> <t:decoration>vs</t> <t:regular_value>Defender <v:defender></t> <t:decoration>·</t> <t:regular>first to<t:regular_value> <v:towin> <t:regular>points'
+        defender: '<bossbar:green:solid><t:positive>Defender holds the point</t> <t:decoration>-</t> <t:regular_value>Attacker <v:attacker></t> <t:decoration>vs</t> <t:positive_value>Defender <v:defender></t> <t:decoration>·</t> <t:regular>first to<t:regular_value> <v:towin> <t:regular>points'
+        neutral: '<bossbar:white:solid><t:regular>The point is contested</t> <t:decoration>-</t> <t:regular_value>Attacker <v:attacker></t> <t:decoration>vs</t> <t:regular_value>Defender <v:defender></t> <t:decoration>·</t> <t:regular>first to<t:regular_value> <v:towin> <t:regular>points'
+      land:
+        place:
+          wrong-land: <t:error>Set your team's KotH point in your own main land<t:error_value> <v:land></t> (a nation fights over its capital).
+          set: <t:success>Your KotH point is set in your land<t:entity_land> <v:land></t>. <t:regular>Defend it - once the war starts the enemy will come to capture it, while you go for theirs.
+          replaced: <t:success>Your KotH point was moved. <t:regular>The enemy will have to capture it at its new location.
+          no-war: <t:error>You have no player-land KotH war in preparation here. <t:regular>Stand in your own land during your KotH war's preparation to set your point.
+          broadcast: '<title><t:regular>KotH Point<subtitle><t:regular><v:land>, <v:x>, <v:y>, <v:z><actionbar><t:regular>A team''s point was placed.'
+        break: <t:error>Your KotH point can't be broken by hand. <t:regular>To move it, stand where you want it and run <hover:show_text:"<t:regular>Removes the current point and sets it at your position."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd></t></click></hover>.
+        reminder: <t:regular>Set your team's KotH point in your land<t:entity_land> <v:land></t> before the war starts in<t:time> <v:time></t> <t:regular>- stand where you want it and run <hover:show_text:"<t:regular>Sets your KotH point at your current position."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd></t></click></hover>.
+        start: <t:regular>The war has started! Capture the enemy's KotH point to score - and defend your own, which they'll be coming for.
+        fallback-arena: <t:regular>Not every team placed its KotH point in time - the war has moved to an admin arena instead.
+        draw: <t:regular>The KotH war between <v:attacker> <t:regular>and <v:defender> <t:regular>ended in a draw - not enough points were placed.
+    noaccess:
+      wilderness: '<t:error>You''re not allowed to do this in the wilderness while being engaged in a war. <t:decoration>Flag: </t><t:regular_value><v:flag></t>'
+      general: '<t:error>You can only perform certain actions in enemy land<t:error_value> <v:land></t> <t:error>during a war or raid. <t:decoration>Flag: </t><t:regular_value><v:flag></t>'
+      block-break: <t:error>You can only break a limited set of blocks in enemy land<t:error_value> <v:land></t> <t:error>during a war or raid.
+      block-place: <t:error>You can only place a limited set of blocks in enemy land<t:error_value> <v:land></t> <t:error>during a war or raid.
+      pillage: <t:error>You can't pillage the land<t:error_value> <v:land></t> while not enough defenders are online. <t:regular>Please wait until a minimum of<t:limit> <v:defenders></t> defender(s) of land<t:entity_land> <v:land></t> are online.
+      allies: <t:error>You can only invade the attacker<t:error_value> <v:attacker></t> and defender<t:error_value> <v:defender></t> in this war. <t:regular>Allies of either team can't be invaded.
+    start:
+      broadcast: <t:regular>The war between <v:attacker> <t:regular>and <v:defender> <t:regular>started. It will be over in<t:time> <v:time></t>.
+    end:
+      broadcast:
+        won: <t:regular><v:winner><t:regular> won the war against <v:loser><t:regular> with<t:regular_value> <v:winner_points></t> vs.<t:regular_value> <v:loser_points></t> points, robbing<t:cost> <v:robbery></t>. It took<t:time> <v:time></t>.
+        surrendered:
+          skirmish: '<v:loser> <t:regular>surrendered to <v:winner><t:regular>, robbed of<t:cost> <v:robbery></t>.'
+          annex: '<v:loser> <t:regular>surrendered to <v:winner><t:regular> and was annexed - their lands were unclaimed.'
+          vassal: '<v:loser> <t:regular>surrendered to <v:winner><t:regular> and is now their vassal.'
+          raid: '<v:loser> <t:regular>surrendered to <v:winner><t:regular>, who is raiding their lands for<t:time> <v:time></t>.'
+        draw: <t:regular>The war between <v:attacker> <t:regular>and <v:defender> <t:regular>ended in a draw with<t:regular_value> <v:points></t> points. It took<t:time> <v:time></t>.
+        annex: <t:regular><v:winner><t:regular> annexed <v:loser><t:regular> and unclaimed their lands. It took<t:time> <v:time></t>.
+        vassal: <t:regular><v:winner><t:regular> subjugated <v:loser><t:regular> as a vassal. It took<t:time> <v:time></t>.
+        independence:
+          won: <t:positive><v:vassal><t:regular> won its independence from <v:overlord><t:regular>.
+          lost: <t:regular><v:overlord><t:regular> crushed the rebellion of <v:vassal><t:regular>.
+        raid: <t:regular><v:winner><t:regular> won the war against <v:loser><t:regular> and is raiding their lands for<t:time> <v:time></t>.
+    kill:
+      target:
+        attackers: <t:regular>Our team mate<t:regular_value> <v:attacker></t> got killed by the defender<t:regular_value> <v:defender></t>.
+        defenders: <t:regular>Our team mate<t:regular_value> <v:defender></t> got killed by the attacker<t:regular_value> <v:attacker></t>.
+      killer:
+        attackers: '<t:regular>Our team mate<t:regular_value> <v:attacker></t> killed the defender<t:regular_value> <v:defender></t>: <t:positive><b>+ <v:points> points'
+        defenders: '<t:regular>Our team mate<t:regular_value> <v:defender></t> killed the attacker<t:regular_value> <v:attacker></t>: <t:positive><b>+ <v:points> points'
+    capture:
+      place:
+        wilderness: <t:error>You can't place a capture flag in the wilderness. <t:regular>You need to place it inside an enemy land.
+        overlap: <t:error>Capture blocks must be placed in a way that the beacon wouldn't overlap with the wilderness.
+        region: <t:error>Can't place capture flag here. <t:regular>It overlaps with a capture region of another capture flag.
+        outskirts: <t:error>Can't place capture flag here. <t:regular>You must place it in the outskirts of the land.
+        state: <t:error>You're currently not at war against land<t:error_value> <v:land></t> or the war hasn't started yet.
+        y: <t:error>Can't place capture flag here. <t:regular>It must be placed between<t:limit> <v:min></t> and<t:limit> <v:max></t> blocks of height.
+        already: <t:error>Can't place capture flag here. <t:regular>There's already a capture flag placed in this chunk.
+        space: <t:error>Can't place capture flag here. <t:regular>There's not enough space at this position.
+        cooldown: <t:error>You need to wait<t:error_value> <v:time></t> before your team can place a capture flag again.
+        max: <t:error>Your team already placed the maximum amount of<t:error_value> <v:max></t> simultaneously capture flags.
+        invader: '<title><t:success>Capture Point<subtitle><t:success>placed in enemy land: <v:land>, <v:x>, <v:y>, <v:z><actionbar><t:success>Join them to capture the area.'
+        defender: '<title><t:error>Capture Point<subtitle><t:error>placed in our land: <v:land>, <v:x>, <v:y>, <v:z><actionbar><t:error>Go there to join the defenders.'
+        koth:
+          success: <t:success>KotH arena flag placed.
+          ready: <t:positive>The KotH arena is now fully set up and ready for war.
+          needs-spawns: <t:regular>Set both team spawns (<t:cmd>/<v:cmd_setspawn_attacker><t:regular> / <t:cmd><v:cmd_setspawn_defender><t:regular>) to finish setting up the arena.
+          not-in-arena: <t:error>You must stand inside a designated KotH arena to set its capture point. <t:regular>Create one first with<t:cmd> /<v:cmd_create></t>.
+          no-permission: <t:error>You're not allowed to set up KotH arenas.
+          exists: <t:error>This KotH arena already has a capture point. <t:regular>Break the existing one first to move it.
+          break-in-war: <t:error>You can't break the arena point while a war is using this arena.
+          removed: <t:regular>Removed the arena point. <t:regular>Run<t:cmd> /<v:cmd_setflag></t> <t:regular>where you want it to set it again.
+      destroy:
+        presence: <t:error>You currently can't break this capture flag. <t:regular>There are still<t:regular_value> <v:players></t> enemy players in this area.
+        invader: <title><t:error>Capture Point<subtitle><t:error>in enemy land <v:land> has been destroyed
+        defender: <title><t:success>Capture Point<subtitle><t:success>removed from our land <v:land><actionbar><t:success><b>+ <v:points> points
+        invaders-break: <t:error>Invaders aren't allowed to break their own capture flags.
+      progress:
+        none:
+          area: <bossbar:white:solid><t:regular>Capturing paused - <t:regular_value><v:progress>%</t> - no team has the majority
+          broadcast: '<bossbar:white:solid><t:regular>Capturing paused - <t:regular_value><v:progress>%</t>, x: <t:regular_value><v:x></t>, y: <t:regular_value><v:y></t>, z: <t:regular_value><v:z></t>'
+        invaders:
+          broadcast: '<bossbar:red:solid><t:error>Enemy is capturing - <v:progress>%, <v:invaders> invader(s), x: <v:x>, y: <v:y>, z: <v:z>'
+          invaders: <bossbar:red:solid><t:error>We are capturing - <v:progress>%, <v:defenders> defender(s)
+          defenders: <bossbar:red:solid><t:error>Enemy is capturing - <v:progress>%, <v:invaders> invader(s)
+        defenders:
+          broadcast: '<bossbar:green:solid><t:positive>We are capturing back - <v:progress>%, <v:invaders> invader(s), x: <v:x>, y: <v:y>, z: <v:z>'
+          invaders: <bossbar:red:solid><t:error>Defenders are capturing back - <v:progress>%, <v:defenders> defender(s)
+          defenders: <bossbar:green:solid><t:positive>We are capturing back - <v:progress>%, <v:invaders> invader(s)
+      health:
+        status: '<bossbar:white:solid><t:regular>Capture flag health: <t:regular_value><v:health>%</t>'
+        invaders: <t:positive>Your capture flag is healthy! <t:positive><b>+<v:points> <!b><t:regular>points awarded to your team.
+        defenders: <t:positive>The enemy capture flag is weakened! <t:positive><b>+<v:points> <!b><t:regular>points rewarded.
+        damage: '<t:regular>Capture flag: <t:error_value>-<v:damage></t> hp <t:decoration>| </t><t:error_value><v:health>%</t> <t:regular>remaining.'
+      online: '<actionbar><t:error>Can''t capture: Min. of<t:error_value> <v:min></t> player(s) of land<t:error_value> <v:land></t> need to be online.'
+      success:
+        invader: <title><t:success>Capture Point<subtitle><t:success>we captured <v:chunks> chunk(s) from <v:land><actionbar><t:success><b>+ <v:points> points
+        defender: <title><t:error>Capture Point<subtitle><t:error>enemy captured <v:chunks> chunk(s) of <v:land>
+  command:
+    koth:
+      admin:
+        not-in-area: <t:error>You need to stand in a sub area to run this command.
+        exists: <t:error>There's already a KoTH arena in the area you're standing in.
+        no-arena: <t:error>There's no KoTH arena in the area you're standing in. <t:regular>Create one first.
+        created: <t:regular>Created the KoTH arena. <t:regular>Now stand where the capture point should be and run <hover:show_text:"<t:regular>Sets the arena''s capture point at your position."><click:run_command:"/<v:cmd_setflag>"><t:cmd>/<v:cmd_setflag></t></click></hover>, then set both team spawns (<t:cmd><v:cmd_setspawn_attacker><t:regular> / <t:cmd><v:cmd_setspawn_defender><t:regular>). It can't be used in a war until it's complete.
+        removed: <t:regular>Removed the KoTH arena. <t:regular>The capture point and the sub area were left untouched.
+        setspawn:
+          usage: <t:error>Specify which team's spawn to set - attacker or defender.
+          set-complete: <t:regular>Set the<t:regular_value> <v:team></t> spawn. <t:positive>The arena is now complete and can be used in wars.
+          set-incomplete: <t:regular>Set the<t:regular_value> <v:team></t> spawn. <t:regular>The arena still needs its capture flag and/or the other team's spawn.
+    declare:
+      not-allowed: <t:error>You're not allowed to start a war for<t:error_value> <v:object></t>. <t:regular>The leader of <v:object> <t:regular>needs to do this.
+      hours: '<t:error>You can only declare war during the following hours:<t:error_value> <v:hours></t> <t:decoration>(</t><t:regular>current time:<t:time> <v:current></t>, time zone: <t:time><v:timezone></t><t:decoration>)</t>'
+      enemies: |
+        <t:error>You must add<t:error_value> <v:object></t> as an enemy first.
+          <hover:show_text:"<t:regular>Click here to add <v:object> <t:regular>as an enemy in order to declare war on them."><click:run_command:"/<v:cmd>"><t:regular>✖ Add as Enemy: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      ally: |
+        <t:error>You can't declare war against your ally<t:error_value> <v:object></t>.
+          <hover:show_text:"<t:regular>Click here to manage your relations."><click:run_command:"/<v:cmd>"><t:regular>✖ Manage Relations: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      nation: <t:error>You can't declare war against<t:error_value> <v:object></t>. <t:regular>They're part of the same nation<t:entity_nation> <v:nation></t>.
+      min-balance:
+        attacker: '<t:error>Can''t send this declaration. <t:regular>The attackers <v:object> <t:regular>need a minimum balance of<t:limit> <v:min></t> in order to start a war. Deposit money into your land bank: <hover:show_text:"<t:regular>Click here to deposit <v:min> into your land bank."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>'
+        defender: <t:error>The balance of the defenders <v:object> <t:error>is too low. <t:regular>You can only attack others that have a minimum balance of<t:limit> <v:min></t>.
+      min-chunks:
+        attacker: '<t:error>Can''t send this declaration. <t:regular>The attackers <v:object> <t:regular>need a minimum amount of<t:limit> <v:min></t> chunks in order to start a war. Claim: <hover:show_text:"<t:regular>Click here to claim."><click:run_command:"/<v:cmd>"><t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>'
+        defender: <t:error>The claim amount of the defenders <v:object> <t:error>is too low. <t:regular>You can only attack others that have a minimum amount of<t:limit> <v:min></t> chunks.
+      min-age:
+        attacker: <t:error>Can't send this declaration. <t:regular>The attackers <v:object> <t:regular>need to be at least<t:time> <v:min></t> old in order to start a war.
+        defender: <t:error>The age of the defenders <v:object> <t:error>is too low. <t:regular>You can only attack others that are at least<t:time> <v:min></t> old.
+      online: <t:error>Can't send this declaration. <t:regular>At least one player of <v:object> <t:regular>need to be online.
+      broadcast: <t:regular><v:attacker> <t:regular>declared war against <v:defender><t:regular>. Their war will start in<t:time> <v:time></t>.
+      success:
+        normal: <t:regular>You <t:decoration>(<v:object></t><t:decoration>) </t><t:regular>successfully declared war against <v:enemy><t:regular>. The war will start in<t:time> <v:time></t>.
+        mutual:
+          sent: <t:regular>You <t:decoration>(<v:object></t><t:decoration>) </t><t:regular>sent a war request to <v:enemy><t:regular>. They need to accept it, before this war can start.
+      target: <t:regular>The enemy <v:attacker> <t:regular>declared war against <v:defender> <t:decoration>(</t><t:regular>YOU<t:decoration>)</t><t:regular>. The war will start in<t:time> <v:time></t>.
+      already:
+        attacker: <t:error>Can't join another war. <t:regular>The current war of <v:object> <t:regular>needs to end first.
+        defender: <t:error>You currently can't declare war against them. <t:regular>The target <v:object> <t:regular>is already engaged in a war.
+      min-players:
+        attacker: <t:error>You can't engage in a war, because<t:error_value> <v:object></t> needs more trusted players. <t:regular>The required minimum for attackers to declare war is<t:limit> <v:min></t> players.
+        defender: <t:error>You can't declare war against<t:error_value> <v:object></t>, because they need more trusted players. <t:regular>The required minimum for defenders to receive a war declaration is<t:limit> <v:min></t> players.
+      level-difference: <t:error>You can't declare war against<t:error_value> <v:defender></t><t:error>. <t:regular>They're too far from <v:attacker><t:regular> in level <t:decoration>(</t><t:regular><v:defender_level> <t:regular>vs <v:attacker_level><t:decoration>)</t><t:regular>. You can only declare war within<t:limit> <v:max></t> level(s).
+    deny:
+      attacker: <t:error>Attackers can't deny their own war declaration. <t:regular>Only the defender can do that.
+      success: <t:regular>You successfully denied the war declaration for <v:object> <t:regular>against the enemy <v:enemy><t:regular>.
+    menu:
+      mutual: <t:error>You can't open the war menu right now. <t:regular>The war declaration to <v:object> <t:regular>hasn't been accepted yet.
+    info:
+      war: |
+        <t:regular_heading>Current War:</t>
+        <t:decoration>- </t><t:regular>Attacker <v:attacker><t:regular>: <v:att_score>
+        <t:decoration>- </t><t:regular>Defender <v:defender><t:regular>: <v:def_score>
+
+        <t:regular>Timeout:<t:time> <v:time></t>
+        <hover:show_text:"<t:regular>Click here to open the war menu."><click:run_command:"/<v:cmd>"><t:regular>More info: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      declaration:
+        normal: |
+          <t:regular_heading>War Declaration:</t>
+            <t:decoration>• </t><t:regular>Attacker: <v:attacker>
+            <t:decoration>• </t><t:regular>Defender: <v:defender>
+            <t:decoration>• </t><t:regular>Starts in:
+              <t:time><v:time></t>
+
+          <hover:show_text:"<t:regular>Click here to open the war menu."><click:run_command:"/<v:cmd>"><t:regular>More info: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        mutual:
+          defender: |
+            <t:regular_heading>War Declaration:</t>
+              <t:decoration>• </t><t:regular>Attacker: <v:attacker>
+              <t:decoration>• </t><t:regular>Defender: <v:defender>
+
+            <hover:show_text:"<t:regular>Click here to accept the war declaration."><click:run_command:"/<v:cmd_accept>"><t:positive>✔ Accept: <t:cmd>/<v:cmd_accept> </t><java><t:click>[CLICK]</t></java></click></hover>
+            <hover:show_text:"<t:regular>Click here to deny the war declaration."><click:run_command:"/<v:cmd_deny>"><t:negative>✘ Deny: <t:cmd>/<v:cmd_deny> </t><java><t:click>[CLICK]</t></java></click></hover>
+          attacker: |
+            <t:regular_heading>War Declaration:</t>
+              <t:decoration>• </t><t:regular>Attacker: <v:attacker>
+              <t:decoration>• </t><t:regular>Defender: <v:defender>
+
+            <t:regular>The defender hasn't accepted
+            the declaration yet.
+help:
+  command:
+    wars:
+      menu: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Open war menu</click></hover>
+      deny: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Deny mutual war declaration</click></hover>
+      spawn: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Teleport to enemy</click></hover>
+      declare: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> - </t><t:regular>Declare war</click></hover>
+      list: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> - </t><t:regular>View active wars</click></hover>
+      info:
+        main: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Info about war</click></hover>
+        captureflag: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>View captureflag recipe</click></hover>
+      admin:
+        main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Special war administration</click></hover>
+        start: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Start war</click></hover>
+        end: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>End war</click></hover>
+    lands:
+      admin:
+        war:
+          main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>War administration</click></hover>
+          end: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>End a war</click></hover>
+          koth:
+            main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage KoTH arenas</click></hover>
+            create: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Create KoTH arena</click></hover>
+            setflag: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Set the arena's capture point</click></hover>
+            setspawn: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set a team's arena spawn</click></hover>
+            remove: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Remove KoTH arena</click></hover>
+            list: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>List KoTH arenas</click></hover>
+        land:
+          shield:
+            main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Edit shield time</click></hover>
+            modify: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add (+) or remove (-) time</click></hover>
+            set: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set time</click></hover>
+        player:
+          give:
+            captureflag: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Give to captureblocks</click></hover>
+
+      war:
+        main: <hover:show_text:"<t:regular>Declare war on an enemy or manage an ongoing war. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage war</click></hover>
+        menu: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>War menu</click></hover>
+        declare: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Declare war</click></hover>
+        info:
+          main: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>View war information</click></hover>
+          captureflag: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>View captureflag recipe</click></hover>
+        spawn: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Teleport to war spawn</click></hover>
+        decline: <hover:show_text:"<t:regular>Decline a mutual war declaration. Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Decline war</click></hover>
+        koth:
+          main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Player-land KotH point</click></hover>
+          set: <hover:show_text:"<t:regular>Stand where you want your KotH point, then execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Set your KotH point</click></hover>
+lands:
+  command:
+    bank:
+      withdraw:
+        war: <t:error>You can't do this right now. <t:regular><v:object> <t:regular>is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+    claim:
+      war: <t:error>You can't claim while being engaged in a war against<t:error_value> <v:object></t>.
+    delete:
+      war: <t:error>You can't delete land<t:error_value> <v:object></t>, because it's at war with<t:error_value> <v:enemy></t>.
+    member:
+      trust:
+        inviter:
+          war: <t:error>You can't add players right now. <t:regular><v:object><t:regular> is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+        target:
+          war: <t:error>You can't join land<t:error_value> <v:object></t> right now. <t:regular>It is engaged in a war against <v:enemy><t:regular>. <t:regular>Try again when the war is over.
+    war:
+      no-war: <t:error>There aren't any upcoming or active wars for<t:error_value> <v:object></t>. <t:regular>Everything is peaceful.
+      declare:
+        confirm: |
+          <t:regular>Please confirm that you <t:decoration>(</t><t:regular><v:attacker><t:decoration>) </t><t:regular>want to declare war against <v:defender><t:regular>:
+            <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        shield:
+          confirm: |
+            <t:regular>Declaring war against <v:defender> <t:regular>will remove your active war shield <t:decoration>(</t><t:time><v:shield></t> <t:regular>left</t><t:decoration>)</t><t:regular> and leave you attackable.
+              <hover:show_text:"<t:regular>Click here to declare war and drop your shield."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        admin: <t:error>You can't declare war against admin lands.
+        peaceful: <t:error>This land has been marked as peaceful by a server admin. <t:regular>It can't engage in any wars.
+        no-nation: <t:error>You can't attack land<t:error_value> <v:land></t>. <t:regular>They must be part of a nation to be engaged in a war.
+        member: <t:error>You can't declare war against<t:error_value> <v:object></t>. <t:regular>You or the enemy leader are trusted in common lands and / or a nation.
+        vassal: <t:error>Your land<t:error_value> <v:land></t> is a vassal and can't declare war. <t:regular>It can only wage an independence war against its overlord.
+        enemies: |
+          <t:error>You must add<t:error_value> <v:object></t> as an enemy first.
+            <hover:show_text:"<t:regular>Click here to add <v:object> <t:regular>as an enemy in order to declare war on them."><click:run_command:"/<v:cmd>"><t:regular>✖ Add as Enemy: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        war-shield: <t:error>You currently can't declare war against<t:error_value> <v:object></t>. <t:regular>They have a war shield for the next<t:time> <v:time></t>.
+        days: '<t:error>You can only declare war at the following days:<t:error_value> <v:days></t> <t:decoration>(</t><t:regular>current day:<t:time> <v:current></t>, time zone: <t:time><v:timezone></t><t:decoration>)</t>'
+        hours: '<t:error>You can only declare war during the following hours:<t:error_value> <v:hours></t> <t:decoration>(</t><t:regular>current time:<t:time> <v:current></t>, time zone: <t:time><v:timezone></t><t:decoration>)</t>'
+        success:
+          mutual:
+            accepted: <t:regular>You <t:decoration>(<v:object></t><t:decoration>) </t><t:regular>accepted the war against <v:enemy><t:regular>. The war will start in<t:time> <v:time></t>.
+      decline:
+        ongoing: <t:error>You can't deny the ongoing war against<t:error_value> <v:enemy></t>. <t:regular>You can only deny war declarations for <v:object><t:regular>.
+      spawn:
+        none: <t:error>The enemy<t:error_value> <v:enemy></t> has no claims to teleport to.
+        success: <t:regular>You were teleported near the border of enemy <v:enemy><t:regular>.
+        arena-success: <t:regular>You were teleported to your team's arena spawn.
+      independence:
+        disabled: <t:error>Independence wars are disabled on this server.
+        confirm: |
+          <t:regular>Please confirm that you want to declare independence from nation<t:entity_nation> <v:nation></t> with land<t:entity_land> <v:land></t>. The land leaves the nation and a war against it starts:
+            <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        not-vassal: <t:error>Your land<t:error_value> <v:land></t> isn't a vassal, so it has no overlord to break free from.
+        cooldown: <t:error>Your land<t:error_value> <v:land></t> can't declare independence yet. <t:regular>Try again in<t:time> <v:time></t>.
+        success: <t:regular>Your land<t:entity_land> <v:land></t> declared independence from nation<t:entity_nation> <v:nation></t>. The war will start in<t:time> <v:time></t>.
+    area:
+      member:
+        trust:
+          inviter:
+            war: <t:error>You can't add players right now. <t:regular><v:object><t:regular> is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+          target:
+            war: <t:error>You can't join land<t:error_value> <v:object></t> right now. <t:regular>It is engaged in a war against <v:enemy><t:regular>. <t:regular>Try again when the war is over.
+    spawn:
+      war: <t:error>You currently can't teleport to the spawn of land<t:error_value> <v:land></t>. <t:regular>They're currently engaged in a war, that will end in<t:time> <v:time></t>.
+    unclaim:
+      all:
+        war: <t:error>You can't do this right now. <t:regular><v:object> <t:regular>is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+      war: <t:error>You can't do this right now. <t:regular><v:object> <t:regular>is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+  message:
+    blacklist:
+      war: <t:error>You're not allowed to use this command while you're engaged in a war.
+    capture:
+      dropped: <t:error>Some capture flags lie on the ground. <t:regular>There was no space left in your inventory.
+      success: <t:regular>You got<t:regular_value> <v:blocks></t> capture flag(s). <t:regular>Place them into enemy claims during the war to start capturing an area.
+    war: <t:error>You can't do this right now. <t:regular><v:object> <t:regular>is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+nations:
+  command:
+    war:
+      no-war: <t:error>There aren't any upcoming or active wars for<t:error_value> <v:object></t>. <t:regular>Everything is peaceful.
+      declare:
+        confirm: |
+          <t:regular>Please confirm that you <t:decoration>(</t><t:regular><v:attacker><t:decoration>) </t><t:regular>want to declare war against <v:defender><t:regular>:
+            <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        shield:
+          confirm: |
+            <t:regular>Declaring war against <v:defender> <t:regular>will remove your active war shield <t:decoration>(</t><t:time><v:shield></t> <t:regular>left</t><t:decoration>)</t><t:regular> and leave you attackable.
+              <hover:show_text:"<t:regular>Click here to declare war and drop your shield."><click:run_command:"/<v:fullcmd>"><t:positive>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        admin: <t:error>You can't declare war against admin lands.
+        peaceful: <t:error>This land has been marked as peaceful by a server admin. <t:regular>It can't engage in any wars.
+        no-nation: <t:error>You can't attack land<t:error_value> <v:land></t>. <t:regular>They must be part of a nation to be engaged in a war.
+        member: <t:error>You can't declare war against<t:error_value> <v:object></t>. <t:regular>You or the enemy leader are trusted in common lands and / or a nation.
+        vassal: <t:error>Your land<t:error_value> <v:land></t> is a vassal and can't declare war. <t:regular>It can only wage an independence war against its overlord.
+        enemies: |
+          <t:error>You must add<t:error_value> <v:object></t> as an enemy first.
+            <hover:show_text:"<t:regular>Click here to add <v:object> <t:regular>as an enemy in order to declare war on them."><click:run_command:"/<v:cmd>"><t:regular>✖ Add as Enemy: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        war-shield: <t:error>You currently can't declare war against<t:error_value> <v:object></t>. <t:regular>They have a war shield for the next<t:time> <v:time></t>.
+        days: '<t:error>You can only declare war at the following days:<t:error_value> <v:days></t> <t:decoration>(</t><t:regular>current day:<t:time> <v:current></t>, time zone: <t:time><v:timezone></t><t:decoration>)</t>'
+        hours: '<t:error>You can only declare war during the following hours:<t:error_value> <v:hours></t> <t:decoration>(</t><t:regular>current time:<t:time> <v:current></t>, time zone: <t:time><v:timezone></t><t:decoration>)</t>'
+        success:
+          mutual:
+            accepted: <t:regular>You <t:decoration>(<v:object></t><t:decoration>) </t><t:regular>accepted the war against <v:enemy><t:regular>. The war will start in<t:time> <v:time></t>.
+      decline:
+        ongoing: <t:error>You can't deny the ongoing war against<t:error_value> <v:enemy></t>. <t:regular>You can only deny war declarations for <v:object><t:regular>.
+      spawn:
+        none: <t:error>The enemy<t:error_value> <v:enemy></t> has no claims to teleport to.
+        success: <t:regular>You were teleported near the border of enemy <v:enemy><t:regular>.
+        arena-success: <t:regular>You were teleported to your team's arena spawn.

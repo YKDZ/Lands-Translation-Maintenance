@@ -1,0 +1,881 @@
+name: Lands
+main: me.angeschossen.lands.Lands
+version: 9.2.0
+author: 'Angeschossen'
+description: 'Feature rich GUI, Taxes, Customize your own, Titles, New factions - Let players manage their land!'
+website: 'https://www.spigotmc.org/resources/53313'
+api-version: '1.13'
+load: POSTWORLD
+folia-supported: true
+
+softdepend: [ WorldGuard, MobHunting, BlueMap, WildRegeneration ]
+
+libraries:
+  - "org.redisson:redisson:3.48.0"
+  - "org.apache.commons:commons-lang3:3.17.0"
+  - "com.zaxxer:HikariCP:4.0.3"
+  - "org.slf4j:slf4j-jdk14:1.7.32"
+  - "org.slf4j:slf4j-api:1.7.32"
+  - "net.kyori:adventure-api:4.26.1"
+  - "net.kyori:adventure-text-minimessage:4.26.1"
+  - "net.kyori:adventure-text-serializer-legacy:4.26.1"
+  - "net.kyori:adventure-text-serializer-plain:4.26.1"
+  - "net.kyori:adventure-text-serializer-gson:4.26.1"
+
+commands:
+  lands:
+    description: 'Claim land and manage it in a useful GUI menu.'
+    aliases:
+      - land
+  nations:
+    description: 'Create a nation and invite other lands to join you.'
+    aliases:
+      - nation
+  claim:
+    description: 'Quickly create your own land named after you and claim your current chunk.'
+  view:
+    description: 'Show info about the land at your current location.'
+  unclaim:
+    description: 'Unclaim your current chunk (also supports radius/auto).'
+  trust:
+    description: 'Trust a player in your land.'
+  untrust:
+    description: 'Untrust a player from your land.'
+  assign:
+    description: 'Assign your current selection as an area, auto-creating it if it does not exist yet.'
+  selection:
+    description: 'Turn selection mode on or off.'
+
+permissions:
+  lands.*:
+    description: Access to all Lands actions
+    children:
+      lands.command.*:
+        description: Access to all player commands
+        children:
+          lands.command.area:
+            description: /lands area
+            children:
+              lands.command.area.menu:
+                description: /lands area <area> menu
+              lands.command.area.assign:
+                description: /lands area <area> assign (also available as /assign)
+              lands.command.area.create:
+                description: /lands area <name> create
+              lands.command.area.rental:
+                description: /lands area <area> rental
+                children:
+                  lands.command.area.rental.info:
+                    description: /lands area <area> rental info
+                  lands.command.area.rental.remove:
+                    description: /lands area <area> rental remove
+                    children:
+                      lands.command.area.rental.remove.offer:
+                        description: Remove a rental/sale offer.
+                      lands.command.area.rental.remove.tenant:
+                        description: Forcefully remove tenants from their area.
+              lands.command.area.member:
+                description: /lands area <area> member
+                children:
+                  lands.command.area.member.menu:
+                    description: /lands area <area> member menu
+                  lands.command.area.member.setrole:
+                    description: /lands area <area> member setrole
+                  lands.command.area.member.trust:
+                    description: /lands area <area> member trust
+                  lands.command.area.member.untrust:
+                    description: /lands area <area> member untrust
+                  lands.command.area.member.ban:
+                    description: /lands area <area> member ban
+                  lands.command.area.member.unban:
+                    description: /lands area <area> member unban
+              lands.command.area.spawn:
+                description: /lands area <area> spawn
+                children:
+                  lands.command.area.spawn.set:
+                    description: /lands area <area> spawn set
+                  lands.command.area.spawn.teleport:
+                    description: Teleport to an area's spawn via /lands area <area> spawn.
+          lands.command.assign:
+            description: /assign - same as /lands area <area> assign.
+          lands.command.bank:
+            description: /lands bank
+            children:
+              lands.command.bank.balance:
+                description: /lands bank balance
+              lands.command.bank.deposit:
+                description: /lands bank deposit
+              lands.command.bank.withdraw:
+                description: /lands bank withdraw
+          lands.command.camp:
+            description: /lands camp
+          lands.command.chat:
+            description: /lands chat
+          lands.command.claim:
+            description: /lands claim (also available as /claim)
+            children:
+              lands.command.claim.merge:
+                description: /lands claim merge
+              lands.command.claim.auto:
+                description: /lands claim auto
+              lands.command.claim.fill:
+                description: /lands claim fill
+              lands.command.claim.radius:
+                description: /lands claim radius
+              lands.command.claim.expand:
+                description: /lands claim expand
+              lands.command.claim.list:
+                description: /lands claim list
+          lands.command.confirmtp:
+            description: /lands confirmtp
+          lands.command.create:
+            description: /lands create
+          lands.command.delete:
+            description: /lands delete
+          lands.command.edit:
+            description: /lands edit <land> - pick which of your own lands other commands apply to.
+          lands.command.eco:
+            description: /lands eco
+            children:
+              lands.command.eco.taxes:
+                description: /lands eco taxes
+              lands.command.eco.upkeep:
+                description: /lands eco upkeep
+          lands.command.help:
+            description: /lands help
+          lands.command.info:
+            description: /lands info
+            children:
+              lands.command.info.player:
+                description: /lands info player
+              lands.command.info.land:
+                description: /lands info land
+          lands.command.invites:
+            description: /lands invites
+            children:
+              lands.command.invites.menu:
+                description: /lands invites menu
+              lands.command.invites.accept:
+                description: /lands invites accept
+              lands.command.invites.decline:
+                description: /lands invites decline
+          lands.command.leave:
+            description: /lands leave
+          lands.command.list:
+            description: /lands list
+          lands.command.map:
+            description: /lands map
+          lands.command.member:
+            description: /lands member
+            children:
+              lands.command.member.menu:
+                description: /lands member menu
+              lands.command.member.setrole:
+                description: /lands member setrole
+              lands.command.member.trust:
+                description: /lands member trust (also available as /trust)
+              lands.command.member.untrust:
+                description: /lands member untrust (also available as /untrust)
+              lands.command.member.setowner:
+                description: /lands member setowner
+              lands.command.member.ban:
+                description: /lands member ban
+              lands.command.member.unban:
+                description: /lands member unban
+          lands.command.menu:
+            description: /lands menu
+          lands.command.nation:
+            description: /lands nation
+            children:
+              lands.command.nation.menu:
+                description: /lands nation menu
+              lands.command.nation.leave:
+                description: /lands nation leave
+              lands.command.nation.accept:
+                description: /lands nation accept
+              lands.command.nation.decline:
+                description: /lands nation decline
+              lands.command.nation.delete:
+                description: /lands nation delete
+          lands.command.relation:
+            description: /lands relation
+          lands.command.rename:
+            description: /lands rename
+          lands.command.rental:
+            description: /lands rental
+            children:
+              lands.command.rental.cancel:
+                description: /lands rental cancel
+              lands.command.rental.info:
+                description: /lands rental info
+              lands.command.rental.list:
+                description: /lands rental list
+              lands.command.rental.buy:
+                description: /lands rental buy [land] - buy the land of an inactive owner that's for sale
+          lands.command.rtp:
+            description: /lands rtp
+          lands.command.selection:
+            description: /lands selection (also available as /selection)
+            children:
+              lands.command.selection.assign:
+                description: /lands selection assign <area> - same as /assign.
+          lands.command.setspawn:
+            description: /lands setspawn
+          lands.command.spawn:
+            description: /lands spawn [land]
+          lands.command.storage:
+            description: /lands storage
+          lands.command.trust:
+            description: /lands trust (also available as /trust)
+          lands.command.unclaim:
+            description: /lands unclaim (also available as /unclaim)
+            children:
+              lands.command.unclaim.all:
+                description: /lands unclaim all
+              lands.command.unclaim.radius:
+                description: /lands unclaim radius
+              lands.command.unclaim.auto:
+                description: /lands unclaim auto
+          lands.command.unstuck:
+            description: /lands unstuck
+          lands.command.untrust:
+            description: /lands untrust (also available as /untrust)
+          lands.command.view:
+            description: /lands view (also available as /view)
+          lands.command.war:
+            description: /lands war
+            children:
+              lands.command.war.menu:
+                description: /lands war menu
+              lands.command.war.declare:
+                description: /lands war declare
+              lands.command.war.info:
+                description: /lands war info
+                children:
+                  lands.command.war.info.captureflag:
+                    description: /lands war info captureflag
+              lands.command.war.spawn:
+                description: /lands war spawn
+              lands.command.war.koth:
+                description: /lands war koth
+                children:
+                  lands.command.war.koth.set:
+                    description: /lands war koth set
+              lands.command.war.independence:
+                description: /lands war independence
+              lands.command.war.decline:
+                description: /lands war decline
+
+
+
+      lands.bypass.*:
+        description: Bypass all protections and other restrictions
+        children:
+          lands.bypass.block_break:
+            description: Bypass block break protection
+          lands.bypass.block_place:
+            description: Bypass block place protection
+          lands.bypass.block_ignite:
+            description: Bypass block ignite protection
+          lands.bypass.interact_general:
+            description: Bypass interaction protection
+          lands.bypass.interact_mechanism:
+            description: Bypass interaction protection
+          lands.bypass.interact_door:
+            description: Bypass interaction protection
+          lands.bypass.interact_container:
+            description: Bypass interaction protection
+          lands.bypass.interact_trapdoor:
+            description: Bypass trapdoor protection
+          lands.bypass.interact_villager:
+            description: Bypass villager protection
+          lands.bypass.attack_animal:
+            description: Bypass animal attack protection
+          lands.bypass.attack_monster:
+            description: Bypass monster attack protection
+          lands.bypass.attack_player:
+            description: Bypass player attack protection
+          lands.bypass.ender_pearl:
+            description: Bypass ender pearl protection
+          lands.bypass.member.untrust:
+            description: Untrust players or remove invites in other lands
+          lands.bypass.elytra:
+            description: Bypass elytra protection
+          lands.bypass.fly:
+            description: Bypass fly flag
+          lands.bypass.harvest:
+            description: Bypass harvest protection
+          lands.bypass.item_pickup:
+            description: Bypass item pickup protection
+          lands.bypass.land_enter:
+            description: Bypass land enter flag
+          lands.bypass.plant:
+            description: Bypass plant protection
+          lands.bypass.shear:
+            description: Bypass shear protection
+          lands.bypass.spawn_teleport:
+            description: Bypass spawn teleport role flag
+          lands.bypass.trample_farmland:
+            description: Bypass farmland trampling protection
+          lands.bypass.vehicle_use:
+            description: Bypass vehicle protection
+          lands.bypass.wind_burst:
+            description: Bypass wind charge and wind burst protection
+          lands.bypass.no_damage:
+            description: Bypass no_damage role flag checks
+          lands.bypass.player_trust:
+            description: Bypass player_trust role flag checks
+          lands.bypass.player_untrust:
+            description: Bypass player_untrust role flag checks
+          lands.bypass.player_setrole:
+            description: Bypass player_setrole role flag checks
+          lands.bypass.land_claim:
+            description: Bypass land_claim role flag checks
+          lands.bypass.spawn_set:
+            description: Bypass spawn_set role flag checks
+          lands.bypass.setting_edit_land:
+            description: Bypass setting_edit_land role flag checks
+          lands.bypass.setting_edit_role:
+            description: Bypass setting_edit_role role flag checks
+          lands.bypass.setting_edit_taxes:
+            description: Bypass setting_edit_taxes role flag checks
+          lands.bypass.setting_edit_various:
+            description: Bypass setting_edit_various role flag checks
+          lands.bypass.balance_withdraw:
+            description: Bypass balance_withdraw role flag checks
+          lands.bypass.balance_deposit:
+            description: Bypass balance_deposit role flag checks
+          lands.bypass.area_assign:
+            description: Bypass area_assign role flag checks
+          lands.bypass.player_ban:
+            description: Bypass player_ban role flag checks
+          lands.bypass.war_manage:
+            description: Bypass war_manage role flag checks
+          lands.bypass.level_up:
+            description: Bypass level_up role flag checks
+          lands.bypass.selection:
+            description: Bypass error message of other plugin cancelling selection
+          lands.bypass.land_claim_border:
+            description: Bypass buffer zone between claims
+          lands.bypass.shape:
+            description: Bypass the configured claim shape restriction.
+          lands.bypass.encirclement:
+            description: Bypass the encirclement prevention (prevents surrounding another land's chunks).
+
+          lands.bypass.wilderness.*:
+            description: Bypass all wilderness protections (for worlds in disallow-wilderness_list)
+            children:
+              lands.bypass.wilderness.block_break:
+                description: Bypass block break protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.block_place:
+                description: Bypass block place protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.block_ignite:
+                description: Bypass block ignite protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.interact_general:
+                description: Bypass interaction protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.interact_mechanism:
+                description: Bypass interaction protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.interact_door:
+                description: Bypass interaction protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.interact_container:
+                description: Bypass interaction protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.interact_trapdoor:
+                description: Bypass trapdoor protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.interact_villager:
+                description: Bypass villager protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.attack_animal:
+                description: Bypass animal attack protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.attack_monster:
+                description: Bypass monster attack protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.attack_player:
+                description: Bypass player attack protection for disallow-wilderness_list in config
+              lands.bypass.wilderness.elytra:
+                description: Use elytras in wilderness
+              lands.bypass.wilderness.ender_pearl:
+                description: Use ender pearls in wilderness
+              lands.bypass.wilderness.worldedit:
+                description: Bypass WorldEdit restrictions in wilderness.
+              lands.bypass.wilderness.fly:
+                description: Fly in wilderness
+              lands.bypass.wilderness.harvest:
+                description: Harvest in wilderness
+              lands.bypass.wilderness.item_pickup:
+                description: Pick up items in wilderness
+              lands.bypass.wilderness.land_enter:
+                description: Enter protected wilderness areas
+              lands.bypass.wilderness.plant:
+                description: Plant in wilderness
+              lands.bypass.wilderness.shear:
+                description: Shear entities in wilderness
+              lands.bypass.wilderness.spawn_teleport:
+                description: Teleport to spawns in wilderness
+              lands.bypass.wilderness.trample_farmland:
+                description: Trample farmland in wilderness
+              lands.bypass.wilderness.vehicle_use:
+                description: Use vehicles in wilderness
+              lands.bypass.wilderness.wind_burst:
+                description: Use wind charge and wind burst in wilderness
+              lands.bypass.wilderness.no_damage:
+                description: Bypass no_damage role flag checks in wilderness
+
+          lands.bypass.cooldown.*:
+            description: Bypass cooldowns
+            children:
+              lands.bypass.cooldown.wild:
+                description: Bypass /lands rtp cooldown
+              lands.bypass.cooldown.rename_land:
+                description: Bypass /lands rename cooldown
+              lands.bypass.cooldown.teleport:
+                description: Bypass chunk teleport cooldown
+              lands.bypass.cooldown.spawn:
+                description: Bypass /lands spawn / /lands setspawn cooldown
+              lands.bypass.cooldown.unstuck:
+                description: Bypass /lands unstuck cooldown
+
+          lands.bypass.spawn.private:
+            description: Teleport to private land spawns
+
+          lands.bypass.war.*:
+            description: Bypass war restrictions
+            children:
+              lands.bypass.war.trust:
+                description: Trust players during war.
+              lands.bypass.war.claim:
+                description: Claim during war.
+              lands.bypass.war.unclaim:
+                description: Unclaim chunks during war.
+
+          lands.bypass.option.*:
+            description: Bypass special config options.
+            children:
+              lands.bypass.option.force-near:
+                description: Bypass force-near option from config.
+
+          lands.bypass.cmd.untrusted.*:
+            description: Bypass blacklisted commands for untrusted players from config.yml. Use lands.bypass.cmd.untrusted.COMMAND to specify a command.
+          lands.bypass.cmd.general.*:
+            description: Bypass blacklisted commands for untrusted and trusted players from config.yml. Use lands.bypass.cmd.general.COMMAND to specify a command.
+          lands.bypass.cmd.war:
+            description: Bypass the war command blacklist from wars.yml.
+          lands.bypass.priority:
+            description: Edit roles even if they have the same or a higher priority than your own role.
+          lands.bypass.expiration:
+            description: Players with this permission never count as inactive for land expiration. For offline players, this only works with LuckPerms.
+
+          lands.bypass.teleport.*:
+            description: Bypass teleport restrictions.
+            children:
+              lands.bypass.teleport.delay:
+                description: Skip teleport delay.
+              lands.bypass.teleport.cmd:
+                description: Execute commands during teleportation.
+
+
+      lands.setting.*:
+        description: Allow players to toggle natural flags.
+        children:
+          lands.setting.entity_griefing:
+            description: Allow to toggle entity griefing
+          lands.setting.block_spreading:
+            description: Allow to toggle block spreading
+          lands.setting.phantom_spawn:
+            description: Allow to toggle phantom spawning
+          lands.setting.piston_griefing:
+            description: Allow to toggle piston griefing
+          lands.setting.monster_spawn:
+            description: Allow to toggle monster spawn
+          lands.setting.animal_spawn:
+            description: Allow to toggle animal spawn
+          lands.setting.waterflow_allow:
+            description: Allow to toggle waterflow
+          lands.setting.lavaflow_allow:
+            description: Allow to toggle lavaflow
+          lands.setting.tnt_griefing:
+            description: Allow to toggle tnt griefing
+          lands.setting.fire_spread:
+            description: Allow to toggle fire spread
+          lands.setting.leaf_decay:
+            description: Allow to toggle leaf decay
+          lands.setting.plant_growth:
+            description: Allow to toggle plant growth
+          lands.setting.snow_melt:
+            description: Allow to toggle snow melt
+          lands.setting.wither_attack_animal:
+            description: Allow to toggle wither attack animal
+          lands.setting.copper_golem:
+            description: Allow to toggle copper golem sorting
+          lands.setting.title_hide:
+            description: Allow to toggle title hiding
+          lands.setting.request_accept:
+            description: Allow to toggle join request acceptance
+          lands.setting.expiration_shield:
+            description: Allow to toggle expiration shield
+          lands.setting.peaceful:
+            description: Allow to toggle peaceful mode
+
+
+      lands.role.setting.*:
+        description: Allow players to toggle all role flags.
+        children:
+          lands.role.setting.block_break:
+            description: Allow players to toggle the 'block_break' flag.
+          lands.role.setting.block_place:
+            description: Allow players to toggle the 'block_place' flag.
+          lands.role.setting.harvest:
+            description: Allow players to toggle the 'harvest' flag.
+          lands.role.setting.plant:
+            description: Allow players to toggle the 'plant' flag.
+          lands.role.setting.shear:
+            description: Allow players to toggle the 'shear' flag.
+          lands.role.setting.attack_player:
+            description: Allow players to toggle the 'attack_player' flag.
+          lands.role.setting.attack_animal:
+            description: Allow players to toggle the 'attack_animal' flag.
+          lands.role.setting.block_ignite:
+            description: Allow players to toggle the 'block_ignite' flag.
+          lands.role.setting.interact_general:
+            description: Allow players to toggle the 'interact_general' flag.
+          lands.role.setting.interact_door:
+            description: Allow players to toggle the 'interact_door' flag.
+          lands.role.setting.interact_container:
+            description: Allow players to toggle the 'interact_container' flag.
+          lands.role.setting.interact_mechanism:
+            description: Allow players to toggle the 'interact_mechanism' flag.
+          lands.role.setting.interact_villager:
+            description: Allow players to toggle the 'interact_villager' flag.
+          lands.role.setting.fly:
+            description: Allow players to toggle the 'fly' flag.
+          lands.role.setting.elytra:
+            description: Allow players to toggle the 'elytra' flag.
+          lands.role.setting.land_enter:
+            description: Allow players to toggle the 'land_enter' flag.
+          lands.role.setting.player_trust:
+            description: Allow players to toggle the 'player_trust' flag.
+          lands.role.setting.player_untrust:
+            description: Allow players to toggle the 'player_untrust' flag.
+          lands.role.setting.player_setrole:
+            description: Allow players to toggle the 'player_setrole' flag.
+          lands.role.setting.land_claim:
+            description: Allow players to toggle the 'land_claim' flag.
+          lands.role.setting.land_claim_border:
+            description: Allow players to toggle the 'land_claim_border' flag.
+          lands.role.setting.spawn_set:
+            description: Allow players to toggle the 'spawn_set' flag.
+          lands.role.setting.spawn_teleport:
+            description: Allow players to toggle the 'spawn_teleport' flag.
+          lands.role.setting.balance_withdraw:
+            description: Allow players to toggle the 'balance_withdraw' flag.
+          lands.role.setting.balance_deposit:
+            description: Allow players to toggle the 'balance_deposit' flag.
+          lands.role.setting.area_assign:
+            description: Allow players to toggle the 'area_assign' flag.
+          lands.role.setting.setting_edit_land:
+            description: Allow players to toggle the 'setting_edit_land' flag.
+          lands.role.setting.setting_edit_role:
+            description: Allow players to toggle the 'setting_edit_role' flag.
+          lands.role.setting.setting_edit_taxes:
+            description: Allow players to toggle the 'setting_edit_taxes' flag.
+          lands.role.setting.vehicle_use:
+            description: Allow players to toggle the 'vehicle_use' flag.
+          lands.role.setting.attack_monster:
+            description: Allow players to toggle the 'attack_monster' flag.
+          lands.role.setting.ender_pearl:
+            description: Allow players to toggle the 'ender_pearl' flag.
+          lands.role.setting.interact_trapdoor:
+            description: Allow players to toggle the 'interact_trapdoor' flag.
+          lands.role.setting.item_pickup:
+            description: Allow players to toggle the 'item_pickup' flag.
+          lands.role.setting.wind_burst:
+            description: Allow players to toggle the 'wind_burst' flag.
+          lands.role.setting.no_damage:
+            description: Allow players to toggle the 'no_damage' flag.
+          lands.role.setting.player_ban:
+            description: Allow players to toggle the 'player_ban' flag.
+          lands.role.setting.setting_edit_various:
+            description: Allow players to toggle the 'setting_edit_various' flag.
+          lands.role.setting.trample_farmland:
+            description: Allow players to toggle the 'trample_farmland' flag.
+          lands.role.setting.war_manage:
+            description: Allow players to toggle the 'war_manage' flag.
+          lands.role.setting.level_up:
+            description: Allow players to toggle the 'level_up' flag.
+
+
+      lands.player.setting.*:
+        description: Allow players to toggle all personal flags.
+        children:
+          lands.player.setting.enter_messages:
+            description: Allow players to toggle the 'enter_messages' flag.
+          lands.player.setting.receive_invites:
+            description: Allow players to toggle the 'receive_invites' flag.
+          lands.player.setting.show_inbox:
+            description: Allow players to toggle the 'show_inbox' flag.
+
+
+      lands.admin.*:
+        description: Access to all admin actions. Commands are executed directly against any land via /lands edit <land>, bypassing ownership and trust checks.
+        children:
+          lands.admin.disabled-features:
+            description: Allow to use disabled features such as setting areas up for rental or claim in worlds where claiming was disabled for regular players in config.yml.
+          lands.admin.command.edit:
+            description: Allow to manage any land via /lands edit <land>, even if not a member. This may also ignore requirements such as max members for some commands.
+          lands.admin.setting_edit_land:
+            description: Edit land settings of other lands (like mob spawning etc.)
+          lands.admin.setting_edit_role:
+            description: Edit role settings of other lands.
+          lands.admin.setting_edit_taxes:
+            description: Edit taxes settings of other lands.
+          lands.admin.sign.top:
+            description: Create and edit top-signs (leaderboard signs).
+          lands.admin.command.*:
+            description: Access to all admin commands
+            children:
+              lands.admin.command.reload:
+                description: Access to /lands reload
+              lands.admin.command.about:
+                description: Access to /lands admin about
+              lands.admin.command.rtp:
+                description: Random teleport other players via /lands rtp <world> <player>
+              lands.admin.command.expiration:
+                description: Access to /lands admin expiration list and run
+                children:
+                  lands.admin.command.expiration.list: true
+                  lands.admin.command.expiration.run: true
+              lands.admin.command.expiration.list:
+                description: Access to /lands admin expiration list
+              lands.admin.command.expiration.run:
+                description: Access to /lands admin expiration run
+              lands.admin.command.limits:
+                description: Access to /lands admin limits
+              lands.admin.command.limits.refresh:
+                description: Access to /lands admin limits refresh
+              lands.admin.command.limits.migrate:
+                description: Access to /lands admin limits migrate
+              lands.admin.command.player:
+                description: Access to /lands admin player
+              lands.admin.command.player.limits:
+                description: Access to /lands admin player <player> limits
+              lands.admin.command.player.menu:
+                description: Access to /lands admin player <player> menu
+              lands.admin.command.player.delete:
+                description: Access to /lands admin player <player> delete
+              lands.admin.command.player.give:
+                description: Access to /lands admin player <player> give
+                children:
+                  lands.admin.command.player.give.claimblock:
+                    description: Give claimblocks to player
+                  lands.admin.command.player.give.camp:
+                    description: Give camp items to player
+                  lands.admin.command.player.give.captureflag:
+                    description: Give capture flags to player
+                  lands.admin.command.player.give.first-join-items:
+                    description: Give enabled first join items to player
+                  lands.admin.command.player.give.limit:
+                    description: Give a specific limit to player
+              lands.admin.command.database:
+                description: Access to /lands admin database
+                children:
+                  lands.admin.command.database.migrate:
+                    description: Access to /lands admin database migrate
+                  lands.admin.command.database.backup:
+                    description: Access to /lands admin database backup
+                  lands.admin.command.database.restore:
+                    description: Access to /lands admin database restore
+              lands.admin.command.land.*:
+                description: Access to admin land commands
+                children:
+                  lands.admin.command.land.limits:
+                    description: View limits of a land
+                  lands.admin.command.land.menu:
+                    description: Open the menu of a land
+                  lands.admin.command.land.addrole:
+                    description: Add a configured role to a land or all lands
+                  lands.admin.command.land.setflag:
+                    description: Set a flag in a land or all lands
+                  lands.admin.command.land.resetflag:
+                    description: Reset one or all flags in a land or all lands
+                  lands.admin.command.land.removespawn:
+                    description: Remove the spawn of a land or all lands
+                  lands.admin.command.land.shield:
+                    description: Manage war shields for lands
+                  lands.admin.command.land.shield.set:
+                    description: Set a war shield
+                  lands.admin.command.land.shield.modify:
+                    description: Modify a war shield
+                  lands.admin.command.land.bank:
+                    description: Manage land bank balances
+                  lands.admin.command.land.bank.set:
+                    description: Set a land bank balance
+                  lands.admin.command.land.bank.modify:
+                    description: Modify a land bank balance
+                  lands.admin.command.land.level:
+                    description: Set the level of a land
+              lands.admin.command.war:
+                description: Access to /lands admin war
+                children:
+                  lands.admin.command.war.end:
+                    description: Force end an active or upcoming war.
+                  lands.admin.command.war.koth:
+                    description: Manage KoTH arenas
+                    children:
+                      lands.admin.command.war.koth.create:
+                        description: Designate the current sub area as a KoTH arena
+                      lands.admin.command.war.koth.setflag:
+                        description: Place the arena control point at your position
+                      lands.admin.command.war.koth.setspawn:
+                        description: Set a team's arena spawn at your position
+                      lands.admin.command.war.koth.remove:
+                        description: Remove the arena you're standing in
+                      lands.admin.command.war.koth.list:
+                        description: List KoTH arenas
+              lands.admin.command.resetworld:
+                description: Delete claims and spawns in a world
+              lands.admin.command.dismiss:
+                description: Dismiss new-flag notes
+              lands.admin.command.chatspy:
+                description: Listen to land and nation chats
+              lands.admin.command.debug:
+                description: Print debug information
+              lands.admin.command.debug.tasks:
+                description: Print task debug information
+              lands.admin.command.listperms:
+                description: List permissions detected for a player
+              lands.admin.command.import:
+                description: Import data from other plugins
+              lands.admin.command.hologram:
+                description: Manage leaderboard holograms
+              lands.admin.command.hologram.create:
+                description: Create a leaderboard hologram
+              lands.admin.command.hologram.list:
+                description: List leaderboard holograms
+              lands.admin.command.hologram.delete:
+                description: Delete a nearby leaderboard hologram
+              lands.admin.command.menu:
+                description: Access to /lands menu <player>
+
+      lands.teleport.*:
+        description: Allow all teleportation.
+        children:
+          lands.teleport.chunk:
+            description: Allow teleportation to claimed chunks via /lands claimlist.
+            default: true
+          lands.teleport.rentable:
+            description: Allow teleportation to rentable areas or lands setup for purchase.
+            default: true
+          lands.teleport.land_spawn:
+            description: Allow to teleport to a land spawn.
+            default: true
+          lands.teleport.random_teleport:
+            description: Allow to random teleport via /lands rtp.
+            default: true
+          lands.teleport.war:
+            description: Allow to teleport to war spawn via /lands war spawn or /nations war spawn.
+            default: true
+          lands.teleport.sub_area:
+            description: Allow to teleport to a sub area.
+            default: true
+          lands.teleport.unstuck:
+            description: Allow to teleport via /lands unstuck (nearest wilderness, or world spawn if used in the wilderness).
+            default: true
+
+
+
+  nations.*:
+    description: Access to all Nations actions
+    children:
+      nations.admin.*:
+        description: Access to all Nations admin actions
+        children:
+          nations.admin.nation_edit:
+            description: Manage any nation via /lands edit <land> (using a land in that nation) as if trusted in it, and bypass nation level requirements when creating a nation.
+          nations.admin.command.*:
+            description: Access to all nation admin commands
+            children:
+              nations.admin.command:
+                description: Access to /nations admin
+              nations.admin.command.nation:
+                description: Access to /nations admin nation <nation>
+              nations.admin.command.nation.level:
+                description: Set the level of a nation
+              nations.admin.command.nation.shield:
+                description: Manage war shields for nations
+              nations.admin.command.nation.shield.set:
+                description: Set the war shield of a nation
+              nations.admin.command.nation.shield.modify:
+                description: Modify the war shield of a nation
+
+      nations.bypass.cooldown.*:
+        description: Bypass cooldowns
+        children:
+          nations.bypass.cooldown.rename_nation:
+            description: Bypass /nations rename cooldown
+      nations.setting.*:
+        description: Allow players to toggle all nation role settings.
+        children:
+          nations.setting.nation_edit:
+            description: Allow players to toggle the 'nation_edit' flag.
+      nations.bypass.*:
+        description: Bypass nation role restrictions.
+        children:
+          nations.bypass.nation_edit:
+            description: Bypass the nation_edit role flag.
+          nations.bypass.wilderness.nation_edit:
+            description: Bypass the nation_edit wilderness role flag.
+
+      nations.command.*:
+        description: Access to all Nations commands.
+        children:
+          nations.command.create:
+            description: /nations create
+          nations.command.list:
+            description: /nations list
+          nations.command.menu:
+            description: /nations menu
+          nations.command.info:
+            description: /nations info
+          nations.command.chat:
+            description: /nations chat
+          nations.command.delete:
+            description: /nations delete
+          nations.command.rename:
+            description: /nations rename
+          nations.command.relation:
+            description: /nations relation
+          nations.command.member:
+            description: /nations member
+            children:
+              nations.command.member.menu:
+                description: /nations member menu
+              nations.command.member.setcapital:
+                description: /nations member setcapital
+              nations.command.member.trust:
+                description: /nations member trust
+              nations.command.member.untrust:
+                description: /nations member untrust
+          nations.command.trust:
+            description: /nations trust
+          nations.command.untrust:
+            description: /nations untrust
+          nations.command.war:
+            description: /nations war
+            children:
+              nations.command.war.menu:
+                description: /nations war menu
+              nations.command.war.declare:
+                description: /nations war declare
+              nations.command.war.info:
+                description: /nations war info
+                children:
+                  nations.command.war.info.captureflag:
+                    description: /nations war info captureflag
+              nations.command.war.spawn:
+                description: /nations war spawn
+              nations.command.war.koth:
+                description: /nations war koth
+                children:
+                  nations.command.war.koth.set:
+                    description: /nations war koth set
+              nations.command.war.decline:
+                description: /nations war decline
+          nations.command.spawn:
+            description: /nations spawn [nation]

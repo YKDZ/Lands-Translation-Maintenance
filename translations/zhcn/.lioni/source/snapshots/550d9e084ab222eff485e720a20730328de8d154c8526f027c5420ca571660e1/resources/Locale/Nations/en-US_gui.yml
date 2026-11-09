@@ -1,0 +1,183 @@
+general:
+  nation:
+    role:
+      capital: <t:entity_land><b>Capital</t>
+      land: <t:entity_land><b>Land</t>
+      vassal: <t:negative><b>Vassal</t>
+
+gui:
+  nation:
+    title: <t:menu_title><v:level> <v:nation>
+    items:
+      default:
+        role:
+          name: <t:regular_heading>Nation Role
+          lore:
+          - <t:decoration>✖ </t><t:regular>Configure what nation members
+          - '   can do in each land that is part'
+          - '   of this nation.'
+          - ''
+          - <t:decoration>✖ </t><t:negative>Vassal lands don't receive this role
+          - '   and their players can''t use it on your lands.'
+        level:
+          name: <t:regular_heading>Level
+          lore:
+          - <t:decoration>✖ </t><t:regular>View level progression and
+          - '   attributes.'
+        war:
+          name: <t:negative_heading>Active War
+          lore:
+          - <t:decoration>✖ </t><t:regular>Get information about
+          - '   the current war.'
+        taxes:
+          name: <t:regular_heading>Taxes
+          lore:
+          - <t:decoration>✖ </t><t:regular>Tax lands that are part of
+          - '   this nation by their size.'
+          - ''
+          - '   <t:decoration>• </t><t:regular>Member tax:<t:cost> <v:tax></t>'
+          - '   <t:decoration>• </t><t:regular>Vassal tax:<t:cost> <v:vassal_tax></t>'
+        child_failure_spawn_teleport:
+          name: <t:error_heading>Not Allowed to Teleport
+          lore:
+          - <t:error>You're not allowed to teleport
+          - to the capital's spawn.
+          - ' <t:decoration>• </t><t:regular>The capital''s owner can give your'
+          - '   role permission to do so.'
+        effects:
+          name: <t:regular_heading>Effects
+          lore:
+          - <t:decoration>✖ </t><t:regular>Set effects to be active within
+          - '   your nation. Effects can be unlocked'
+          - '   through nation level progression.'
+        spawn:
+          name: <t:regular_heading>Spawn
+          lore:
+          - <t:decoration>✖ </t><t:regular>Teleport to the capital's spawn.
+        stats:
+          name: <t:regular_heading>Statistics
+          lore:
+          - '<t:regular>Total players: <t:regular_value><v:members></t>'
+          - ''
+          - <t:regular_heading>Economy</t>
+          - ' <t:decoration>• </t><t:regular>Nation'
+          - '   Balance: <t:regular_value><v:balance></t>'
+          - '   Nation pays<t:cost> <v:upkeep></t> upkeep'
+          - '   in <t:time><v:upkeep_next></t>.'
+          - ' <t:decoration>• </t><t:regular>Next land tax collection in'
+          - <t:time><v:upkeep_next_land></t>.
+        lands:
+          name: <t:regular_heading>Lands
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage lands that are part
+          - '   of this nation.'
+        no-war:
+          name: <t:positive_heading>Peaceful
+          lore:
+          - <t:regular>Your nation isn't engaged in any
+          - war. Everything is peaceful.
+        relations:
+          name: <t:regular_heading>Relations
+          lore:
+          - <t:decoration>✖ </t><t:regular>Manage your relations with other
+          - '   lands and nations.'
+        inbox:
+          name: <t:regular_heading>Inbox</t> <t:decoration>(</t><t:regular_value><v:amount></t><t:decoration>)</t>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View inbox messages.
+          - ''
+          - <t:regular_value><v:inbox></t>
+        various:
+          name: <t:regular_heading>Miscellaneous Settings
+          lore:
+          - <t:decoration>✖ </t><t:regular>Edit the nation name, tag
+          - '   icon etc.'
+        child_failure_spawn_none:
+          name: <t:error_heading>No Spawnpoint
+          lore:
+          - <t:error>The capital hasn't set a spawn yet.
+          - ' <t:decoration>• </t><t:regular>Set spawn point:'
+          - '   <t:cmd>/<v:cmd></t>'
+  nation_various:
+    title: <t:menu_title>Miscellaneous
+  list_nation_effects:
+    title: <t:menu_title>Effects
+    items:
+      default:
+        child_failure_max:
+          name: <t:error_heading>Max Amount
+          lore:
+          - <t:error>Your nation reached its maximum
+          - amount of<t:error_value> <v:max></t> concurrent
+          - active effects.
+          - ' <t:decoration>• </t><t:regular>You can have more effects'
+          - '   active at the same time, by'
+          - '   reaching a higher level.'
+        child_failure_locked:
+          name: <t:error_heading>Level too low
+          lore:
+          - <t:error>Your nation needs to reach
+          - level<t:error_value> <v:level></t> before you're
+          - able to activate this effect.
+        entry_object:
+          name: '<t:entry_heading><v:effect>: <v:active>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should this effect be active
+          - '   within your nation''s lands?'
+        entry_object_locked:
+          name: <t:entry_heading><v:effect>
+          lore:
+          - '<t:regular>Unlocks at level: <t:regular_value><v:level></t>'
+        entry_object_active:
+          name: '<t:entry_heading><v:effect>: <v:active>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Should this effect be active
+          - '   within your nation''s lands?'
+          enchanted: true
+  list_nation_lands:
+    title: <t:menu_title>Nation Members
+    items:
+      default:
+        add:
+          name: <t:positive_heading>Add Land
+          lore:
+          - <t:decoration>✖ </t><t:regular>Invite a land to join your nation.
+          - '   Available:<t:regular_value> <v:lands></t> <t:decoration>/</t><t:limit> <v:max></t>'
+        members_online:
+          name: <t:regular_heading>Online Members
+          lore:
+          - <t:decoration>✖ </t><t:regular>View members that are online.
+        entry_object:
+          name: <t:entry_heading><v:prefix><v:land>
+          lore:
+          - '<t:regular>Title:'
+          - <t:user_content><v:title></t>
+          - ''
+          - <action:primary><label>View Information</label></action>
+          - <action:remove><label>Remove from Nation</label></action>
+        remove:
+          name: <t:negative_heading>Remove Land
+          lore:
+          - <t:decoration>✖ </t><t:regular>Remove a land from your nation.
+  list_player_nations:
+    title: <t:menu_title>Your Nations
+    items:
+      default:
+        entry_nation_own:
+          name: <t:entry_heading><v:nation>
+          lore:
+          - <t:regular>You own this nation.
+          - ' <t:decoration>• </t><t:regular>Lands: <t:regular_value><v:lands></t>'
+          - ' <t:decoration>• </t><t:regular>Chunks: <t:regular_value><v:chunks></t>'
+          - ' <t:decoration>• </t><t:regular>Total members: <t:regular_value><v:members></t>'
+          - <action:primary><label>Open Nation Menu</label></action>
+          - <action:secondary><label>View Information</label></action>
+        entry_nation:
+          name: <t:entry_heading><v:nation>
+          lore:
+          - <t:regular>You're trusted in this nation.
+          - ' <t:decoration>• </t><t:regular>Lands: <t:regular_value><v:lands></t>'
+          - ' <t:decoration>• </t><t:regular>Total chunks: <t:regular_value><v:chunks></t>'
+          - ' <t:decoration>• </t><t:regular>Total members: <t:regular_value><v:members></t>'
+          - <action:primary><label>Open Nation Menu</label></action>
+          - <action:secondary><label>View Information</label></action>

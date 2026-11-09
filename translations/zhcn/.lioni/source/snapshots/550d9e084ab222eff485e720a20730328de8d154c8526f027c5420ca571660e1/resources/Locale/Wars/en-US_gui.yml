@@ -1,0 +1,212 @@
+general:
+  inbox-filter:
+    war: <t:negative>War ⚔</t>
+  war:
+    defenders: <t:positive>Defenders</t>
+    attackers: <t:negative>Attackers</t>
+
+physical:
+  capture_flag:
+    name: <t:regular_heading>Capture Flag
+    lore:
+    - <t:regular>Place this flag on the enemy land
+    - during war in order to capture it.
+
+gui:
+  war:
+    title: <t:menu_title>War
+    items:
+      default:
+        war_attackers:
+          name: <t:negative_heading>Attacker <v:object>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all attacking lands.
+          - '   <t:regular>Players:<t:regular_value> <v:players></t>'
+          - '   <t:regular>Score: <v:score>'
+        war_attackers_declaration:
+          name: <t:negative_heading>Attacker <v:object>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all attacking lands.
+          - '   <t:regular>Players:<t:regular_value> <v:players></t>'
+        war_defenders:
+          name: <t:positive_heading>Defender <v:object>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all defending lands.
+          - '   <t:regular>Players:<t:regular_value> <v:players></t>'
+          - '   <t:regular>Score: <v:score>'
+        war_defenders_declaration:
+          name: <t:positive_heading>Defender <v:object>
+          lore:
+          - <t:decoration>✖ </t><t:regular>View all defending lands.
+          - '   <t:regular>Players:<t:regular_value> <v:players></t>'
+        mode:
+          name: '<t:regular_heading>Mode: <v:mode>'
+          lore:
+          - <v:description>
+        mode_declaration:
+          name: '<t:regular_heading>Mode: <v:mode>'
+          lore:
+          - <v:description>
+        goal:
+          name: '<t:regular_heading>Goal: <v:goal>'
+          lore:
+          - '<t:decoration>• </t><t:regular>If the attacker wins:'
+          - '  <v:outcome_attacker>'
+          - ''
+          - '<t:decoration>• </t><t:regular>If the attacker loses:'
+          - '  <v:outcome_defender>'
+        child_failure_permission:
+          name: <t:error_heading>Not allowed
+          lore:
+          - <t:error>You're not allowed to do
+          - this for <t:decoration>(</t><t:error_value><v:object></t>)<t:error>.
+          - ' <t:decoration>• </t><t:regular>The owner can give you'
+          - '   permission to do so.'
+          - '   Flag: <t:regular_value><v:flag></t>'
+        recipe:
+          name: <t:regular_heading>Capture flag Recipe
+          lore:
+          - <t:decoration>✖</t> <t:regular>Click here to see the recipe
+          - '   of the capture flag item.'
+        child_failure_none:
+          name: <t:error_heading>No Claims
+          lore:
+          - <t:error>The enemy <t:error_value><v:enemy></t> has no claims
+          - to teleport to.
+        flags:
+          name: <t:regular_heading>Active Flags
+          lore:
+          - <t:regular>Involved players can do the following
+          - 'things in affected lands:'
+          - <v:settings>
+        spawn:
+          name: <t:regular_heading>Spawn
+          lore:
+          - <t:regular>Teleport to the enemy's border.
+        declaration_start:
+          name: <t:regular_heading>Start
+          lore:
+          - <t:regular>The war will start in<t:time> <v:time></t>.
+          - Until then each team has time to prepare.
+        surrender:
+          name: <t:error_heading>Surrender
+          lore:
+          - <action:primary><label>Surrender the war.</label><desc><v:outcome></desc></action>
+  list_wars:
+    title: <t:menu_title>Ongoing Wars
+    items:
+      default:
+        entry_object:
+          name: <t:regular_heading><v:attacker> vs. <v:defender>
+          lore:
+          - ' <t:decoration>• </t><t:regular>Progress:<t:regular_value> <v:points></t> <t:decoration>/</t><t:regular_value> <v:points_towin></t> <t:regular>points'
+          - '   <t:regular_value><v:points_bar></t>'
+          - ''
+          - ' <t:decoration>• </t><t:regular>Timeout: <t:time><v:timeout></t>'
+          - ' <t:decoration>• </t><t:regular>Attacker: <v:attacker>'
+          - ' <t:decoration>• </t><t:regular>Defender: <v:defender>'
+  list_war_lands:
+    title: <t:menu_title><v:team>
+    items:
+      default:
+        entry_object:
+          name: <t:entry_heading><v:land>
+          lore:
+          - <t:user_content><v:title></t>
+          - <t:decoration>✖ </t><t:regular>View information about this land.
+        entry_object_ally:
+          name: <t:entry_heading>Ally <v:land>
+          lore:
+          - <t:user_content><v:title></t>
+          - <t:decoration>✖ </t><t:regular>View information about this land.
+  war-declaration_confirm:
+    title: <t:menu_title>Declare War
+    items:
+      default:
+        cancel-declaration:
+          name: <t:error_heading>Cancel War Declaration
+          lore:
+          - <t:decoration>✖ </t><t:regular>Discard this declaration
+          - '   before it''s sent to the enemy.'
+        send-declaration:
+          name: <t:positive_heading>Send War Declaration
+          lore:
+          - <t:decoration>✖ </t><t:regular>Send this war declaration
+          - '   to the enemy.'
+        mode:
+          name: '<t:regular_heading>Mode: <v:mode>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change the war mode.
+          - ''
+          - <v:description>
+        goal:
+          name: '<t:regular_heading>Goal: <v:goal>'
+          lore:
+          - <t:decoration>✖ </t><t:regular>Change the war goal.
+          - ''
+          - '<t:decoration>• </t>If the attacker wins:'
+          - '  <v:outcome_attacker>'
+          - ''
+          - '<t:decoration>• </t>If the attacker loses:'
+          - '  <v:outcome_defender>'
+  list_war-declaration_mode:
+    title: <t:menu_title>Choose War Mode
+    items:
+      default:
+        entry_object:
+          name: <t:entry_heading><v:name>
+          lore:
+          - <v:description>
+        entry_object_selected:
+          name: <t:positive_heading>✔ <v:name>
+          lore:
+          - <v:description>
+        child_failure_not_applicable:
+          name: <t:error_heading>Not available
+          lore:
+          - <t:error>This mode can't be used
+          - for this war.
+        child_failure_koth_no_arena:
+          name: <t:error_heading>No arena set up
+          lore:
+          - <t:error>This King of the Hill mode needs a
+          - set-up arena. <t:regular>An admin must create
+          - one with<t:cmd> /<v:cmd_create><t:regular> first.
+  list_war-declaration_goal:
+    title: <t:menu_title>Choose War Goal
+    items:
+      default:
+        entry_object:
+          name: <t:entry_heading><v:name>
+          lore:
+          - '<t:decoration>• </t><t:regular>If the attacker wins:'
+          - '  <v:outcome_attacker>'
+          - ''
+          - '<t:decoration>• </t>If the attacker loses:'
+          - '  <v:outcome_defender>'
+        entry_object_selected:
+          name: <t:positive_heading>✔ <v:name>
+          lore:
+          - '<t:decoration>• </t><t:regular>If the attacker wins:'
+          - '  <v:outcome_attacker>'
+          - ''
+          - '<t:decoration>• </t>If the attacker loses:'
+          - '  <v:outcome_defender>'
+        child_failure_not_applicable:
+          name: <t:error_heading>Not available
+          lore:
+          - <t:error>This goal can't be used
+          - for this war.
+  war_capture_recipe:
+    title: <t:menu_title>Capture Flag Recipe
+  war_info:
+    title: <t:menu_title>War Info
+  list_server_koth_arenas:
+    title: <t:menu_title>KotH Arenas
+    items:
+      default:
+        entry_object:
+          name: <t:entry_heading><v:area>
+          lore:
+          - <t:decoration>✖ </t><t:regular>KotH arena in land<t:entity_land> <v:land></t>.
+          - '   <t:decoration>• </t><t:regular>Status:<t:regular_value> <v:status></t>'

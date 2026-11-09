@@ -1,0 +1,249 @@
+general:
+  affiliation:
+    nation: <t:decoration>[</t><t:entity_nation><v:nation> </t><t:decoration>|</t><t:entity_land> <v:land></t><t:decoration>]</t>
+  command:
+    argument:
+      type:
+        nation: nation
+        capital: capital
+  inbox:
+    economy:
+      upkeep:
+        alert:
+          nation:
+            normal: <t:error>You need to pay<t:error_value> <v:0></t> in upkeep in<t:error_value> <v:1></t>, but<t:error_value> <v:2></t> has insufficient funds.
+            delete: <t:error>You need to pay<t:error_value> <v:0></t> in upkeep in<t:error_value> <v:1></t>, but<t:error_value> <v:2></t> has insufficient funds. <t:regular>This will lead to the nation being deleted. Make sure to deposit some money to prevent this from happening.
+        nation: <t:error>Nation<t:error_value> <v:0></t> failed to pay the upkeep of<t:error_value> <v:1></t>, from their capital's balance, and has been deleted.
+    nation:
+      general:
+        created: <t:regular>Nation<t:entity_nation> <v:0></t> created.
+      member:
+        join: <t:regular>Land<t:entity_land> <v:0></t> joined.
+        leave: <t:regular>Land<t:entity_land> <v:0></t> left.
+      economy:
+        upkeep:
+          warning: <t:error>Couldn't pay the upkeep cost of<t:error_value> <v:0></t>.
+          paid: '<t:regular>Paid upkeep cost: -<t:cost> <v:0></t>'
+        taxes:
+          warning: <t:error>Land<t:error_value> <v:0></t> couldn't pay taxes.
+          untrusted: <t:error>Land<t:error_value> <v:0></t> couldn't pay taxes. They were removed.
+          received: '<t:regular>Received total of<t:cost> <v:0></t> taxes from lands. New balance:<t:regular_value> <v:1></t>'
+  integration:
+    bluemap:
+      capital:
+        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">Capital''s Spawnpoint</span><br /></span>This spawn belongs to the capital of nation <v:nation>.</div><div class="\&quot;infowindow\&quot;"><br />Open to untrusted: <v:public></div><ul><li>If this spawn is open to untrusted, anyone can teleport to it by executing /<v:cmd>.</li></ul>'
+      nation:
+        description: |
+          <div><span style="font-size: 200%;"><span style="color: <v:land_color>;"><v:land></span><br /></span><v:title></div><ul><li>Level: <v:level></li><li>Balance: <v:balance></li><li>Chunks: <v:chunks></li><li>Created at: <v:created_at></li><li>Players (<v:members_amount>): <v:members></li></ul><p><strong>This land belongs to nation <v:nation>:</strong></p><ul><li>Level: <v:level_nation></li><li>Capital: <v:capital></li><li>Founded at: <v:nation_created_at></li><li>Lands (amount: <v:lands_amount>, players: <v:members_amount_nation>): <v:lands></li></ul>
+    dynmap:
+      capital:
+        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">Capital''s Spawnpoint</span><br /></span>This spawn belongs to the capital of nation <v:nation>.</div><div class="\&quot;infowindow\&quot;"><br />Open to untrusted: <v:public></div><ul><li>If this spawn is open to untrusted, anyone can teleport to it by executing /<v:cmd>.</li></ul>'
+      nation:
+        description: |
+          <div><span style="font-size: 200%;"><span style="color: <v:land_color>;"><v:land></span><br /></span><v:title></div><ul><li>Level: <v:level></li><li>Balance: <v:balance></li><li>Chunks: <v:chunks></li><li>Created at: <v:created_at></li><li>Players (<v:members_amount>): <v:members></li></ul><p><strong>This land belongs to nation <v:nation>:</strong></p><ul><li>Level: <v:level_nation></li><li>Capital: <v:capital></li><li>Founded at: <v:nation_created_at></li><li>Lands (amount: <v:lands_amount>, players: <v:members_amount_nation>): <v:lands></li></ul>
+    pl3xmap:
+      capital:
+        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">Capital''s Spawnpoint</span><br /></span>This spawn belongs to the capital of nation <v:nation>.</div><div class="\&quot;infowindow\&quot;"><br />Open to untrusted: <v:public></div><ul><li>If this spawn is open to untrusted, anyone can teleport to it by executing /<v:cmd>.</li></ul>'
+      nation:
+        description: |
+          <div><span style="font-size: 200%;"><span style="color: <v:land_color>;"><v:land></span><br /></span><v:title></div><ul><li>Level: <v:level></li><li>Balance: <v:balance></li><li>Chunks: <v:chunks></li><li>Created at: <v:created_at></li><li>Players (<v:members_amount>): <v:members></li></ul><p><strong>This land belongs to nation <v:nation>:</strong></p><ul><li>Level: <v:level_nation></li><li>Capital: <v:capital></li><li>Founded at: <v:nation_created_at></li><li>Lands (amount: <v:lands_amount>, players: <v:members_amount_nation>): <v:lands></li></ul>
+    squaremap:
+      capital:
+        spawn: '<div class="\&quot;infowindow\&quot;"><span style="font-size: 200%;"><span style="color: <v:land_color>;">Capital''s Spawnpoint</span><br /></span>This spawn belongs to the capital of nation <v:nation>.</div><div class="\&quot;infowindow\&quot;"><br />Open to untrusted: <v:public></div><ul><li>If this spawn is open to untrusted, anyone can teleport to it by executing /<v:cmd>.</li></ul>'
+      nation:
+        description: |
+          <div><span style="font-size: 200%;"><span style="color: <v:land_color>;"><v:land></span><br /></span><v:title></div><ul><li>Level: <v:level></li><li>Balance: <v:balance></li><li>Chunks: <v:chunks></li><li>Created at: <v:created_at></li><li>Players (<v:members_amount>): <v:members></li></ul><p><strong>This land belongs to nation <v:nation>:</strong></p><ul><li>Level: <v:level_nation></li><li>Capital: <v:capital></li><li>Founded at: <v:nation_created_at></li><li>Lands (amount: <v:lands_amount>, players: <v:members_amount_nation>): <v:lands></li></ul>
+  top:
+    hologram:
+      nation:
+        title: '<t:decoration>━━━━━━━━━━━━━━‹━ <t:prefix>Top 10 Nations </t><t:decoration>(</t><t:regular>Total: <t:regular_value><v:total></t><t:decoration>) </t><t:decoration>━›━━━━━━━━━━━━━━'
+        entry: <t:regular_heading>#<v:pos> <t:prefix><v:object> </t><t:regular_value><v:sorting>:</t><t:regular_value> <v:value></t>
+        footer: '<t:decoration>━━━━━━━━━━━━━━‹━ <t:prefix>Top 10 Nations </t><t:decoration>(</t><t:regular>Total: <t:regular_value><v:total></t><t:decoration>) </t><t:decoration>━›━━━━━━━━━━━━━━'
+
+nations:
+  message:
+    current-war: <t:error>You can't do this right now. <t:regular>Your nation<t:entity_nation> <v:nation></t> is currently engaged in a war. <t:regular>Please try again after the war is over.
+    untrusted: <t:error>You're not a member of nation<t:error_value> <v:nation></t>.
+  command:
+    general:
+      none: |
+        <t:error>Your land<t:error_value> <v:land></t> isn't part of any nation.
+
+          <t:regular>Any nation can invite your land: <t:cmd>/<v:cmd_trust>
+          </t><hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:cmd>"><t:regular>Create your own nation: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+    create:
+      camp: |
+        <t:error>You can't create a nation with a camp <t:decoration>(</t><t:error_value><v:land></t>) <t:error>as the capital.
+          <hover:show_text:"<t:regular>Create a land. Click to copy."><click:suggest_command:"/<v:cmd_create>"><t:regular>✖ Create land: <t:cmd>/<v:cmd_create> </t><java><t:click>[CLICK]</t></java></click></hover>
+      already: <t:error>Your land<t:error_value> <v:land></t> is already part of the nation<t:error_value> <v:nation></t>. <t:regular>Your land needs to leave it first by executing <t:cmd>/<v:cmd></t><t:regular>.
+      war: <t:error>You can't create a nation with land<t:error_value> <v:land></t> as the capital while it is engaged in a war against<t:error_value> <v:object></t>. <t:regular>Please try again after the war is over.
+      level: '<t:error>You currently can''t create a nation. <t:regular>Your land<t:entity_land> <v:land></t> needs to be at least level<t:regular_value> <v:level></t> <t:decoration>(</t><t:regular>current: <t:regular_value><v:current></t><t:decoration>)</t><t:regular>.'
+      success: <t:regular>You successfully created the nation<t:entity_nation> <v:nation></t> with the land<t:entity_land> <v:land></t> as the capital. <hover:show_text:"<t:regular>Open the menu."><click:run_command:"/<v:cmd>"><t:regular>Click here to open the menu.</click></hover>
+    chat:
+      activated: <t:regular>Activated nation chat. Send a message in public chat to chat with your nation.
+      deactivated: <t:regular>Successfully deactivated nation chat.
+      none: |
+        <t:error>No nation found for nation chat.
+          <hover:show_text:"<t:regular>Click here to deactivate the chat mode."><click:run_command:"/<v:cmd>"><t:regular>✖ <t:regular>Disable chat mode: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      format:
+        minecraft: <noprefix><t:entity_nation>Nation <v:nation></t> <t:decoration>| </t><t:regular_value><v:player_display></t> »<t:user_content> <v:message></t>
+        discord: <noprefix><t:entity_nation>Nation <v:nation></t> <t:decoration>| </t><t:entity_nation>Discord </t><t:regular_value><v:player_display></t> <t:decoration>»</t><t:user_content> <v:message></t>
+        spy: <noprefix><t:decoration>[</t><t:negative>ChatSpy<t:decoration>] </t><t:entity_nation>Nation <v:nation> </t>| <t:regular_value><v:player_display> </t>»<t:user_content> <v:message></t>
+    delete:
+      confirm: |
+        <t:regular>Please confirm the deletion of nation<t:entity_nation> <v:nation></t> by clicking below:
+          <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:success>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      war: <t:error>You currently can't delete your nation. <t:regular>Nation<t:entity_nation> <v:nation></t> is currently engaged in a war against <v:object><t:regular>. Please try again when the war is over.
+      success: <t:regular>Successfully deleted this nation <t:decoration>(</t><t:regular>Nation:<t:entity_nation> <v:nation></t><t:decoration>)</t><t:regular>.
+    rename:
+      success: <t:regular>Successfully set the new name<t:regular_value> <v:name></t> for this nation <t:decoration>(</t><t:regular>Nation:<t:entity_nation> <v:nation></t><t:decoration>)</t><t:regular>. You paid<t:cost> <v:cost></t>.
+    member:
+      setcapital:
+        confirm: |
+          <t:regular>Please confirm that you want to set land<t:entity_land> <v:land></t> as the new capital of nation<t:entity_nation> <v:nation></t>:
+            <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:success>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        level: '<t:error>You can''t set the land<t:error_value> <v:land></t> as the new capital of nation<t:error_value> <v:nation></t>. <t:regular>It needs to be at least level<t:regular_value> <v:level></t> <t:decoration>(</t><t:regular>current: <t:regular_value><v:current></t><t:decoration>)</t><t:regular>.'
+        success: <t:regular>Successfully set the land<t:entity_land> <v:land></t> as the new capital of nation<t:entity_nation> <v:nation></t>.
+        not-trusted: <t:error>The land<t:error_value> <v:land></t> isn't a member of your nation<t:error_value> <v:nation></t>.
+        vassal: <t:error>The land<t:error_value> <v:land></t> is a vassal of nation<t:error_value> <v:nation></t> <t:error>and can't be made its capital.
+
+      trust:
+        camp: <t:error>Camps can't be part of nations. <t:regular>The land<t:entity_land> <v:land></t> is a camp.
+        max-distance: <t:error>The land<t:error_value> <v:land></t> is too far away from the capital of nation<t:error_value> <v:nation></t>. <t:regular>Max:<t:limit> <v:max> block(s)</t>, actual distance:<t:regular_value> <v:distance> block(s)</t>
+        already: <t:error>The land<t:error_value> <v:land></t> is already part of the nation<t:error_value> <v:nation></t>. <t:regular>They need to leave it first by using <t:cmd>/<v:cmd></t><t:regular>.
+        added: <t:regular>You successfully added your land<t:entity_land> <v:land></t> as a member of your nation<t:entity_nation> <v:nation></t>.
+        success: <t:regular>You successfully invited land<t:entity_land> <v:land></t> to join your nation<t:entity_nation> <v:nation></t>.
+        target: |
+          <t:regular>Nation<t:entity_nation> <v:nation></t> invited your land<t:entity_land> <v:land></t> to join them.
+            <hover:show_text:"<t:regular>Click here to accept this invite."><click:run_command:"/<v:cmd_accept>"><t:success>✔ Accept: <t:cmd>/<v:cmd_accept> </t><java><t:click>[CLICK]</t></java></click></hover>
+            <hover:show_text:"<t:regular>Click here to deny this invite."><click:run_command:"/<v:cmd_deny>"><t:negative>✘ Deny: <t:cmd>/<v:cmd_deny> </t><java><t:click>[CLICK]</t></java></click></hover>
+      untrust:
+        capital: <t:error>You can't remove this land. <t:regular>Land<t:entity_land> <v:land></t> is the capital of nation<t:entity_nation> <v:nation></t>.
+        already: <t:error>Land<t:error_value> <v:land></t> isn't a member of nation<t:error_value> <v:nation></t>.
+        success: <t:regular>You successfully removed land<t:entity_land> <v:land></t> from nation<t:entity_nation> <v:nation></t>.
+        noaccess: '<t:error>You''re not allowed to do this for nation<t:error_value> <v:nation></t>. <t:decoration>Flag: </t><t:regular_value><v:flag></t>'
+help:
+  command:
+    nations:
+      create: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Create nation</click></hover>
+      list: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>List all nations</click></hover>
+      spawn: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Teleport to nation spawn</click></hover>
+      menu:
+        main: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Menu</click></hover>
+        close: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Close your open menu</click></hover>
+        nations: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open your nations menu</click></hover>
+        nation:
+          main: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open your nation's menu</click></hover>
+          level: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open level requirements menu</click></hover>
+          relations: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open relations menu</click></hover>
+          taxes: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open taxes menu</click></hover>
+          lands: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open nation's lands menu</click></hover>
+          effects: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open effects menu</click></hover>
+          options: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open options menu</click></hover>
+          inbox: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Open inbox menu</click></hover>
+      chat: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Nation chat</click></hover>
+      info: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>View information</click></hover>
+      delete: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Delete nation</click></hover>
+      rename: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Rename nation</click></hover>
+      admin:
+        main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Nation administration</click></hover>
+        nation:
+          main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage a nation</click></hover>
+          level: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set the level of a nation</click></hover>
+          shield:
+            main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage the war shield of a nation</click></hover>
+            set: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set the war shield</click></hover>
+            modify: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add (+) or remove (-) war shield time</click></hover>
+      member:
+        main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage members</click></hover>
+        menu: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Show trusted lands</click></hover>
+        setcapital: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Set capital</click></hover>
+        trust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Invite land</click></hover>
+        untrust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove land</click></hover>
+      relation:
+        main: <hover:show_text:"<t:regular>Add lands and nations as your allies or enemies. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage relations</click></hover>
+        ally:
+          main: <hover:show_text:"<t:regular>Add lands and nations as your allies. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage allies</click></hover>
+          add: <hover:show_text:"<t:regular>Add a land or nation as your ally. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add ally</click></hover>
+          remove: <hover:show_text:"<t:regular>End relation with an ally. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove ally</click></hover>
+        enemy:
+          main: <hover:show_text:"<t:regular>Add lands and nations as your enemies. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage enemies</click></hover>
+          add: <hover:show_text:"<t:regular>Declare a land or nation an enemy. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Add enemy</click></hover>
+          remove: <hover:show_text:"<t:regular>Send neutralization request to an enemy. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove enemy</click></hover>
+      war:
+        main: <hover:show_text:"<t:regular>Declare war on an enemy or manage an ongoing war. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage war</click></hover>
+        menu: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>War menu</click></hover>
+        declare: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Declare war</click></hover>
+        info:
+          main: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>View war information</click></hover>
+          captureflag: <hover:show_text:"<t:regular>Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>View captureflag recipe</click></hover>
+        spawn: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Teleport to war spawn</click></hover>
+        decline: <hover:show_text:"<t:regular>Decline a mutual war declaration. Click to execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Decline war</click></hover>
+        koth:
+          main: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Player-land KotH point</click></hover>
+          set: <hover:show_text:"<t:regular>Stand where you want your KotH point, then execute."><click:run_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Set your KotH point</click></hover>
+      trust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Invite land to nation</click></hover>
+      untrust: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Remove land from nation</click></hover>
+    lands:
+      nation:
+        main: <hover:show_text:"<t:regular>Manage this land's relation to its nation. Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Manage nation</click></hover>
+        menu: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>View nation</click></hover>
+        leave: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Leave nation</click></hover>
+        accept: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Accept nation invite</click></hover>
+        decline: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> <v:args> </t><t:decoration>- </t><t:regular>Decline nation invite</click></hover>
+        delete: <hover:show_text:"<t:regular>Click to copy."><click:suggest_command:"/<v:fullcmd>"><t:cmd><v:parent> <v:subcmd> </t><t:decoration>- </t><t:regular>Delete nation</click></hover>
+
+lands:
+  command:
+    general:
+      input:
+        nation: <t:error>The nation<t:error_value> <v:input></t> doesn't exist.
+    relations:
+      allies:
+        add:
+          nation: |
+            <t:error>You can't get into an alliance with land<t:error_value> <v:land></t>. <t:regular>The land is governed by nation<t:entity_nation> <v:nation></t>.
+              <hover:show_text:"<t:regular>Click here to send an alliance request to nation<t:entity_nation> <v:nation></t>."><click:run_command:"/<v:cmd>"><t:regular>✖ Send Alliance request to nation<t:entity_nation> <v:nation></t> instead: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      enemies:
+        add:
+          nation: |
+            <t:error>You can't declare land<t:error_value> <v:land></t> as an enemy. <t:regular>The land is governed by nation<t:entity_nation> <v:nation></t>.
+              <hover:show_text:"<t:regular>Click here to declare nation<t:entity_nation> <v:nation></t> as an enemy."><click:run_command:"/<v:cmd>"><t:regular>✖ Declare nation<t:entity_nation> <v:nation></t> as an enemy instead: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+      nation: <t:error>All relations are managed by the nation<t:error_value> <v:nation></t>, which your land is part of.
+    area:
+      member:
+        setrole:
+          cant-set:
+            nation: <t:error>You can't set the<t:error_value> <v:role></t> role. <t:regular>This role is automatically assigned to players that are part of the same nation as land <t:entity_land><v:land></t>.
+    claim:
+      chunk-distance:
+        nation: <t:error>This is too near to land<t:error_value> <v:land></t>. <t:regular>The minimum distance is<t:limit> <v:distance> chunk(s)</t>, because they're part of a nation.
+      merge:
+        nation: |
+          <t:error>You can't merge land<t:error_value> <v:merge></t> into<t:error_value> <v:land></t>. <t:regular>Land<t:entity_land> <v:merge></t> is the capital of nation<t:entity_nation> <v:nation></t>.
+            <hover:show_text:"<t:regular>Click here to change the nation's capital. This will allow you to merge land <v:merge>. Click to copy."><click:suggest_command:"/<v:cmd> "><t:regular>✖ Change capital: <t:cmd>/<v:cmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+    delete:
+      nation: '<t:error>You can''t delete this land, because it''s the capital of nation<t:error_value> <v:nation></t>. <t:regular>You need to delete the nation first: <t:cmd>/<v:cmd></t>'
+    member:
+      setrole:
+        cant-set:
+          nation: <t:error>You can't set the<t:error_value> <v:role></t> role. <t:regular>This role is automatically assigned to players that are part of the same nation as land <t:entity_land><v:land></t>.
+    nation:
+      accept:
+        none: <t:error>Your land<t:error_value> <v:land></t> didn't receive any invite from nation<t:error_value> <v:nation></t>. <t:regular>They can invite your land by executing <t:cmd>/<v:cmd></t><t:regular>.
+        war: <t:error>You can't do this right now. <t:regular><v:object> <t:regular>is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+        current-war: <t:error>You can't join this nation right now. <t:regular>Nation<t:entity_nation> <v:nation></t> is currently engaged in a war against <v:object><t:regular>. Please try again once their war is over.
+        already: <t:error>Your land<t:error_value> <v:land></t> is already part of nation<t:error_value> <v:nation></t>. <t:regular>You need to leave it first by executing <t:cmd>/<v:cmd></t><t:regular>.
+        success: <t:regular>Your land<t:entity_land> <v:land></t> is now part of nation<t:entity_nation> <v:nation></t>.
+      leave:
+        confirm: |
+          <t:regular>Please confirm that you want to leave nation<t:entity_nation> <v:nation></t> with land<t:entity_land> <v:land></t>:
+            <hover:show_text:"<t:regular>Click here to confirm this action."><click:run_command:"/<v:fullcmd>"><t:success>✔ Confirm: <t:cmd>/<v:fullcmd> </t><java><t:click>[CLICK]</t></java></click></hover>
+        capital: <t:error>Your land<t:error_value> <v:land></t> can't leave nation<t:error_value> <v:nation></t>, because the land is the capital of this nation. <t:regular>To delete your nation, execute <t:cmd>/<v:cmd></t><t:regular>.
+        vassal: <t:error>Your land<t:error_value> <v:land></t> can't leave nation<t:error_value> <v:nation></t>, because it is a vassal. <t:regular>Only the nation can release it.
+        war: <t:error>You can't do this right now. <t:regular><v:object> <t:regular>is currently engaged in a war against <v:enemy><t:regular>. <t:regular>Please try again after the war is over.
+        current-war: <t:error>You can't leave this nation right now. <t:regular>Nation<t:entity_nation> <v:nation></t> is currently engaged in a war against <v:object><t:regular>. Your war will be over in<t:time> <v:time></t>.
+        success: <t:regular>You successfully left nation<t:entity_nation> <v:nation></t> with land<t:entity_land> <v:land></t>.
+      decline:
+        none: <t:error>Your land<t:error_value> <v:land></t> didn't receive any invite from nation<t:error_value> <v:nation></t>. <t:regular>They can invite your land by executing <t:cmd>/<v:cmd></t><t:regular>.
+        success: <t:regular>You successfully denied the invite from nation<t:entity_nation> <v:nation></t>.

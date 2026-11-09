@@ -6,8 +6,6 @@ resources:
     purpose: documentation
   - path: categories.yml
     purpose: configuration
-  - path: changelog.txt
-    purpose: documentation
   - path: config.yml
     purpose: configuration
   - path: events.yml
