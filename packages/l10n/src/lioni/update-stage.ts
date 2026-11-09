@@ -13,21 +13,69 @@ function configPathOf(entry: string | URL): string {
   return entry instanceof URL ? fileURLToPath(entry) : resolve(entry);
 }
 
+function scopeRangeLabel(range: unknown): string | undefined {
+  if (typeof range !== "object" || range === null || !("kind" in range)) {
+    return undefined;
+  }
+  if (
+    (range.kind === "lands-resource" ||
+      range.kind === "lands-unregistered-resource") &&
+    "path" in range &&
+    typeof range.path === "string"
+  ) {
+    return range.path;
+  }
+  if (
+    range.kind === "lands-target-resource" &&
+    "targetFile" in range &&
+    typeof range.targetFile === "string"
+  ) {
+    return range.targetFile;
+  }
+  return undefined;
+}
+
+function readErrorDetail(read: {
+  readonly error?: string;
+  readonly scopes: readonly {
+    readonly range: unknown;
+    readonly enumeration: string;
+    readonly error?: string;
+  }[];
+}): string | undefined {
+  if (read.error !== undefined) return read.error;
+  const details = [
+    ...new Set(
+      read.scopes
+        .filter(({ enumeration }) => enumeration !== "complete")
+        .map(({ range, enumeration, error }) => {
+          const label = scopeRangeLabel(range);
+          const reason = error ?? enumeration;
+          return label === undefined || reason.includes(label)
+            ? reason
+            : `${label}：${reason}`;
+        }),
+    ),
+  ];
+  return details.length === 0 ? undefined : details.join("；");
+}
+
 function incompleteFactMessage(
   facts: Awaited<ReturnType<typeof readFacts>>,
 ): string | undefined {
   if (facts.source.read.status !== "complete") {
-    return `原文事实读取${facts.source.read.status}，未开始写回${facts.source.read.error === undefined ? "。" : `：${facts.source.read.error}`}`;
+    const detail = readErrorDetail(facts.source.read);
+    return `原文事实读取${facts.source.read.status}，未开始写回${detail === undefined ? "。" : `：${detail}`}`;
   }
   const incompleteTranslations = facts.translations.reads.filter(
     ({ status }) => status !== "complete",
   );
   if (incompleteTranslations.length === 0) return undefined;
   return `译文事实读取不完整：${incompleteTranslations
-    .map(
-      ({ language, status, error }) =>
-        `${language}（${status}${error === undefined ? "" : `：${error}`}）`,
-    )
+    .map(({ language, status, ...read }) => {
+      const detail = readErrorDetail(read);
+      return `${language}（${status}${detail === undefined ? "" : `：${detail}`}）`;
+    })
     .join("、")}。未开始写回。`;
 }
 

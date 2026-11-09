@@ -3050,14 +3050,22 @@ void test("同步阶段遇到不完整事实时不运行写回", async (t) => {
   const project = await prepareBaselineUpdate(t);
   const originalTarget = await readFile(project.targetPath);
   const originalBaseline = await readFile(project.baselinePath);
+  const projectFile = join(project.projectDirectory, ".lioni/project.yml");
   await writeFile(
-    join(project.projectDirectory, ".lioni/source/current.json"),
-    "{}\n",
+    projectFile,
+    (await readFile(projectFile, "utf8")).replace(
+      "resources:\n",
+      "resources:\n  - path: changelog.txt\n    purpose: documentation\n",
+    ),
   );
 
   const result = await runLandsUpdateStage(project.configPath);
 
   assert.equal(result.status, "sync-incomplete");
+  assert.equal(
+    result.message,
+    "原文事实读取failed，未开始写回：changelog.txt：已登记资源在保存的 JAR 来源中缺失",
+  );
   assert.equal(result.update, undefined);
   assert.deepEqual(await readFile(project.targetPath), originalTarget);
   assert.deepEqual(await readFile(project.baselinePath), originalBaseline);
