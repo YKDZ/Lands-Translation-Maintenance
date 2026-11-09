@@ -2,36 +2,6 @@ format: lioni.qa-exceptions/v1
 exceptions:
   [
     {
-      id: ticket11-same-source-owner-list-area-players,
-      reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox
-        messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。,
-      checkId: message-family-same-source,
-      sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_players","items","default","child_failure_owner","name"]',
-      language: zh-CN,
-      inputFingerprint: sha256:bc5968f9819302c47af7dfb37e478b3135420dd34db820c4fb2b69fc3744bdfc,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
-          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:147cfc769404677af9516b697fd7d77c964818e3e55772d44b1e0218df18e923,
-        },
-    },
-    {
-      id: ticket11-same-source-owner-list-inbox,
-      reason: 收件箱失败条目的 lore 明确 Only the land owner can remove inbox
-        messages，显示“城镇所有者”；一般角色及成员页面保留“所有者”。,
-      checkId: message-family-same-source,
-      sourceKey: 'Locale/en-US_gui.yml:["gui","list_inbox","items","default","child_failure_owner","name"]',
-      language: zh-CN,
-      inputFingerprint: sha256:1c1bec8370b43212128d2c5f6fc24430cdcc2ecf204ce58c5b75e237846a544b,
-      fingerprintSummary:
-        {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
-          configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:68faa1a4aaa54771af75c7265428075582cdec604895632b50d285ddaa63ada8,
-        },
-    },
-    {
       id: ticket11-same-source-not-allowed-list-role-settings,
       reason: “职位权限不足”的三个条目 lore 均明确 role
         permission；同组一般限制项显示“无权操作”。前者是针对当前权限场景的具体表达，后者是通用失败提示。,
@@ -313,12 +283,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US.yml:["general","level","name","nation","nation"]',
       language: zh-CN,
-      inputFingerprint: sha256:35757356e639f07a1c34a7b69ac116e7e4674a192939c7c4a6b871dc53c8e8ad,
+      inputFingerprint: sha256:7236f5e8569f903b48bc4385c2029c5fb01d76e3b3f10f3845f4624e94f3901f,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:b27151ff452f288dff8072d2314b1ede1f9c9cee205390b9e308d75f2a0bd6b9,
+          inputFingerprint: sha256:d3b20a83776f7d963f4abb1bd4f1f9047d853c054ca9f63304b01a66cad42983,
         },
     },
     {
@@ -329,12 +299,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_dialogs.yml:["value","confirm","war","independence","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:86d44c1df120d47b92fbd1decfa227d597686f8e39739098d6b6c9fa96d85f5d,
+      inputFingerprint: sha256:e1af25a280cf04bcf99ca10bf84b2d0a444327066d04856ca604929e00f14809,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:436b1985f14dfc0bd7e51ea1cc49b3773e4111c19ff04bf98d82b54ae81a58fa,
+          inputFingerprint: sha256:ea28d4109489fe4807b1619501cf523322e6517bc740629829a444ba0945e07c,
         },
     },
     {
@@ -360,12 +330,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US.yml:["lands","command","unstuck","success_wilderness"]',
       language: zh-CN,
-      inputFingerprint: sha256:fc18dbf3745034fef9326539047eb6d0fac146bd274ebc56a1866d516af867d0,
+      inputFingerprint: sha256:dcaa85087d7fdcf9889d6833e359a624ae602adbcabc6ade575378e662152b31,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:2481179ccd849a0ac0f9b28ecef745f91a0937a366eca1dd598fa858df255fef,
+          inputFingerprint: sha256:1d1bd24cdb8336cfa20569dceca5b318e0508d1d84e87e943bd74a8234915b1d,
         },
     },
     {
@@ -374,12 +344,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_animal_spawn","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:7c4ab76baaf9b52dfa85743b00da1bf17f5f2c5fb4182345a32dd3c281ed31d3,
+      inputFingerprint: sha256:2c5346a8f0b1fa5692016b0020b073b1232156e461add12c1ba61223406bf01b,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:51afddab1880f196d5350cff46d47dd6e94a1677a3a9b6446fa663de877d6fba,
+          inputFingerprint: sha256:b89602f4b16adc7b5dbe2a443f37c23d90db0923add4515e9c1579b1c6dc2014,
         },
     },
     {
@@ -390,12 +360,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_monster_spawn","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:abcc364872486d60f9892f0f965a80d12e46c437b44a545c8edc1cac6f9de842,
+      inputFingerprint: sha256:dda4488689d5888972b7172da6387900eeb0be0b10159fc32e70e7f4dd44c420,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:3ec67cbec75b4cf6a421addc8abbe364482fe4c41b96fa23202f3668d70f5ed5,
+          inputFingerprint: sha256:70716c57a809f5e688cc9cb43a87948ecf917506630af28625a1bbcc1fc003c8,
         },
     },
     {
@@ -406,12 +376,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","entry_phantom_spawn","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:a06f6d8b11dd3c06bf72f109143caf35c9cd80cbbdc1a09f0e9c1c6f7715a424,
+      inputFingerprint: sha256:e52ad6f747401f6a463a198dd6e2caaa40c732327a2ab2231394884475663c9f,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:16a279284d4c6b3e9f81a4b41b2c56ce300bcdb025e353efbe629b4f346b17ee,
+          inputFingerprint: sha256:2d6d16709cf9e23098ff84347f0549f11be3cbd70ee7f153c89ff6825e4395ce,
         },
     },
     {
@@ -421,12 +391,12 @@ exceptions:
       checkId: minimessage-tag-correspondence,
       sourceKey: 'Locale/en-US_gui.yml:["gui","action-confirm","items","default","info","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:b81f837576d738e400f1166ea0aa13f85b72d2ea99b331d9dad61ea152c94eb2,
+      inputFingerprint: sha256:fc9a74d2ac344fa3806a36781a353b28b5e33ffb77991492fa89c759bf916924,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:1,
+          version: lioni.check-input/v1:2,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:03226fea333da7a79c7e08f7cdc7d04bb9938b31f94841cab9e479c41abdff94,
+          inputFingerprint: sha256:083e42905391037271297d57150efa12e3ae03b29dc596d9c1ae00721b03264e,
         },
     },
     {
@@ -436,12 +406,12 @@ exceptions:
       checkId: minimessage-tag-correspondence,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_players","items","default","child_failure_self","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:03cfa77e3438060508cce3ccbfc6137c6e972590b0f439f0897f6b99d630056d,
+      inputFingerprint: sha256:e211b3b31b137a83d9a70026a96b945f20929635bee00efee374fac79e86b02d,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:1,
+          version: lioni.check-input/v1:2,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:ad67644978ee341e30d03390428e74c742d8239752bad20603f113e821540f79,
+          inputFingerprint: sha256:d963724bc1a664a4a6376e219ee798f9fc770856ea1c8e39d6f9730caed69340,
         },
     },
     {
@@ -450,12 +420,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_default","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:0aa272c98b812dd54fe9ea7c73f7ad17ae65f7ceeaf801e538830181a0ccc611,
+      inputFingerprint: sha256:17f70d3df0f4a4f291948e8c15761c349b6292bd0dcb923b157bdbe2c49b6cbd,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:b2788f0726db9d8f2e5d099e8ed3fdad163af79715c836cacb6e36f430393e0f,
+          inputFingerprint: sha256:bf6efaf910c5b845c90dc73774867b364e4e2202517f8465e3cee94c5615d808,
         },
     },
     {
@@ -464,12 +434,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_default","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:ceafc18d8cf92c2b7b77fc4fe4f5e9f63610e3d77bc79466dd2d22675deaf104,
+      inputFingerprint: sha256:6f6d68a54c7fc3c241428b7cbea46c4cbe96e56ebb542b08515e91cfc1bf44c8,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:17574d973d62aaa9034c8dd47559e1ab11b1cdc1d932cc569931f6379ecbd6a7,
+          inputFingerprint: sha256:c9395ccd915426516340345a842c4bbac8973536b38e2661904b83bcfae96a26,
         },
     },
     {
@@ -478,12 +448,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_koth_arena","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:64e38883839252c5271c334c9f59a44aeb2cf025a4ea02e0d76f147ffb70a565,
+      inputFingerprint: sha256:39db8f88d1e02a0fb26c66cbc99435650b1742f34c64ba358fc0d22b643f3f6b,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:0b8b69f58af235e81d9e669823c5a41c6538655d6266e4b16d3722b011d78e0e,
+          inputFingerprint: sha256:d9f5751d14ab73f8be66177570562bbdded26560b7c24314aafb56708a75c0d9,
         },
     },
     {
@@ -492,12 +462,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_lands","items","default","entry_land","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:f319846140be01919577b0129eb82127bd402d195933910d3477e09d3ab2e19f,
+      inputFingerprint: sha256:07bade821ffbf2ea6b7362ca6e3f464e71b9c3670f0384002d7b8cc702a3e307,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:ef9567210d69e180f7383318960c210a031822ff1c9108961fc764d854c81624,
+          inputFingerprint: sha256:d838850484fc8213b4d8e5914068df17d2aacc27190112a86b8cbe01e6efbfe5,
         },
     },
     {
@@ -506,12 +476,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_lands","items","default","entry_land_edit","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:3ac055c8e1056ef540a48da7ad9f930bdccf1bae252293a3ea3ccd4edbfc816b,
+      inputFingerprint: sha256:ee8052691154eb7fe79d7cd96e310493e4e7a5f66f2d58fd85b2ca1f01e21113,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:727c7c1f55bbc404cb2a4fdfd9aac29b47c801dc87e31b4bffd52d3973f80c2d,
+          inputFingerprint: sha256:193012c93ade8bbbfd6673f295f612e42740402e851a429d3f1515cadc7d7532,
         },
     },
     {
@@ -520,12 +490,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_lands","items","default","entry_land_own","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:f2f20cd316fb4df1d53bac8c2ad21179690cb82eff1aaaffa9b2ce4eeccc6b95,
+      inputFingerprint: sha256:51f720be24b08be4fe48faa602f330b005839df324a51749e8330dd778cbd6eb,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:e8d55957cbe5c0739d1bd26a9a5a5502bf0829ac1313ac5f7557cf708e5159e0,
+          inputFingerprint: sha256:b1096949f8b51f2547cadfca230960eccb66042d3db63d71bee3d0f529b8ae97,
         },
     },
     {
@@ -534,12 +504,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_player_map","items","default","child_failure_no-land-selected","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:43f2eab317a19b18272f6428d05f7249bc84256bafb8331103738a37b902776f,
+      inputFingerprint: sha256:2bc677146424a281f13c09be5401674e7c7b744d815717b051991c1e4c2d3fa6,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:8317d4b3f1929e6d941494c3a71877d179cd43fc1576bc2926e57939c2141020,
+          inputFingerprint: sha256:594d6da330a28858da290411c892701f3193f7ab157499f494d1c820f5396d9e,
         },
     },
     {
@@ -548,12 +518,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_relation","items","default","child_failure_nation","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:87889a2f377a19767fae42cf6eda0bdea229d01a08be637828442f3025c78f82,
+      inputFingerprint: sha256:a0f94effa069a3d7279e3299a283d59011b35aa7d203be44327175ebeb9bb2c3,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:479ba4cb6c98848a1987c0fc6608ff7d13d4fd36fc3d2f4a2d14e84cc0fa636d,
+          inputFingerprint: sha256:e92f0f529b03c50b2dbc70ff9e204103ec950b9d54d64e59c421b8183face922,
         },
     },
     {
@@ -562,12 +532,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_relation","items","default","remove_nation","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:00b0ee9379403771188236569e02bb6e48024d699e17a780c1927c107e1e6961,
+      inputFingerprint: sha256:335ddd5448e3b0d76309ce918929730468bb4ed2cd5232c6a457540474d501f5,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:6014c3e96a263dff7a93fc6e4eca06fa4fd4ae166f9b65aa344a8be85b7fb372,
+          inputFingerprint: sha256:fd80a742bb9d302ecea6b1b0c8c31cc9e7a9b435c800b9772f75850e31823ebd,
         },
     },
     {
@@ -576,12 +546,12 @@ exceptions:
       checkId: terminology,
       sourceKey: 'Locale/en-US_gui.yml:["gui","rental_setup","items","default","restore_unavailable","lore"]',
       language: zh-CN,
-      inputFingerprint: sha256:341d6e0339d92ff7dc284de8805eb21f42f6cc96087a4ba5252f0c6f36f7470b,
+      inputFingerprint: sha256:00e82ae85bf7f370b00b07c9ee35cdcd7f0b7fba7b53e3e9c3828421bf42fe25,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v3,
+          version: lioni.check-input/v1:checks.terminology-rule/v2+lands-terminology-context-v4,
           configurationFingerprint: sha256:52773ea4a092227109fbdeedd75ebd53b1be9b3fd630efe9223a82859841e82d,
-          inputFingerprint: sha256:aa11a958b7a5f685f08e4081f9d16cf049153185bb90ef483fa9881ebe460b55,
+          inputFingerprint: sha256:97a1c612895115e347ade5dc73ef9d9594b318574db2e8c2fba991dfbc6f0ecf,
         },
     },
   ]
