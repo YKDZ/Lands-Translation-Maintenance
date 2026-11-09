@@ -33,7 +33,7 @@ import {
 import { canonicalJson } from "#/value";
 
 const targetLanguage = "zh-CN";
-const stylePolicyVersion = "lands-chinese-style-v1";
+const stylePolicyVersion = "lands-chinese-style-v2";
 const styleSource = {
   path: "README.md",
   commit: "b8f6985a4ad2af1b76b05f0f79b718a2234623ad",

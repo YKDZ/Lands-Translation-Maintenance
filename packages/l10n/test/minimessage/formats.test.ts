@@ -935,55 +935,16 @@ void describe("地图与旧格式官方 MiniMessage 投影", () => {
     );
   });
 
-  void it("共享格式投影保留旧颜色码政策与来源版本限制的位置", async (t) => {
-    const supported = await createGuiProject(t, {
-      name: "工具",
-      lore: ["说明"],
-      sourceVersion: "8.0.1",
-    });
-    const supportedTarget = join(supported.directory, "Locale/zh-CN_gui.yml");
-    const target = await readFile(supportedTarget, "utf8");
-    const modified = target.replace('name: "工具"', 'name: "§a工具"');
-    assert.notEqual(modified, target);
-    await writeFile(supportedTarget, modified);
-
-    const supportedProjection = await inspectFormatProjection(supported);
-    const unsupportedColor = supportedProjection.projection.formatFindings.find(
-      (finding) =>
-        finding.code === "legacy-format.code-unsupported" &&
-        finding.origin === "target",
-    );
-    assert.ok(unsupportedColor, JSON.stringify(supportedProjection, null, 2));
-    assert.equal(unsupportedColor.location.file, "Locale/zh-CN_gui.yml");
-    assert.deepEqual(unsupportedColor.location.path, [
-      "physical",
-      "selection",
-      "name",
-    ]);
-    assert.deepEqual(unsupportedColor.position, { start: 0, end: 2 });
-
-    const unknownVersion = await createGuiProject(t, {
-      name: "&a工具",
-      lore: ["&c说明"],
-      sourceVersion: "8.9.3",
-    });
-    const unknownProjection = await inspectFormatProjection(unknownVersion);
-    assert.ok(
-      unknownProjection.projection.formatFindings.some(
-        (finding) =>
-          finding.code === "legacy-format.source-version-unsupported" &&
-          finding.origin === "source",
-      ),
-    );
-    assert.ok(
-      unknownProjection.projection.unavailableCapabilities.some((reason) =>
-        reason.includes("来源 Lands 版本未受支持"),
-      ),
-    );
-    assert.ok(
-      unknownProjection.projection.formatFindings.some((finding) =>
-        finding.reason.includes("未知 Lands 版本 8.9.3"),
-      ),
-    );
+  void it("共享格式投影按当前规则接受不同来源版本的旧颜色码", async (t) => {
+    for (const sourceVersion of ["8.0.1", "8.9.3"]) {
+      const project = await createGuiProject(t, {
+        name: "&a工具",
+        lore: ["§c说明"],
+        sourceVersion,
+      });
+      const inspected = await inspectFormatProjection(project);
+      assert.deepEqual(inspected.projection.formatFindings, []);
+      assert.deepEqual(inspected.projection.unavailableCapabilities, []);
+    }
   });
 });

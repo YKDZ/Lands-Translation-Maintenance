@@ -67,7 +67,6 @@ export interface MiniMessageQualityObject extends QualityObject {
 
 export interface MiniMessageQualityDependencies {
   readonly languageLoad?: ReturnType<typeof inspectLandsLanguageLoad>;
-  readonly sourceVersion: string;
   readonly resources: readonly ResourceInventoryEntry[];
   readonly messages: readonly MiniMessageInputMessage[];
   readonly themeInput: MiniMessageThemeInput;
@@ -397,7 +396,6 @@ export async function projectMiniMessageQualityInputs(
     }
   }
   return {
-    sourceVersion: input.sourceVersion,
     resources: input.resources,
     messages: input.messages,
     themeInput: input.theme,
@@ -482,11 +480,9 @@ export async function loadMiniMessageQualityDependencies(
 ): Promise<MiniMessageQualityDependencies> {
   const readIssues = factReadIssues(facts);
   let landsProjection: LandsStructureProjection | undefined;
-  let sourceVersion = "";
   let theme: MiniMessageThemeInput = { issues: [] };
   try {
     landsProjection = await readLandsStructureProjection(entryUrl);
-    sourceVersion = landsProjection.sourceVersion;
     theme = themeInputFrom(landsProjection);
   } catch (error) {
     readIssues.push({
@@ -505,7 +501,6 @@ export async function loadMiniMessageQualityDependencies(
     messages: factInputs.messages,
     resources: factInputs.resources,
     theme,
-    sourceVersion,
   };
   const projected = await projectMiniMessageQualityInputs(input, {
     readIssues,

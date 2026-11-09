@@ -1,0 +1,380 @@
+# Land and nation levels. Wiki: https://wiki.incredibleplugins.com/lands/configuration/levels
+# You must insert valid YAML format. To verify your format, you can paste the content of this file here: https://yaml-online-parser.appspot.com
+# /lands admin reload only reloads land.enabled, nation.enabled, the sounds and general.farm-multipliers. Restart the
+# server after changing the levels, and to enable levels that were disabled at startup.
+#
+# How levels work:
+# - A land or nation levels up in the level menu, once all requirements of the next level are met. It pays the level's
+#   cost from its bank once (nations pay from the bank of their capital).
+# - Levels are never lost. Admins can set a level with /lands admin land <land> level <level>, and the level of a nation
+#   with /nations admin nation <nation> level <level>.
+# - The rewards of all reached levels add up: a land at the third level has the rewards of the first three levels.
+# - The commands of a level run once, when the level is reached.
+#
+# Each level's section name is its id (e.g. "town"). It's stored for every land and nation, so don't rename it once
+# lands reached it. The order of the levels is ascending (lowest level -> highest).
+#
+# Texts come from the language files (general.level in Locale/<language>.yml), so players see them in their language:
+# the names and titles of the levels below, and the texts of the requirements and rewards of Lands. Set "name",
+# "titles", or a requirement's "title" and "description" or a reward's "description" here to use your own text instead.
+#
+# Level options:
+#   name: shown in menus and in front of the land's name, e.g. '<green>Village'. Needed for levels the language files
+#     don't have.
+#   cost: paid once on level-up.
+#   announce: tell the whole server when a land or nation reaches it.
+#   titles: owner and member titles (placeholders %lands_land_level_title% and %lands_nation_level_title%), e.g.
+#     titles:
+#       owner: 'Mayor'
+#       member: 'Citizen'
+#   webmap-color: fill color on web maps, e.g. '#55FF55'. Default: the color of the land's name.
+#   commands: console commands run once when the level is reached. Placeholders: <v:level>, <v:owner>,
+#     lands: <v:land>, <v:land_name>, <v:member> (runs the command for every member, see "members" below),
+#     nations: <v:nation>, <v:nation_name>, <v:land>, <v:land_name> (runs the command for every land of the nation).
+#     <v:land> and <v:nation> are command names (no spaces): use them as arguments. Names can contain spaces, so put
+#     <v:land_name> and <v:nation_name> only at the end of a command, as text, e.g. 'broadcast <v:land_name> reached <v:level>'.
+#
+# Requirements (in your own "title" and "description", <v:req> is the required value). Times are written like in the
+# other files, with s, m, h or d, e.g. 10h or 7d; a number without a unit is seconds:
+#   members: players trusted in the whole land, the owner included. Players trusted only in a sub area, tenants and
+#     temporarily trusted players don't count (also not for playtime and tenure). Nations: each player once, also if
+#     trusted in several of its lands.
+#   chunks: claims.
+#   age: time since the land or nation was created, e.g. 3d.
+#   playtime: time the members who are trusted for at least "trusted-for" (default 7d) played together, e.g. 10h. On
+#     a network with Redis: on all servers. Their time before they joined the land counts too.
+#   tenure: members who are trusted for at least "trusted-for" (default 7d).
+#   level_held: time since the current level was reached, e.g. 2d.
+#   lands (nations): lands of the nation, besides the capital.
+#   Nations: a land counts for the requirements of its nation (lands, members, chunks, playtime, tenure, plugin
+#   requirements) once it's in the nation for nation.land-time. The capital always counts.
+#   Plugins add requirements under their name, with their texts here, e.g.:
+#     upgradeablehoppers:
+#       hoppers:
+#         required: 5
+#         title: '<v:req> Upgradeable Hoppers'
+#         description: [ '<t:regular>Have <v:req> upgradeable hoppers in your land.' ]
+#   (upgradeablespawners: spawners, betterfarming: farms)
+#
+# Rewards (in your own "description", <v:value> is the value; an empty one hides the reward):
+#   chunks, members, areas, allies, enemies (lands): added to the land's limits. Can be negative.
+#   chunks (nations): more claims for every land of the nation. lands, allies, enemies (nations): added to the nation's limits.
+#   upkeep: percent added to the upkeep, negative is a discount. Lands in a nation pay taxes instead of upkeep.
+#   unlock: features that can only be used from this level on. A feature that no level unlocks can always be used.
+#     public_spawn (visitors can teleport to the spawns of the land and its sub areas; players of the land's nation
+#     aren't visitors), storage (land storage), rentals (rent out and sell areas),
+#     declare_war (declare wars).
+#   permissions: permissions trusted players get while they're online (of a nation: the players of all its lands).
+#   crop_growth, spawner_rate, mob_xp, mob_drops: percent bonus inside the land (of a nation: inside its lands). Mob XP and
+#     drops only for mobs killed by trusted players. Enable them in general.farm-multipliers. They add up with
+#     the upgrades of BetterFarming and UpgradeableSpawners.
+#   war_shield: longer war shield after a lost war, e.g. 6h.
+#   effects (nations): potion effects the nation can activate. Format: EFFECT:LEVEL, e.g. JUMP_BOOST:2 for Jump Boost II.
+#   effects_amount (nations): how many effects can be active at the same time.
+
+general:
+  # Farm multiplier rewards. Disabled multipliers don't apply, even if a level has them. Servers that updated from a
+  # version before 9.0 start with them turned off.
+  farm-multipliers:
+    crop-growth: true
+    spawner-rate: true
+    mob-xp: true
+    mob-drops: true
+
+land:
+  # Enable land levels?
+  enabled: true
+  levels:
+    settlement:
+      cost: 0
+      commands: [ ]
+    hamlet:
+      cost: 2000
+      requirements:
+        members:
+          required: 2
+        chunks:
+          required: 4
+      rewards:
+        chunks:
+          value: 2
+        members:
+          value: 1
+      commands: [ ]
+    village:
+      cost: 5000
+      requirements:
+        members:
+          required: 3
+        playtime:
+          # Time the counted members played together.
+          required: 10h
+          # Only members trusted for at least this long count, so trusting someone briefly doesn't help.
+          trusted-for: 7d
+        level_held:
+          required: 1d
+      rewards:
+        chunks:
+          value: 3
+        members:
+          value: 1
+        unlock:
+          value:
+            - public_spawn
+      commands: [ ]
+    town:
+      cost: 12000
+      requirements:
+        members:
+          required: 5
+        tenure:
+          required: 3
+          # How long a member must be trusted in the land to count.
+          trusted-for: 3d
+        level_held:
+          required: 2d
+      rewards:
+        chunks:
+          value: 4
+        members:
+          value: 2
+        areas:
+          value: 1
+        unlock:
+          value:
+            - storage
+      commands: [ ]
+    borough:
+      cost: 25000
+      requirements:
+        members:
+          required: 7
+        playtime:
+          # Time the counted members played together.
+          required: 50h
+          # Only members trusted for at least this long count, so trusting someone briefly doesn't help.
+          trusted-for: 7d
+        level_held:
+          required: 3d
+      rewards:
+        chunks:
+          value: 5
+        members:
+          value: 2
+        upkeep:
+          value: -5
+        crop_growth:
+          value: 10
+      commands: [ ]
+    city:
+      cost: 50000
+      requirements:
+        members:
+          required: 10
+        tenure:
+          required: 6
+          # How long a member must be trusted in the land to count.
+          trusted-for: 7d
+        level_held:
+          required: 4d
+      rewards:
+        chunks:
+          value: 6
+        members:
+          value: 2
+        areas:
+          value: 1
+        unlock:
+          value:
+            - rentals
+        mob_xp:
+          value: 10
+      commands: [ ]
+    metropolis:
+      cost: 100000
+      requirements:
+        members:
+          required: 13
+        playtime:
+          # Time the counted members played together.
+          required: 200h
+          # Only members trusted for at least this long count, so trusting someone briefly doesn't help.
+          trusted-for: 7d
+        level_held:
+          required: 5d
+      rewards:
+        chunks:
+          value: 8
+        members:
+          value: 3
+        upkeep:
+          value: -5
+        spawner_rate:
+          value: 10
+        war_shield:
+          value: 6h
+      commands: [ ]
+    province:
+      cost: 200000
+      requirements:
+        members:
+          required: 16
+        tenure:
+          required: 10
+          # How long a member must be trusted in the land to count.
+          trusted-for: 14d
+        level_held:
+          required: 7d
+      rewards:
+        chunks:
+          value: 10
+        members:
+          value: 3
+        mob_drops:
+          value: 10
+        crop_growth:
+          value: 10
+      commands: [ ]
+    duchy:
+      cost: 400000
+      requirements:
+        members:
+          required: 20
+        playtime:
+          # Time the counted members played together.
+          required: 500h
+          # Only members trusted for at least this long count, so trusting someone briefly doesn't help.
+          trusted-for: 7d
+        level_held:
+          required: 7d
+      rewards:
+        chunks:
+          value: 12
+        members:
+          value: 4
+        upkeep:
+          value: -10
+      commands: [ ]
+    kingdom:
+      cost: 800000
+      announce: true
+      requirements:
+        members:
+          required: 25
+        tenure:
+          required: 18
+          # How long a member must be trusted in the land to count.
+          trusted-for: 30d
+        level_held:
+          required: 10d
+      rewards:
+        chunks:
+          value: 15
+        members:
+          value: 5
+        war_shield:
+          value: 12h
+      commands: [ ]
+
+nation:
+  # Enable nation levels?
+  enabled: true
+  # A land counts for the level requirements of its nation once it's in the nation for this long, so lands can't join a
+  # nation just for its level-up. The capital always counts. Lands that were in a nation before the update count right
+  # away. 0d to count every land right away (servers that updated from a version before 9.0 start with 0d).
+  land-time: 7d
+  levels:
+    federation:
+      cost: 0
+      commands: [ ]
+    alliance:
+      cost: 50000
+      requirements:
+        lands:
+          required: 2
+        members:
+          required: 15
+        age:
+          required: 3d
+      rewards:
+        chunks:
+          value: 5
+        upkeep:
+          value: -5
+      commands: [ ]
+    nation:
+      cost: 150000
+      requirements:
+        lands:
+          required: 4
+        members:
+          required: 30
+        level_held:
+          required: 3d
+      rewards:
+        chunks:
+          value: 10
+        lands:
+          value: 1
+        effects:
+          value:
+            - JUMP_BOOST
+            - SPEED
+            - HASTE
+            - DOLPHINS_GRACE
+        effects_amount:
+          value: 1
+      commands: [ ]
+    empire:
+      cost: 400000
+      requirements:
+        lands:
+          required: 6
+        members:
+          required: 50
+        level_held:
+          required: 7d
+      rewards:
+        chunks:
+          value: 15
+        lands:
+          value: 1
+        upkeep:
+          value: -10
+        effects:
+          value:
+            - JUMP_BOOST:2
+            - SPEED:2
+            - HASTE:2
+            - DOLPHINS_GRACE:2
+            - NIGHT_VISION
+            - LUCK
+            - HEALTH_BOOST
+        effects_amount:
+          value: 2
+      commands: [ ]
+    dominion:
+      cost: 1000000
+      announce: true
+      requirements:
+        lands:
+          required: 10
+        members:
+          required: 80
+        level_held:
+          required: 14d
+      rewards:
+        chunks:
+          value: 20
+        lands:
+          value: 2
+        war_shield:
+          value: 12h
+      commands: [ ]
+
+# You can disable sounds by setting them to ''
+sound:
+  # Played to each player of the land or nation on level up.
+  up: 'block.bell.use'
+  # Played to each player of the land or nation when an admin lowers the level.
+  down: 'block.anvil.destroy'

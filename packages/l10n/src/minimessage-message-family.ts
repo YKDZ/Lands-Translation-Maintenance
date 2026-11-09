@@ -40,7 +40,7 @@ import { pairTranslatableTextDocuments } from "#/translatable-text-pairing";
 import { canonicalJson } from "#/value";
 
 const sourceLanguage = "en-US";
-const landsMessageFamilyVersion = "lands-message-family-v2";
+const landsMessageFamilyVersion = "lands-message-family-v3";
 
 export interface LandsMessageFamilySubject extends MessageFamilySubject<
   LandsUnit,
@@ -374,6 +374,7 @@ async function projectMessage(
   dependencies: MiniMessageQualityDependencies,
   message: MiniMessageInputMessage,
   language: string,
+  includeGlobalIssues = true,
 ): Promise<MessageFamilyInput> {
   const sourceKey = message.id;
   const sharedView = dependencies.miniMessageViews[sourceKey];
@@ -386,7 +387,6 @@ async function projectMessage(
         messages: [message],
         resources: dependencies.resources,
         theme: dependencies.themeInput,
-        sourceVersion: dependencies.sourceVersion,
       });
   const documents = useSharedProjection
     ? sharedView.translatableText
@@ -415,20 +415,30 @@ async function projectMessage(
   const sourceIssues: MessageFamilyIssue[] = [];
   const targetIssues: MessageFamilyIssue[] = [];
   const projectionIssues = useSharedProjection
-    ? [...sharedView.incompleteFacts, ...dependencies.globalProjectionIssues]
+    ? [
+        ...sharedView.incompleteFacts,
+        ...(includeGlobalIssues ? dependencies.globalProjectionIssues : []),
+      ]
     : parsed.incompleteFacts.filter(
         (issue) =>
           issue.message?.id === sourceKey ||
-          (issue.message === undefined && issue.origin !== "theme"),
+          (includeGlobalIssues &&
+            issue.message === undefined &&
+            issue.origin !== "theme"),
       );
   const issuesForSide = (origin: "source" | "target") =>
     projectionIssues
-      .filter((issue) => issue.origin === origin || issue.origin === undefined)
+      .filter((issue) => issue.origin === origin)
       .map((issue) => issueForIncompleteFact(issue, sourceKey, language));
+  globalIssues.push(
+    ...projectionIssues
+      .filter((issue) => issue.origin === undefined)
+      .map((issue) => issueForIncompleteFact(issue, sourceKey, language)),
+  );
   sourceIssues.push(...issuesForSide("source"));
   targetIssues.push(...issuesForSide("target"));
 
-  if (parsed.unavailableCapabilities.length > 0) {
+  if (includeGlobalIssues && parsed.unavailableCapabilities.length > 0) {
     globalIssues.push(
       ...parsed.unavailableCapabilities.map((capability) => ({
         code: "message-family-parser-unavailable",
@@ -600,6 +610,7 @@ async function projectMessage(
 }
 
 // sourceUnit 参与 MemoScope 默认键，避免同键原文事实误共享；内容来自保存记录。
+// 全局投影或能力问题由当前候选自身报告，不复制到每条保存参考，避免全体参考被视为不完整而重复展开。
 async function projectSavedMessageFamilyReference(
   dependencies: MiniMessageQualityDependencies,
   _sourceUnit: ReferenceProjectionInput["sourceUnit"],
@@ -617,6 +628,7 @@ async function projectSavedMessageFamilyReference(
     dependencies,
     messageWithReference(message, content),
     language,
+    false,
   );
 }
 
@@ -644,6 +656,19 @@ export async function selectLandsMessageFamilyCandidate(
   const message = messageForCandidate(dependencies, sourceKeyFor(input));
   if (message === undefined) {
     return { status: "not-applicable" };
+  }
+  // 共享解析器不可用时没有可比较依据，原生选择结果会跳过参照准备。
+  const parserIssue = dependencies.globalProjectionIssues.find(
+    ({ code }) => code === "minimessage.java-unavailable",
+  );
+  if (parserIssue !== undefined) {
+    return {
+      status: "incomplete",
+      issue: {
+        code: parserIssue.code,
+        message: parserIssue.reason,
+      },
+    };
   }
   // 两个消息族检查共享同一候选投影；正文身份参与键，草稿不会复用保存译文。
   const projected = await input.memo.memo(projectCandidateMessageFamily)(
@@ -692,11 +717,9 @@ export async function projectLandsMessageFamilyReference(
 }
 
 export function landsMessageFamilyFingerprint(
-  input: FingerprintInput,
+  _input: FingerprintInput,
 ): JsonValue {
-  const dependencies = dependenciesOf(input.dependencies);
   return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
     projectionVersion: landsMessageFamilyVersion,
   });
 }

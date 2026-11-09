@@ -1,0 +1,110 @@
+physical:
+  capture_flag:
+    material: BEACON
+
+gui:
+  war:
+    items:
+      default:
+        spawn:
+          material: ENDER_PEARL
+          slots: 9
+        war_attackers:
+          material: IRON_SWORD
+          slots: 11
+        war_attackers_declaration:
+          material: IRON_SWORD
+          slots: 11
+        war_defenders:
+          material: SHIELD
+          slots: 12
+        war_defenders_declaration:
+          material: SHIELD
+          slots: 12
+        mode:
+          material: DIAMOND_SWORD
+          slots: 13
+        mode_declaration:
+          material: DIAMOND_SWORD
+          slots: 13
+        goal:
+          material: WRITABLE_BOOK
+          slots: 14
+        flags:
+          material: IRON_PICKAXE
+          slots: 15
+        recipe:
+          material: BEACON
+          slots: 16
+        surrender:
+          material: WHITE_BANNER
+          slots: 29
+          bedrock:
+            detail: true
+        declaration_start:
+          material: CLOCK
+          slots: 15
+  list_wars:
+    items:
+      default:
+        entry_object:
+          material: IRON_SWORD
+  list_war_lands:
+    items:
+      default:
+        entry_object:
+          material: INHERIT
+        entry_object_ally:
+          material: INHERIT
+  war-declaration_confirm:
+    items:
+      default:
+        mode:
+          material: DIAMOND_SWORD
+          slots: 21
+        goal:
+          material: WRITABLE_BOOK
+          slots: 25
+        send-declaration:
+          material: skin:ffec3d25ae0d147c342c45370e0e43300a4e48a5b43f9bb858babff756144dac
+          slots: 45
+        cancel-declaration:
+          material: skin:548d7d1e03e1af145b0125ab841285672b421265da2ab915015f9058438ba2d8
+          slots: 37
+  list_war-declaration_mode:
+    items:
+      default:
+        entry_object:
+          material: PAPER
+        entry_object_selected:
+          material: ENCHANTED_BOOK
+  list_war-declaration_goal:
+    items:
+      default:
+        entry_object:
+          material: PAPER
+        entry_object_selected:
+          material: ENCHANTED_BOOK
+  war_info:
+    items:
+      default:
+        war_attackers:
+          material: IRON_SWORD
+          slots: 21
+        war_defenders:
+          material: SHIELD
+          slots: 23
+        war_points:
+          material: IRON_INGOT
+          slots: 25
+        mode:
+          material: DIAMOND_SWORD
+          slots: 30
+        goal:
+          material: WRITABLE_BOOK
+          slots: 32
+  list_server_koth_arenas:
+    items:
+      default:
+        entry_object:
+          material: INHERIT

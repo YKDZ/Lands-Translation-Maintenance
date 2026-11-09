@@ -44,10 +44,8 @@ function landsControlBasis(input: MiniMessageCheckInput): JsonValue {
             source: message.source,
             target: input.candidate.content,
           },
-    sourceVersion: analysis?.hasControls ? dependencies.sourceVersion : null,
     contexts: analysis?.controlContexts ?? [],
     findings: analysis?.controls ?? [],
-    limitations: analysis?.controlIssues ?? [],
   });
 }
 
@@ -60,7 +58,6 @@ function landsControlIssues(input: MiniMessageCheckInput) {
   return [
     ...dependencies.readIssues,
     ...(analysis?.projectionIssues ?? []),
-    ...(analysis?.controlIssues ?? []),
   ].filter(
     (issue) =>
       issue.message === undefined ||
@@ -77,7 +74,7 @@ export const miniMessageLandsControlsCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-lands-controls",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: landsControlBasis,

@@ -56,7 +56,7 @@ export const miniMessageInteractionDistributionCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-interaction-distribution",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: interactionBasis,

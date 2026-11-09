@@ -12,7 +12,7 @@ import {
 /** 对只在动态变量或数字槽取值上不同的 Lands 模板单独复核译文差异。 */
 export const miniMessageSameTemplateFamilyCheck = createMessageFamilyChecker({
   id: "message-family-same-template",
-  hostVersion: "lands-same-template-family-v1",
+  hostVersion: "lands-same-template-family-v2",
   analysis: landsMessageFamilyAnalysis,
   sourceTemplate: landsMessageTemplate,
   targetTemplate: landsMessageTemplate,

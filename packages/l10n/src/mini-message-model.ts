@@ -198,7 +198,6 @@ export interface MiniMessageIncompleteFact {
 }
 
 export interface MiniMessageParseProject {
-  readonly sourceVersion: string;
   readonly documents: readonly ParsedMiniMessageDocument[];
   readonly translatableText: readonly TranslatableTextDocument[];
   readonly themes: readonly MiniMessageThemeEntry[];
@@ -220,5 +219,4 @@ export interface MiniMessageProjectionInput {
   readonly messages: readonly MiniMessageInputMessage[];
   readonly resources: readonly ResourceInventoryEntry[];
   readonly theme: MiniMessageThemeInput;
-  readonly sourceVersion: string;
 }

@@ -41,7 +41,6 @@ function syntaxBasis(input: MiniMessageCheckInput): JsonValue {
     (finding) => finding.message?.id === input.candidate.sourceKey,
   );
   return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
     message:
       message === undefined
         ? null
@@ -87,7 +86,7 @@ export const miniMessageSyntaxCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-syntax",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: syntaxBasis,

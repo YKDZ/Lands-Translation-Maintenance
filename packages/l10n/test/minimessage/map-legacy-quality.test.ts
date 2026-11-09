@@ -349,7 +349,7 @@ void describe("地图与旧格式原生 QA", () => {
     );
   });
 
-  void it("地图属性占位符按字面保留，旧颜色限制仍按版本检查", async (t) => {
+  void it("地图属性占位符按字面保留，旧颜色按当前规则检查", async (t) => {
     const mapProject = await createFormatProject(t, {
       sourceVersion: "9.1.1",
       mapDescription: '<div style="color: <v:land_color>;"><v:land></div>',
@@ -388,6 +388,8 @@ void describe("地图与旧格式原生 QA", () => {
     for (const [sourceVersion, sourceName, targetName] of [
       ["8.0.1", "&aStone", "&a石头"],
       ["8.9.2", "§aStone", "§a石头"],
+      ["8.0.1", "§aStone", "§a石头"],
+      ["8.9.3", "&aStone", "&a石头"],
     ] as const) {
       const supportedProject = await createGuiProject(t, {
         name: sourceName,
@@ -408,62 +410,9 @@ void describe("地图与旧格式原生 QA", () => {
       assert.equal(supportedFormat.status, "complete");
       assert.equal(supportedFormat.diagnostics.length, 0);
     }
-
-    const guiProject = await createGuiProject(t, {
-      name: "§aStone",
-      lore: ["说明"],
-      sourceVersion: "8.0.1",
-    });
-    await writeGuiTranslation(guiProject, "§a石头");
-    const nativeGuiProject = await prepareNativeProject(t, guiProject);
-    const colorReport = runQa(nativeGuiProject.configPath);
-    const legacyFormat = checkResult(colorReport.report, "legacy-format");
-    const unsupportedColor = legacyFormat.diagnostics.find(
-      ({ object }) =>
-        object.code === "legacy-format.code-unsupported" &&
-        object.origin === "target",
-    );
-    assert.notEqual(colorReport.result.status, 0, colorReport.result.stdout);
-    assert.ok(unsupportedColor, JSON.stringify(legacyFormat, null, 2));
-    assert.equal(unsupportedColor.severity, "error");
-    assert.deepEqual(unsupportedColor.location.range.path, [
-      "physical",
-      "selection",
-      "name",
-    ]);
-
-    const unknownProject = await createGuiProject(t, {
-      name: "&aStone",
-      lore: ["说明"],
-      sourceVersion: "8.9.3",
-    });
-    await writeGuiTranslation(unknownProject, "&a石头");
-    const nativeUnknownProject = await prepareNativeProject(t, unknownProject);
-    const unknownReport = runQa(nativeUnknownProject.configPath);
-    const unknownFormat = checkResult(unknownReport.report, "legacy-format");
-    assert.notEqual(
-      unknownReport.result.status,
-      0,
-      unknownReport.result.stdout,
-    );
-    assert.equal(unknownFormat.status, "incomplete");
-    assert.ok(
-      unknownFormat.diagnostics.some(
-        ({ object }) =>
-          object.code === "legacy-format.source-version-unsupported",
-      ),
-      JSON.stringify(unknownFormat, null, 2),
-    );
-    assert.ok(
-      unknownFormat.diagnostics.every(
-        ({ object, severity }) =>
-          object.code !== "legacy-format.source-version-unsupported" ||
-          severity === "warning",
-      ),
-    );
   });
 
-  void it("地图变量只校验原译对应，旧标题颜色格式仍按版本检查", async (t) => {
+  void it("地图变量只校验原译对应，旧标题颜色按当前规则检查", async (t) => {
     const variableTemplate = "<div><v:runtime_value></div>";
     const sameTextProject = await createFormatProject(t, {
       sourceVersion: "9.1.1",
@@ -534,12 +483,8 @@ void describe("地图与旧格式原生 QA", () => {
     );
     const sameColorReport = runQa(nativeSameColorProject.configPath);
     const sameColorCheck = checkResult(sameColorReport.report, "legacy-format");
-    assert.ok(
-      sameColorCheck.diagnostics.some(
-        ({ object }) => object.code === "legacy-format.code-unsupported",
-      ),
-      JSON.stringify(sameColorCheck, null, 2),
-    );
+    assert.equal(sameColorCheck.status, "complete");
+    assert.deepEqual(sameColorCheck.diagnostics, []);
   });
 
   void it("受保护地图元素结构变化仍由地图检查报告", async (t) => {

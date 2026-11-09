@@ -91,7 +91,6 @@ function themeBasis(input: MiniMessageCheckInput): JsonValue {
         : finding.message.id === input.candidate.sourceKey,
   );
   return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
     message:
       message === undefined
         ? null
@@ -141,7 +140,7 @@ export const miniMessageThemeCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-theme",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: themeBasis,

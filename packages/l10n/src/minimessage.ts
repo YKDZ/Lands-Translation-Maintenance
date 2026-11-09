@@ -55,7 +55,6 @@ interface MessageInput {
   readonly input: string;
   readonly listItems?: readonly MiniMessageListItemRange[];
   readonly adapted: AdaptedMiniMessageInput;
-  readonly legacyAdapterUnsupported: boolean;
   readonly legacyIssues: readonly {
     readonly code: string;
     readonly position: MiniMessagePosition;
@@ -577,7 +576,6 @@ export function usesMiniMessage(message: MiniMessageInputMessage): boolean {
 function messagesToParseInputs(
   messages: readonly MiniMessageInputMessage[],
   resources: readonly LandsResourceInventoryEntry[],
-  sourceVersion: string,
 ): readonly MessageInput[] {
   const purposes = new Map(
     resources.map((resource) => [resource.path, resource.purpose]),
@@ -599,7 +597,7 @@ function messagesToParseInputs(
     const parserInput = input;
     const legacy =
       isLegacyColor && parserInput !== ""
-        ? adaptLegacyMiniMessageInput(parserInput, sourceVersion)
+        ? adaptLegacyMiniMessageInput(parserInput)
         : undefined;
     const adapted =
       legacy ??
@@ -621,8 +619,6 @@ function messagesToParseInputs(
       input,
       ...(listItems === undefined ? {} : { listItems }),
       adapted,
-      legacyAdapterUnsupported:
-        isLegacyColor && parserInput !== "" && legacy === undefined,
       legacyIssues: legacy?.issues ?? [],
       range: { start: 0, end: input.length },
     });
@@ -1227,7 +1223,6 @@ function appendParserFindings(
   for (const warning of java.warnings) {
     const input = inputsByIndex.get(warning.messageIndex);
     if (input !== undefined) {
-      unavailable.add(warning.reason);
       incompleteFacts.push({
         code: "minimessage.parser-warning",
         message: input.message,
@@ -1243,7 +1238,7 @@ function appendParserFindings(
     if (result === undefined) {
       const reason =
         "官方 MiniMessage 辅助程序未返回全部消息结果；完整检查未完成";
-      unavailable.add(reason);
+
       incompleteFacts.push({
         code: "minimessage.result-missing",
         message: input.message,
@@ -1255,7 +1250,7 @@ function appendParserFindings(
     }
     if (result.status === "failed") {
       const reason = `官方 MiniMessage 解析器处理消息失败：${result.error ?? "未知运行时错误"}`;
-      unavailable.add(reason);
+
       incompleteFacts.push({
         code: "minimessage.parser-failed",
         message: input.message,
@@ -1293,7 +1288,7 @@ function appendParserFindings(
     seenOccurrences.add(occurrence);
     if (unresolved.position < 0) {
       const reason = "存在 MiniMessage 解析诊断无法可靠映射回原文位置";
-      unavailable.add("存在 MiniMessage 解析诊断无法可靠映射回原文位置");
+
       incompleteFacts.push({
         code: "minimessage.position-unmapped",
         message: input.message,
@@ -1388,7 +1383,7 @@ function appendParserFindings(
         },
       ),
     );
-    unavailable.add("存在尚未识别的自定义 MiniMessage 标签");
+
     incompleteFacts.push({
       code: "minimessage.extension-unrecognized",
       message: input.message,
@@ -1790,9 +1785,9 @@ function translatableTextDocuments(
 export async function parseMiniMessages(
   input: MiniMessageProjectionInput,
 ): Promise<MiniMessageParseProject> {
-  const { messages, resources, sourceVersion, theme: themeInput } = input;
+  const { messages, resources, theme: themeInput } = input;
   const theme = parseTheme(themeInput.theme);
-  const inputs = messagesToParseInputs(messages, resources, sourceVersion);
+  const inputs = messagesToParseInputs(messages, resources);
   const parserInputs = inputs.filter(({ input: value }) => value !== "");
   const java = await runOfficialParser(theme.definitions, parserInputs);
   const findings = [...theme.findings];
@@ -1800,26 +1795,12 @@ export async function parseMiniMessages(
   const unavailable = new Set<string>();
   const incompleteFacts: MiniMessageIncompleteFact[] = [...themeInput.issues];
   for (const input of inputs) {
-    if (input.legacyAdapterUnsupported) {
-      unavailable.add(
-        "旧颜色格式的来源 Lands 版本未受支持；运行时转换规则无法确认",
-      );
-      findings.push(
-        findingForMessage(
-          input,
-          "legacy-format.source-version-unsupported",
-          `无法按未知 Lands 版本 ${sourceVersion} 确认旧颜色码转换行为`,
-          { supportedVersions: ["8.0.1", "8.9.2", "9.1.1"] },
-          { sourceVersion, format: input.message.format ?? "unknown" },
-        ),
-      );
-    }
     for (const issue of input.legacyIssues) {
       findings.push(
         findingForMessage(
           input,
           issue.code,
-          "旧颜色格式与该 Lands 版本支持的转换形式不一致",
+          "旧颜色格式与当前支持的转换形式不一致",
           {
             expected: issue.expected,
             position: {
@@ -1844,9 +1825,9 @@ export async function parseMiniMessages(
       if (result === undefined) {
         const reason =
           "官方 MiniMessage 辅助程序未返回全部主题结果；完整检查未完成";
-        unavailable.add(reason);
         incompleteFacts.push({
           code: "minimessage.theme-result-missing",
+          origin: "theme",
           reason,
         });
       } else if (!result.ok) {
@@ -1972,12 +1953,6 @@ export async function parseMiniMessages(
     mapSegmentOverrides.set(sourceDocument, analysis.sourceSegments);
     mapSegmentOverrides.set(targetDocument, analysis.targetSegments);
   }
-  for (const reason of unavailable) {
-    incompleteFacts.push({
-      code: "minimessage.projection-incomplete",
-      reason,
-    });
-  }
   const themeFindings = findings.filter(
     ({ code, origin }) =>
       origin === "theme" ||
@@ -2000,7 +1975,6 @@ export async function parseMiniMessages(
   );
   incompleteFacts.push(...translatableText.incompleteFacts);
   return {
-    sourceVersion,
     documents: documentResults,
     translatableText: translatableText.documents,
     themes: themeEntryResults(theme.definitions, java.themes),

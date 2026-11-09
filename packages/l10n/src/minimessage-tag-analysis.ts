@@ -177,7 +177,6 @@ export interface MiniMessageTagMessageAnalysis {
   readonly correspondence: readonly MiniMessageFinding[];
   readonly nesting: readonly MiniMessageFinding[];
   readonly controls: readonly MiniMessageFinding[];
-  readonly controlIssues: readonly MiniMessageIncompleteFact[];
   readonly projectionIssues: readonly MiniMessageIncompleteFact[];
   readonly controlContexts: JsonValue;
   readonly themes: JsonValue;
@@ -1142,7 +1141,6 @@ function actionField(
 
 function guiLoreControlScopes(
   input: string,
-  sourceVersion: string | undefined,
   root: ParsedMiniMessageDocument,
   documents: readonly ParsedMiniMessageDocument[],
   contexts: Map<string, JsonValue[]>,
@@ -1150,15 +1148,7 @@ function guiLoreControlScopes(
   findings: MiniMessageFinding[],
 ): void {
   if (!guiLoreDocument(root)) return;
-  const supportedVersion =
-    sourceVersion === "8.0.1" ||
-    sourceVersion === "8.9.2" ||
-    sourceVersion === "9.1.1";
-  const usesCurrentActionRules =
-    sourceVersion === "8.9.2" || sourceVersion === "9.1.1";
-  const actionPattern = usesCurrentActionRules
-    ? /<action:([a-z]+)>(.*?)<\/action>(<newline>)?/gis
-    : /<action:([a-z]+)>(.*?)<\/action>/gis;
+  const actionPattern = /<action:([a-z]+)>(.*?)<\/action>(<newline>)?/gis;
   let occurrence = 0;
   let actionMatch: RegExpExecArray | null;
   while ((actionMatch = actionPattern.exec(input)) !== null) {
@@ -1166,18 +1156,6 @@ function guiLoreControlScopes(
     const action = actionMatch[1]?.toLowerCase();
     const body = actionMatch[2];
     if (action === undefined || body === undefined) continue;
-    if (!supportedVersion) {
-      addControlFinding(
-        findings,
-        root,
-        "action",
-        occurrence,
-        `GUI lore action 尚无 ${sourceVersion ?? "未知"} Lands 版本的已核实预处理语义`,
-        { sourceVersion: ["8.0.1", "8.9.2", "9.1.1"] },
-        { tag: actionMatch[0], position: actionMatch.index },
-      );
-      continue;
-    }
     const openRaw = `<action:${actionMatch[1]}>`;
     const openStart = actionMatch.index;
     const openEnd = openStart + openRaw.length;
@@ -1236,33 +1214,21 @@ function guiLoreControlScopes(
       action,
       occurrence,
     );
-    if (usesCurrentActionRules) {
-      actionField(
-        documents,
-        contexts,
-        consumed,
-        findings,
-        input,
-        bodyStart,
-        body,
-        "desc",
-        action,
-        occurrence,
-      );
-    } else if (/<desc>/iu.test(body)) {
-      addControlFinding(
-        findings,
-        root,
-        "desc",
-        occurrence,
-        "Lands 8.0.1 GUI lore action 没有已核实的 desc 模板语义",
-        { sourceVersion: "8.9.2" },
-        { action, body, position: bodyStart },
-      );
-    }
+    actionField(
+      documents,
+      contexts,
+      consumed,
+      findings,
+      input,
+      bodyStart,
+      body,
+      "desc",
+      action,
+      occurrence,
+    );
   }
 
-  if (supportedVersion) {
+  {
     const indentPattern = /<indent>/giu;
     let indentMatch: RegExpExecArray | null;
     const lineBreaks = [...input.matchAll(/<newline>|<br>|\n/giu)].map(
@@ -1327,7 +1293,6 @@ function guiLoreControlScopes(
 
 function controlAnalysis(
   message: MiniMessageInputMessage,
-  sourceVersion: string,
   documents: readonly ParsedMiniMessageDocument[],
 ): LandsControlAnalysis {
   const contexts = new Map<string, JsonValue[]>();
@@ -1345,7 +1310,6 @@ function controlAnalysis(
     if (guiLoreDocument(root)) {
       guiLoreControlScopes(
         input,
-        sourceVersion,
         root,
         documents,
         contexts,
@@ -1392,7 +1356,6 @@ function controlAnalysis(
         ...(node.position.start < 0 ? {} : { position: node.position.start }),
         category: document.message.category,
         scene: document.message.scene ?? "",
-        sourceVersion: sourceVersion || "unknown",
       };
       addControlFinding(
         findings,
@@ -1916,62 +1879,6 @@ function tagProjectionIssues(
   return issues;
 }
 
-function controlIssues(
-  message: MiniMessageInputMessage,
-  documents: readonly ParsedMiniMessageDocument[],
-  sourceVersion: string,
-): readonly MiniMessageIncompleteFact[] {
-  const controls = documents.flatMap((document) =>
-    document.nodes.flatMap((node) =>
-      node.kind === "tag" &&
-      (landsControls.has(node.name.toLowerCase()) ||
-        landsPreprocessors.has(node.name.toLowerCase()))
-        ? [{ document, name: node.name.toLowerCase() }]
-        : [],
-    ),
-  );
-  if (controls.length === 0) return [];
-
-  const issues: MiniMessageIncompleteFact[] = [];
-  if (
-    sourceVersion !== "8.0.1" &&
-    sourceVersion !== "8.9.2" &&
-    sourceVersion !== "9.1.1"
-  ) {
-    for (const document of new Map(
-      controls.map(({ document }) => [document.origin, document]),
-    ).values()) {
-      issues.push({
-        code: "minimessage.lands-controls-version-unverified",
-        message,
-        origin: document.origin,
-        location: { file: document.file, path: document.path },
-        reason: `Lands 控制语义只核实了 8.0.1、8.9.2 与 9.1.1；当前版本 ${sourceVersion || "未知"} 仍需核实`,
-      });
-    }
-  }
-  if (
-    sourceVersion === "8.0.1" &&
-    controls.some(({ name }) => name === "desc")
-  ) {
-    for (const document of new Map(
-      controls
-        .filter(({ name }) => name === "desc")
-        .map(({ document }) => [document.origin, document]),
-    ).values()) {
-      issues.push({
-        code: "minimessage.lands-desc-version-unverified",
-        message,
-        origin: document.origin,
-        location: { file: document.file, path: document.path },
-        reason:
-          "Lands 8.0.1 GUI lore action 没有 desc 模板语义；相关内容只能报告限制",
-      });
-    }
-  }
-  return issues;
-}
-
 /**
  * 依赖加载时一次计算各检查共享的 Lands 控制上下文和标签投影。
  * 检查器只读取结果，不依赖彼此的执行顺序或修改共享状态。
@@ -1994,16 +1901,8 @@ export function analyzeMiniMessageTagQuality(
     const targetDocuments = documents.filter(
       (document) => document.origin === "target",
     );
-    const sourceControls = controlAnalysis(
-      message,
-      projection.sourceVersion,
-      sourceDocuments,
-    );
-    const targetControls = controlAnalysis(
-      message,
-      projection.sourceVersion,
-      targetDocuments,
-    );
+    const sourceControls = controlAnalysis(message, sourceDocuments);
+    const targetControls = controlAnalysis(message, targetDocuments);
     const sourceOccurrences = tagOccurrences(
       projection.themes,
       sourceDocuments,
@@ -2059,11 +1958,6 @@ export function analyzeMiniMessageTagQuality(
         correspondence,
         nesting: nestingFindings(documents),
         controls: [...sourceControls.findings, ...targetControls.findings],
-        controlIssues: controlIssues(
-          message,
-          documents,
-          projection.sourceVersion,
-        ),
         projectionIssues: tagProjectionIssues(message, documents, projection),
         controlContexts: [
           ...controlContextBasis(sourceControls, "source"),
