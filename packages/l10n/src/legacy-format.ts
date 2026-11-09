@@ -17,7 +17,6 @@ export interface LegacyFormatIssue {
 }
 
 export interface LegacyMiniMessageAdaptation extends AdaptedMiniMessageInput {
-  readonly sourceVersion: "8.0.1" | "8.9.2" | "9.1.1";
   readonly markers: readonly LegacyFormatMarker[];
   readonly issues: readonly LegacyFormatIssue[];
 }
@@ -112,19 +111,10 @@ function malformedHexCandidate(
   return remainder.includes(prefix) || /[0-9a-f]/iu.test(remainder);
 }
 
-/** 按已核实的 Lands 版本规则转换旧颜色码，其他版本显式不支持。 */
+/** 按当前 Lands 格式规则转换旧颜色码并保留原文位置映射。 */
 export function adaptLegacyMiniMessageInput(
   input: string,
-  sourceVersion: string,
-): LegacyMiniMessageAdaptation | undefined {
-  if (
-    sourceVersion !== "8.0.1" &&
-    sourceVersion !== "8.9.2" &&
-    sourceVersion !== "9.1.1"
-  ) {
-    return undefined;
-  }
-
+): LegacyMiniMessageAdaptation {
   const output: OutputBuilder = {
     pieces: [],
     sourceOffsets: [0],
@@ -133,12 +123,6 @@ export function adaptLegacyMiniMessageInput(
   const markers: LegacyFormatMarker[] = [];
   const issues: LegacyFormatIssue[] = [];
   const activeDecorations = new Set<string>();
-  const usesCurrentColorRules =
-    sourceVersion === "8.9.2" || sourceVersion === "9.1.1";
-  const supportsSectionCodes = usesCurrentColorRules;
-  const skipsExistingTags = usesCurrentColorRules;
-  const supportsHexSequence = usesCurrentColorRules;
-
   const emitClosures = (position: MiniMessagePosition): void => {
     for (const decoration of decorationNames) {
       if (!activeDecorations.delete(decoration)) continue;
@@ -168,7 +152,7 @@ export function adaptLegacyMiniMessageInput(
   };
 
   for (let index = 0; index < input.length; index += 1) {
-    if (skipsExistingTags && input[index] === "<") {
+    if (input[index] === "<") {
       htmlLikeTag.lastIndex = index;
       const tag = htmlLikeTag.exec(input);
       if (tag !== null) {
@@ -180,25 +164,7 @@ export function adaptLegacyMiniMessageInput(
 
     const codePrefix = input[index];
     if (
-      codePrefix === "§" &&
-      !supportsSectionCodes &&
-      index + 1 < input.length
-    ) {
-      const code = input[index + 1]!.toLowerCase();
-      if (colorCodes.has(code) || decorationCodes.has(code) || code === "r") {
-        issues.push({
-          code: "legacy-format.code-unsupported",
-          position: { start: index, end: index + 2 },
-          expected: "8.0.1 支持的 & 颜色/格式码",
-          actual: input.slice(index, index + 2),
-        });
-      }
-      appendCopied(index, index + 2);
-      index += 1;
-      continue;
-    }
-    if (
-      (codePrefix === "&" || (supportsSectionCodes && codePrefix === "§")) &&
+      (codePrefix === "&" || codePrefix === "§") &&
       index + 1 < input.length
     ) {
       const code = input[index + 1]!.toLowerCase();
@@ -224,7 +190,7 @@ export function adaptLegacyMiniMessageInput(
         index += 1;
         continue;
       }
-      if (code === "x" && supportsHexSequence) {
+      if (code === "x") {
         const end = legacyHexSequenceEnd(input, index, codePrefix);
         if (end !== undefined) {
           const position = { start: index, end };
@@ -247,16 +213,6 @@ export function adaptLegacyMiniMessageInput(
             actual: input.slice(index, Math.min(index + 14, input.length)),
           });
         }
-      } else if (code === "x" && sourceVersion === "8.0.1") {
-        const newerSequenceEnd = legacyHexSequenceEnd(input, index, codePrefix);
-        if (newerSequenceEnd !== undefined) {
-          issues.push({
-            code: "legacy-format.hex-sequence-unsupported",
-            position: { start: index, end: newerSequenceEnd },
-            expected: "8.0.1 支持的旧颜色码",
-            actual: input.slice(index, newerSequenceEnd),
-          });
-        }
       }
     }
 
@@ -277,7 +233,6 @@ export function adaptLegacyMiniMessageInput(
     input: output.pieces.join(""),
     sourceOffsets: output.sourceOffsets,
     exact: output.exact,
-    sourceVersion,
     markers,
     issues,
   };

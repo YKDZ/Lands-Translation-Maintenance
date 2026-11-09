@@ -56,7 +56,7 @@ export const miniMessageClickBehaviorCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-click-behavior",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: clickBasis,

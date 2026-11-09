@@ -73,7 +73,7 @@ export const miniMessageNestingCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-nesting",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: nestingBasis,

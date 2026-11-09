@@ -56,7 +56,7 @@ export const miniMessageVariableCorrespondenceCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-variable-correspondence",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: variableBasis,

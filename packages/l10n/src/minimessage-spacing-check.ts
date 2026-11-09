@@ -27,7 +27,7 @@ import {
 } from "#/minimessage-spacing";
 import { matchedMiniMessageTranslation } from "#/minimessage-terminology-check";
 
-const version = "lands-chinese-spacing-v1";
+const version = "lands-chinese-spacing-v2";
 const analyses = new WeakMap<
   MiniMessageQualityMessageView,
   readonly {
@@ -78,7 +78,6 @@ export const miniMessageSpacingCheck = defineQualityCheck<
     const view = viewFor(input);
     return qualityBasis({
       version,
-      sourceVersion: dependenciesOf(input.dependencies).sourceVersion,
       language: input.candidate.language,
       content: input.candidate.content,
       scene: view?.message.scene ?? null,

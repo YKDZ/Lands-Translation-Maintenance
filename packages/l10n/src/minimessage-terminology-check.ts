@@ -49,7 +49,7 @@ import { canonicalJson } from "#/value";
 
 const sourceLanguage = "en-US";
 const targetLanguage = "zh-CN";
-const hostPolicyVersion = "lands-terminology-context-v3";
+const hostPolicyVersion = "lands-terminology-context-v4";
 const englishPolicyId = "lands-en-us-case-and-space-v3";
 const chinesePolicyId = "lands-zh-cn-literal-boundary-v2";
 const wordCharacter = /[\p{L}\p{N}_]/u;

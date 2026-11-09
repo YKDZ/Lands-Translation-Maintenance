@@ -34,14 +34,13 @@ export const landsLanguageLoadCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "lands-language-load",
-  version: "lands-9.1.1-v1",
+  version: "lands-language-load-v2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput(input) {
     if (!selected(input)) return { selected: false };
     const dependencies = dependenciesOf(input.dependencies);
     return qualityBasis({
-      sourceVersion: dependencies.sourceVersion,
       resources:
         dependencies.landsProjection?.mappings.map(
           (mapping) => mapping.languageLoad ?? null,
@@ -52,11 +51,6 @@ export const landsLanguageLoadCheck = defineQualityCheck<
   check(input) {
     if (!selected(input)) return outcome("not-applicable", [], []);
     const dependencies = dependenciesOf(input.dependencies);
-    if (
-      dependencies.landsProjection !== undefined &&
-      dependencies.sourceVersion !== "9.1.1"
-    )
-      return outcome("not-applicable", [], []);
     const analysis = dependencies.languageLoad;
     if (analysis === undefined)
       return outcome(

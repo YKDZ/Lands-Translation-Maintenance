@@ -98,7 +98,6 @@ function legacyFormatBasis(input: MiniMessageCheckInput): JsonValue {
   const dependencies = dependenciesOf(input.dependencies);
   const message = messageForCandidate(dependencies, input.candidate.sourceKey);
   return qualityBasis({
-    sourceVersion: dependencies.sourceVersion,
     message:
       message === undefined
         ? null
@@ -141,7 +140,7 @@ export const legacyFormatCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "legacy-format",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: legacyFormatBasis,

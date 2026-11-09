@@ -118,7 +118,6 @@ void test("间隔规则使用正式解析投影，保留变量、可见边界和
   const project = await parseMiniMessages({
     messages,
     resources: [],
-    sourceVersion: "9.1.1",
     theme: {
       issues: [],
       theme: {

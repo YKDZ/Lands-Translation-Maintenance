@@ -44,7 +44,6 @@ function correspondenceBasis(input: MiniMessageCheckInput): JsonValue {
             source: message.source,
             target: input.candidate.content,
           },
-    sourceVersion: analysis?.hasControls ? dependencies.sourceVersion : null,
     contexts: analysis?.controlContexts ?? [],
     themes: analysis?.themes ?? [],
     findings: analysis?.correspondence ?? [],
@@ -62,7 +61,6 @@ function correspondenceIssues(
   return [
     ...dependencies.readIssues,
     ...(analysis?.projectionIssues ?? []),
-    ...(analysis?.controlIssues ?? []),
   ].filter(
     (issue) =>
       issue.message === undefined ||
@@ -79,7 +77,7 @@ export const miniMessageTagCorrespondenceCheck = defineQualityCheck<
   UnavailableTranslation
 >({
   id: "minimessage-tag-correspondence",
-  version: "1",
+  version: "2",
   configurationSchema: miniMessageQualityConfigurationSchema,
   configuration: {},
   fingerprintInput: correspondenceBasis,

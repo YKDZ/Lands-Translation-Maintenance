@@ -24,6 +24,7 @@ import {
 import { strToU8, zipSync } from "fflate";
 
 import { createLandsConfig } from "../../lioni.config.ts";
+import type { LandsJson } from "../../src/lioni/lands-facts.ts";
 import { miniMessageFactsInput } from "../../src/minimessage-quality.ts";
 import { createProject, prepareLioniProject } from "../lioni-fixtures.ts";
 
@@ -79,6 +80,7 @@ interface QualityCheckResult {
   }[];
   readonly executions: readonly {
     readonly executionId: number;
+    readonly inputFingerprint?: string;
     readonly sourceKey: string;
     readonly status: string;
   }[];
@@ -1609,6 +1611,55 @@ void test("主题 YAML 不可读与 Java 不可用都保留为原生不完整结
     "incomplete",
   );
   assert.ok(checkResult(noJava.report, "minimessage-syntax").issues.length > 0);
+  for (const id of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    const result = checkResult(noJava.report, id);
+    assert.equal(result.status, "incomplete");
+    for (const execution of result.executions) {
+      assert.equal(execution.inputFingerprint, undefined);
+    }
+  }
+  const largerProject = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      chat: { source: "Another message", target: "另一条消息" },
+    },
+  );
+  const largerNoJava = qualityReport(
+    runLioni(["qa", largerProject.configPath], {
+      JAVA_COMMAND: "/missing/java",
+    }),
+  );
+  assert.ok(
+    largerNoJava.report.candidates.length > noJava.report.candidates.length,
+  );
+  for (const current of [noJava, largerNoJava]) {
+    assert.equal(
+      checkResult(current.report, "lands-structure-consistency").status,
+      "complete",
+    );
+    for (const id of [
+      "message-family-same-source",
+      "message-family-same-template",
+    ]) {
+      const family = checkResult(current.report, id);
+      const affected = family.executions.filter(
+        ({ status }) => status === "incomplete",
+      );
+      assert.ok(affected.length > 0);
+      assert.equal(family.issues.length, affected.length);
+      assert.ok(
+        family.issues.every(
+          ({ code }) => code === "minimessage.java-unavailable",
+        ),
+      );
+    }
+  }
 });
 
 void test("官方 Java 语法结果保留来源和主题的实际位置", async (t) => {
@@ -1642,6 +1693,47 @@ void test("官方 Java 语法结果保留来源和主题的实际位置", async 
       sourceFinding.location.range.end !== undefined,
   );
 
+  for (const id of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    const family = checkResult(sourceReport.report, id);
+    assert.ok(
+      family.issues.some(
+        ({ code }) => code === "message-family-syntax-invalid",
+      ),
+      JSON.stringify(family.issues),
+    );
+    assert.ok(
+      family.issues.every(
+        ({ code }) => code !== "message-family-parser-unavailable",
+      ),
+    );
+  }
+
+  const healthy = sourceReport.report.candidates.find(({ sourceKey }) =>
+    sourceKey.endsWith('["gui","main","items","confirm","lore"]'),
+  );
+  assert.ok(healthy);
+  const config = createLandsConfig(pathToFileURL(sourceProject.configPath));
+  const healthyReport = await analyzeQuality(config, {
+    candidates: [{ ...healthy, content: healthy.content as LandsJson }],
+  });
+  for (const id of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    const family = healthyReport.checks.find(({ checkId }) => checkId === id);
+    assert.ok(family);
+    assert.equal(family.executions.length, 1);
+    assert.equal(family.executions[0]?.sourceKey, healthy.sourceKey);
+    assert.equal(family.executions[0]?.status, "incomplete");
+    const issue = family.issues.find(
+      ({ code }) => code === "message-family-syntax-invalid",
+    );
+    assert.ok(issue);
+    assert.equal(issue.location?.key, sourceFinding.object.key);
+  }
   const themeProject = await createQualityProject(
     t,
     'theme:\n  tokens:\n    invalid: "<unknown>"\n',
@@ -1684,6 +1776,16 @@ void test("未识别的扩展标签有原生诊断并保留不完整限制", asy
     JSON.stringify(syntax.issues, null, 2),
   );
   assert.equal(syntax.status, "incomplete");
+  for (const id of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.ok(
+      checkResult(report.report, id).issues.every(
+        ({ code }) => code !== "message-family-parser-unavailable",
+      ),
+    );
+  }
 });
 
 void test("变量、click 行为和交互分布是独立的原生检查", async (t) => {
@@ -2255,6 +2357,40 @@ void test("GUI lore 保留 action、label、desc、indent、空行与重复行�
     JSON.stringify(lands911Report.report, null, 2),
   );
 
+  const lands920 = await createQualityProject(
+    t,
+    undefined,
+    undefined,
+    undefined,
+    {
+      sourceVersion: "9.2.0",
+      sourceLore: [
+        "<action:claim><label>&aClaim</label><desc><gray>Details</gray></desc></action><newline>",
+        "<indent>Next",
+      ],
+      targetLore: [
+        "<action:claim><label>&a占领</label><desc><gray>详情</gray></desc></action><newline>",
+        "<indent>下一项",
+      ],
+    },
+  );
+  const lands920Report = qualityReport(runLioni(["qa", lands920.configPath]));
+  assert.equal(
+    checkResult(lands920Report.report, "legacy-format").status,
+    "complete",
+    JSON.stringify(lands920Report.report, null, 2),
+  );
+  assert.equal(
+    checkResult(lands920Report.report, "minimessage-tag-correspondence").status,
+    "complete",
+    JSON.stringify(lands920Report.report, null, 2),
+  );
+  assert.equal(
+    checkResult(lands920Report.report, "minimessage-lands-controls").status,
+    "complete",
+    JSON.stringify(lands920Report.report, null, 2),
+  );
+
   const lands911BadHex = await createQualityProject(
     t,
     undefined,
@@ -2326,12 +2462,7 @@ void test("GUI lore 保留 action、label、desc、indent、空行与重复行�
     oldVersionReport.report,
     "minimessage-lands-controls",
   );
-  assert.ok(
-    oldVersionControls.issues.some(
-      ({ code }) => code === "minimessage.lands-desc-version-unverified",
-    ),
-    JSON.stringify(oldVersionControls, null, 2),
-  );
+  assert.equal(oldVersionControls.status, "complete");
 
   const unknownVersionAction = await createQualityProject(
     t,
@@ -2351,12 +2482,7 @@ void test("GUI lore 保留 action、label、desc、indent、空行与重复行�
     unknownVersionReport.report,
     "minimessage-lands-controls",
   );
-  assert.ok(
-    unknownVersionControls.issues.some(
-      ({ code }) => code === "minimessage.lands-controls-version-unverified",
-    ),
-    JSON.stringify(unknownVersionControls, null, 2),
-  );
+  assert.equal(unknownVersionControls.status, "complete");
 });
 
 void test("对话资源中的聊天确认文案按聊天规则执行公开 QA", async (t) => {
@@ -2604,7 +2730,23 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
     );
   }
 
-  const changedPolicyProject = await createQualityProject(
+  const unavailableParser = qualityReport(
+    runLioni(["qa", project.configPath], { JAVA_COMMAND: "/missing/java" }),
+  );
+  for (const id of [
+    "message-family-same-source",
+    "message-family-same-template",
+  ]) {
+    assert.equal(
+      unavailableParser.report.exceptionApplicability.find(
+        (exception) =>
+          exception.checkId === id && exception.sourceKey === sourceKey,
+      )?.status,
+      "not-verified",
+    );
+  }
+
+  const changedSourceVersionProject = await createQualityProject(
     t,
     undefined,
     sourceName,
@@ -2618,21 +2760,21 @@ void test("消息族职责分别接受，并只随相关族依据变化失效", 
   );
   await copyFile(
     join(project.directory, ".lioni/lioni.exceptions.yaml"),
-    join(changedPolicyProject.directory, ".lioni/lioni.exceptions.yaml"),
+    join(changedSourceVersionProject.directory, ".lioni/lioni.exceptions.yaml"),
   );
-  const changedPolicy = qualityReport(
-    runLioni(["qa", changedPolicyProject.configPath]),
+  const changedSourceVersion = qualityReport(
+    runLioni(["qa", changedSourceVersionProject.configPath]),
   );
   for (const checkId of [
     "message-family-same-source",
     "message-family-same-template",
   ]) {
     assert.equal(
-      changedPolicy.report.exceptionApplicability.find(
+      changedSourceVersion.report.exceptionApplicability.find(
         ({ checkId: id, sourceKey: key }) =>
           id === checkId && key === sourceKey,
       )?.status,
-      "basis-changed",
+      "applicable",
     );
   }
 

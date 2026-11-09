@@ -38,12 +38,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_role_settings","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:7e2e0157742ca4632c26fdbed027e7eeca591e74e221070da216bd47b218f800,
+      inputFingerprint: sha256:5277ef1b2508b3fc63d67cef881ae84dab134a9b95494eeb49655803f5ef1ab8,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:9b798b1e5487f9be603d1359ca2b6e3885165793024d573cc4c51c06dcb65f43,
+          inputFingerprint: sha256:13ca40c01bef764341428d2ea8d00d3320214c34a215f59b4e641443e0fd2de5,
         },
     },
     {
@@ -53,12 +53,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["common","items","default","child_failure_noaccess","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:95599a5b3dccd348111827cebcf53a20a834207ccf79a131c7d03be1026d1fe6,
+      inputFingerprint: sha256:cf3a8a66a778b391df61f0829aa4d55b662ea9ace092389a458552e01b8e4242,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:1022912a4140f1f8000667e44613e3bb95e523d9314a96bf21119f6b3ba6647d,
+          inputFingerprint: sha256:9eef9004e942f7b9bcc5addccc3c0b90d335ec01358d46e10f42fc08e7605929,
         },
     },
     {
@@ -68,12 +68,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["common","items","default","child_failure_noaccess_owner","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:60dc540f656f318cbcfc03537a1f383b1d7c44d81f62690f0ccb7b5e0549e2c5,
+      inputFingerprint: sha256:52dc344af24bc45b5104ec77f41fd935c9b53a9747615800850da05e84227ac0,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:efca54106958266b3c1b4602dff9815768834a3dd53e8c39c5b28de65eb867bf,
+          inputFingerprint: sha256:e8b22438e328a26578015585afae68f1da8bdec9558ec979a0ae5582b4c3ce2a,
         },
     },
     {
@@ -83,12 +83,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","area","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:186796d5679b071d5b1a8e6ce84fdb64b190dfaaf9a56a0fc81ec7deac2333f9,
+      inputFingerprint: sha256:4f55f54514769e9a88e249693779fecad27fd43241e2434754f6b1ba8ad34e00,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:2a66147dbea402a1ce69d66b9b234e9f6a564ac2466e4be545e517887de13164,
+          inputFingerprint: sha256:4b230e85ce9712d12b18dc7e9587c8d66eef49cdde32a41a88efd1ca77b0126f,
         },
     },
     {
@@ -98,12 +98,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_invites","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:6e49bcdad16ba7f6ae11478c55d6ac82deb06e7fc79531d4555e7e67d8bbaecb,
+      inputFingerprint: sha256:b42bc136d623da631591dd69894d62b065f8cad6c5ed6b19f8b1267967c99557,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:b7c844e2e005ff8d6ac533a1e10f6a3008941bd5decfcd9ce51e787a8843f9cb,
+          inputFingerprint: sha256:7641de24489f91e0fbbbb6480fd234a539d9dbd25910b8ae83e1fa3af0dc0cb6,
         },
     },
     {
@@ -113,12 +113,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/Wars/en-US_gui.yml:["gui","war","items","default","child_failure_permission","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:f3f84ca6e7a165f84461c437151027643d014579fe3014ae2a0591a930adf171,
+      inputFingerprint: sha256:8a441bbe372138092389107600abaf7f90952bf6c2af6a9166a95cb471d3cda0,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:547c882783c25bfea0b166fc476c16bc2d35b3fcebda165561e7ee5c963e85db,
+          inputFingerprint: sha256:7a8b6a0f94db649cf7729ad61eae7342e2cf64c7e9d15e745a66f3c2ab97f953,
         },
     },
     {
@@ -128,12 +128,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_roles","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:4abf755570b01117017a7fbf6fbc0217c17b7c306376a53f4e2af8b4e5d91bd8,
+      inputFingerprint: sha256:9f10bc21abcb6cc725d81915e786bc2e64834b437352b21bff04ecf443df20de,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:c05cc4f9897a88a12d990db65ea895b3d01961371b72349423b98d07823f89bb,
+          inputFingerprint: sha256:b57a51d178061b2565969f27a77d5c4159b4fc9a45dd207f056542e03fd89d7a,
         },
     },
     {
@@ -143,12 +143,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_area_settings","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:0c813713523070d943561a4d61303325edeed79d0ca4464c35c125b730134927,
+      inputFingerprint: sha256:c98ca6e469ee2f2b9a479cccccc9112322b2b76d169ef080776cca0a190f1d30,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:c67f86e63fca6feaad6dcf18349f4f872ba46a5f647ddb2171404c0f1f9bfe0e,
+          inputFingerprint: sha256:eaf2e2b333fd09e85dc325d0bfbe3b4abbbad5f3c53579347d3ffdbd36de126b,
         },
     },
     {
@@ -158,12 +158,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_access","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:c726b3bf69aa2feaf7a71768279c5f3ebf0516fbf28f8e8a7397ab46367a2166,
+      inputFingerprint: sha256:416c357f39f5672d5800cfdd896b9a0d2239066f0a2b3582ba11a85ded0b5102,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:69c5aa867429f30ccb7fb65995b7543ec996fb799efd5a65536f6edd83ea3e50,
+          inputFingerprint: sha256:0dfef62e00fbd59e81727f35ec95232fd1fc375c59d0f64898a982f88a4e01fc,
         },
     },
     {
@@ -174,12 +174,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","area","items","default","child_failure_rented","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:f0542af33bb52a51577a45905f4fcbb1ee5e362d9bcbdee100a854b9fe334e2f,
+      inputFingerprint: sha256:32cefbbb7c15b0da2a790d76527bd1d86846ac571b363824ca5580ce61a15a83,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:177421e8dd1ee53d87e64cc65a509ade360cb295e0e46eea962dce402e0694a8,
+          inputFingerprint: sha256:60568f6603500f4c91cf5722c87218676408073409a3e02299f8b23ff225873e,
         },
     },
     {
@@ -190,12 +190,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","list_land_areas","items","default","child_failure_rented","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:15ae85ba77222f623bf6d6a872b5175b5326dba86f3a634d51042ae18a35e4b2,
+      inputFingerprint: sha256:77627e1faba025b3c79a0a0ad5c98ad66993fda08377bde397e1b4a3a9432fb3,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:65c7c62bb30e98e40dbdb6ce26d72720e682e2cb336e11643d60b4b0c8914844,
+          inputFingerprint: sha256:cea6d2f03679e24d2d241b4f5a008ffabd4e14f0b28566c9510d3bf8ee57bca9,
         },
     },
     {
@@ -206,12 +206,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","player-management","items","default","members","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:226030faa3b289365317da4eebe5f4c66545c83a7362891a1d6845d8691e8c45,
+      inputFingerprint: sha256:0c226663ffcb2eb849970a08182b3c91e52140241938b3d7e985f66ff358c95a,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:771fc20c804b44d93c4391615d6951836529e2afe2dcf9d6b87b08e35dd9f1cc,
+          inputFingerprint: sha256:e9dc21c6f69ba969be92dd055f880803442e5d80363a27168de342da2ac94475,
         },
     },
     {
@@ -222,12 +222,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["general","top","sorting","members"]',
       language: zh-CN,
-      inputFingerprint: sha256:1477da5d10dc3a3518ea107b772b9ed10a678c9a14dd0f0262ee950322045118,
+      inputFingerprint: sha256:041838d3e068101eac9ba91fabeb41e8a1c4246832de14006950489afa82d8ab,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:649dd1228731df7310dbbebc238f128db936122e6c99b3f75508f11ded397455,
+          inputFingerprint: sha256:ca37204ab920f193130a59566463b0bf7ebc155ca39944bff64d243fd9f898da,
         },
     },
     {
@@ -237,12 +237,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/en-US_gui.yml:["gui","mainblock","items","default","land","name"]',
       language: zh-CN,
-      inputFingerprint: sha256:fa00a120b510f8db27a3dbb52f5b2f5bce3129ce0f66153cf1dbdc4dcbd1a46d,
+      inputFingerprint: sha256:86b829778fea4370f2e9503210d4ecdeb6c428a3fada0417cb869295a139d863,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:fbc24653b89467bccaf70c1a387ae64174ff11e08311153369c8db41d89a1d20,
+          inputFingerprint: sha256:1d315b635a1b6d8887fce44b7a2e0bd239b728688f01dbfc4ef18c4c2a5977e1,
         },
     },
     {
@@ -252,12 +252,12 @@ exceptions:
       checkId: message-family-same-source,
       sourceKey: 'Locale/Nations/en-US_gui.yml:["general","nation","role","land"]',
       language: zh-CN,
-      inputFingerprint: sha256:94feabe331435e755da3b5508493a7ef60f1452e70b8763452c6382ab6579c38,
+      inputFingerprint: sha256:9813b7ad95affbaecfa01b452728987a05650425093f96707addf81ee65147c2,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v1,
+          version: lioni.check-input/v1:checks.message-family-consistency/v3+lands-same-source-family-v2,
           configurationFingerprint: sha256:7aacbf1df8ad6e4318a06ad08b29c1277e636692cdfa65da27da9ab55cc0cb7f,
-          inputFingerprint: sha256:979b8acc3fb9c41345c4ae5e7a94381de59788b432f17cf83cc27c2549fb3013,
+          inputFingerprint: sha256:bad2d79ecff2a15c39d3ac8d305c682b36aaf0cae1edab4d108cacbfde0d2ae8,
         },
     },
     {
@@ -269,12 +269,12 @@ exceptions:
       checkId: minimessage-tag-correspondence,
       sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:d5b22ca5ca0d801fa269b55f40c637a96fd79e86c025bfb693735b0b54f5c7c6,
+      inputFingerprint: sha256:b7999056fbcef026221a012a19b66231f5245a95d4b67cc54d6d8e6109266332,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:1,
+          version: lioni.check-input/v1:2,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:eca60c6ca62551bd08344903a52241c1429f542a490f999a38c01cf288aa3a48,
+          inputFingerprint: sha256:da9a9db1cccbd9165e558c840d8b5444930568a5565096fc6789b68d6258f622,
         },
     },
     {
@@ -285,10 +285,10 @@ exceptions:
       checkId: minimessage-nesting,
       sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:96f80e0588c127ed8d13062f3138ec0b0448fa73d55769e4ad20bbd1dc3a4e9f,
+      inputFingerprint: sha256:b8643bdfda049ad9447d180643d22f0ecc94af1fc96adbedde3d2e2a99b9678d,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:1,
+          version: lioni.check-input/v1:2,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
           inputFingerprint: sha256:c80a618456d076e0002f61cf9d297fe6592ab4f31ff293ef87b8af440d7b355f,
         },
@@ -299,10 +299,10 @@ exceptions:
       checkId: minimessage-nesting,
       sourceKey: 'Locale/en-US.yml:["lands","command","admin","limits","migrate","confirm"]',
       language: zh-CN,
-      inputFingerprint: sha256:96f80e0588c127ed8d13062f3138ec0b0448fa73d55769e4ad20bbd1dc3a4e9f,
+      inputFingerprint: sha256:b8643bdfda049ad9447d180643d22f0ecc94af1fc96adbedde3d2e2a99b9678d,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:1,
+          version: lioni.check-input/v1:2,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
           inputFingerprint: sha256:c80a618456d076e0002f61cf9d297fe6592ab4f31ff293ef87b8af440d7b355f,
         },
@@ -345,12 +345,12 @@ exceptions:
       checkId: translation-spacing,
       sourceKey: 'Locale/en-US_gui.yml:["gui","rental_setup","title"]',
       language: zh-CN,
-      inputFingerprint: sha256:0d8776fa057918f6bf5db3be072a2ed98c7be162db8f9357993152426284e202,
+      inputFingerprint: sha256:7480ea143dc84999bb6085b9284770a012db9f6570bc914c3f20c4a1cc33a22f,
       fingerprintSummary:
         {
-          version: lioni.check-input/v1:lands-chinese-spacing-v1,
+          version: lioni.check-input/v1:lands-chinese-spacing-v2,
           configurationFingerprint: sha256:3b083747b2259dd28dda40e7d21b30cf16e39c3db39ffc694b659e4826de46d1,
-          inputFingerprint: sha256:1c8dbc3a84d676b453a23f1aa8d109b88ad5184aef804fd68b22cf6d159102c6,
+          inputFingerprint: sha256:091f82cf1761a5dd753515f91885d38eb14123b4f40ce144525d7acd3bff90bb,
         },
     },
     {
